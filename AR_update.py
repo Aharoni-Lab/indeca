@@ -16,7 +16,7 @@ from scipy.integrate import cumulative_trapezoid
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
-from routine.bin_algo import (
+from routine.update_bin import (
     construct_G,
     construct_R,
     estimate_coefs,

@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from routine.bin_algo import construct_G
+from routine.update_bin import construct_G
 from routine.simulation import AR2tau, tau2AR
 from routine.utilities import norm
 
