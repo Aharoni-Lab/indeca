@@ -301,22 +301,27 @@ def simulate_data(
         return Y, A, C, S, shifts
 
 
-def generate_data(dpath, save_Y=False, **kwargs):
+def generate_data(dpath, save_Y=False, use_minian=False, **kwargs):
     dat_vars = simulate_data(**kwargs)
     Y = dat_vars[0]
     if not save_Y:
         dat_vars = dat_vars[1:]
-    for dat in dat_vars:
-        save_minian(dat, dpath=os.path.join(dpath, "simulated"), overwrite=True)
-    write_video(
-        Y,
-        vpath=dpath,
-        vname="simulated",
-        vext="avi",
-        options={"r": "60", "pix_fmt": "gray", "vcodec": "ffv1"},
-        chunked=True,
-    )
-    return tuple(dat_vars)
+    if use_minian:
+        for dat in dat_vars:
+            save_minian(dat, dpath=os.path.join(dpath, "simulated"), overwrite=True)
+        write_video(
+            Y,
+            vpath=dpath,
+            vname="simulated",
+            vext="avi",
+            options={"r": "60", "pix_fmt": "gray", "vcodec": "ffv1"},
+            chunked=True,
+        )
+        return tuple(dat_vars)
+    else:
+        ds = xr.merge(dat_vars)
+        ds.to_netcdf(dpath)
+        return ds
 
 
 def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post_gain):
@@ -347,27 +352,3 @@ def AR2tau(theta1, theta2):
     z1, z2 = rts[0], rts[1]
     tau_d, tau_r = -1 / np.log(z1), -1 / np.log(z2)
     return tau_d, tau_r
-
-
-# %% main
-if __name__ == "__main__":
-    Y, A, C, S, shifts = generate_data(
-        dpath="simulated_data",
-        ncell=100,
-        dims={"height": 256, "width": 256, "frame": 2000},
-        sig_scale=1,
-        sz_mean=3,
-        sz_sigma=0.6,
-        sz_min=0.1,
-        tmp_pfire=0.01,
-        tmp_tau_d=6,
-        tmp_tau_r=1,
-        bg_nsrc=100,
-        bg_tmp_var=2,
-        bg_cons_fac=0.1,
-        bg_smth_var=60,
-        mo_stp_var=1,
-        mo_cons_fac=0.2,
-        post_offset=1,
-        post_gain=50,
-    )
