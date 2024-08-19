@@ -12,6 +12,7 @@ import xarray as xr
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
+from routine.minian_functions import open_minian
 from routine.update_bin import (
     construct_G,
     construct_R,
@@ -20,12 +21,11 @@ from routine.update_bin import (
     solve_deconv,
     solve_deconv_bin,
 )
-from routine.minian_functions import open_minian
-from routine.simulation import generate_data
 from routine.utilities import norm
 
-INT_PATH = "./intermediate/temporal_simulation"
-FIG_PATH = "./figs/temporal_simulation"
+IN_PATH = "./intermediate/simulated/simulated.nc"
+INT_PATH = "./intermediate/benchmark_bin"
+FIG_PATH = "./figs/benchmark_bin"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
@@ -34,41 +34,16 @@ PARAM_EST_AR = True
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
-
-# %% generate data
-Y, A, C, S, shifts, C_gt, S_gt = generate_data(
-    dpath=INT_PATH,
-    ncell=100,
-    upsample=PARAM_UPSAMP,
-    dims={"height": 256, "width": 256, "frame": 2000},
-    sig_scale=1,
-    sz_mean=3,
-    sz_sigma=0.6,
-    sz_min=0.1,
-    tmp_P=np.array([[0.998, 0.002], [0.75, 0.25]]),
-    tmp_tau_d=PARAM_TAU_D,
-    tmp_tau_r=PARAM_TAU_R,
-    bg_nsrc=0,
-    bg_tmp_var=0,
-    bg_cons_fac=0,
-    bg_smth_var=0,
-    mo_stp_var=0,
-    mo_cons_fac=0,
-    post_offset=1,
-    post_gain=50,
-    save_Y=True,
-)
-
 # %% temporal update
-minian_ds = open_minian(os.path.join(INT_PATH, "simulated"), return_dict=True)
-subset = minian_ds["A"].coords["unit_id"][:5]
+sim_ds = xr.open_dataset(IN_PATH)
+subset = sim_ds["A"].coords["unit_id"][:5]
 Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
-    minian_ds["Y"],
-    minian_ds["A"],
-    minian_ds["C"],
-    minian_ds["S"],
-    minian_ds["C_true"],
-    minian_ds["S_true"],
+    sim_ds["Y"],
+    sim_ds["A"],
+    sim_ds["C"],
+    sim_ds["S"],
+    sim_ds["C_true"],
+    sim_ds["S_true"],
 )
 A, C_gt, S_gt = (
     A.sel(unit_id=subset),
@@ -93,7 +68,7 @@ A, C_gt, S_gt = (
 # )
 # YrA = compute_trace(Y, A, b, C_gt, f).compute()
 # updt_ds = [YrA.rename("YrA")]
-Y_solve = C_gt
+Y_solve = C_gt.dropna("frame", how="all")
 sps_penal = 10
 max_iters = 50
 updt_ds = []
@@ -106,7 +81,7 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
         # parameters
         y_norm = np.array(norm(y))
         T = len(y_norm)
-        g, tn = estimate_coefs(y_norm, p=2, noise_freq=0.9, use_smooth=False, add_lag=0)
+        g, tn = estimate_coefs(y_norm, p=2, noise_freq=0.4, use_smooth=False, add_lag=0)
         if PARAM_EST_AR:
             G = construct_G(g, T * up_factor, fromTau=False)
         else:
@@ -254,9 +229,7 @@ def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
 
 
 updt_ds = xr.open_dataset(os.path.join(INT_PATH, "temp_res.nc"))
-true_ds = open_minian(os.path.join(INT_PATH, "simulated")).isel(
-    unit_id=updt_ds.coords["unit_id"]
-)
+true_ds = xr.open_dataset(IN_PATH).isel(unit_id=updt_ds.coords["unit_id"])
 subset = updt_ds.coords["unit_id"]
 S_gt, S_gt_true, C_gt = (
     true_ds["S"].dropna("frame", how="all"),
@@ -268,7 +241,7 @@ S_org, S_bin_org, S_up, S_bin_up, YrA = (
     updt_ds["S-bin-org"].dropna("frame", how="all"),
     updt_ds["S-upsamp"],
     updt_ds["S-bin-upsamp"],
-    updt_ds["YrA"].dropna("frame", how="all"),
+    C_gt,
 )
 S_updn, S_bin_updn = (
     S_up.coarsen({"frame": 10}).sum().rename("S-updn"),
