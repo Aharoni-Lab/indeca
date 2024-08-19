@@ -1,12 +1,11 @@
 # %% import and definition
 import os
 
-import cvxpy as cp
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import xarray as xr
 
-from routine.minian_functions import open_minian
 from routine.update_AR import (
     convolve_g,
     convolve_h,
@@ -18,9 +17,9 @@ from routine.update_AR import (
 from routine.update_bin import construct_G, estimate_coefs
 from routine.utilities import scal_like
 
-IN_PATH = "./intermediate/temporal_simulation/"
-INT_PATH = "./intermediate/ar_update"
-FIG_PATH = "./figs/ar_update"
+IN_PATH = "./intermediate/simulated/simulated.nc"
+INT_PATH = "./intermediate/benchmark_ar"
+FIG_PATH = "./figs/benchmark_ar"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
@@ -29,45 +28,15 @@ PARAM_EST_AR = True
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
-# %% AR update exp approach
-minian_ds = open_minian(os.path.join(IN_PATH, "simulated"), return_dict=True)
-Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
-    minian_ds["Y"],
-    minian_ds["A"],
-    minian_ds["C"],
-    minian_ds["S"],
-    minian_ds["C_true"],
-    minian_ds["S_true"],
-)
-c, s = np.array(C_gt.isel(unit_id=0)).reshape((-1, 1)), np.array(
-    S_gt.isel(unit_id=0)
-).reshape((-1, 1))
-y = c
-tau1_init, tau2_init = 7, 1.2
-
-T = y.shape[0]
-lam1, lam2 = cp.Variable(), cp.Variable()
-# pulse_kernel = cp.exp(-np.arange(T) * lam1) - cp.exp(-np.arange(T) * 1 / tau2_init)
-pulse_kernel = cp.exp(-np.arange(T) * lam1)
-
-M0 = pulse_kernel.reshape((-1, 1))
-M1n = [
-    cp.vstack([np.zeros(i).reshape((-1, 1)), pulse_kernel[:-i].reshape((-1, 1))])
-    for i in range(1, T)
-]
-M = cp.hstack([M0] + M1n)
-obj = cp.norm(M @ s - y)
-
-
 # %% AR update reverse solve approach
-minian_ds = open_minian(os.path.join(IN_PATH, "simulated"), return_dict=True)
+sim_ds = xr.open_dataset(IN_PATH)
 Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
-    minian_ds["Y"],
-    minian_ds["A"],
-    minian_ds["C"],
-    minian_ds["S"],
-    minian_ds["C_true"],
-    minian_ds["S_true"],
+    sim_ds["Y"],
+    sim_ds["A"],
+    sim_ds["C"].dropna("frame", how="all"),
+    sim_ds["S"].dropna("frame", how="all"),
+    sim_ds["C_true"],
+    sim_ds["S_true"],
 )
 c, s = np.array(C_gt.isel(unit_id=0)).reshape((-1, 1)), np.array(
     S_gt.isel(unit_id=0)
