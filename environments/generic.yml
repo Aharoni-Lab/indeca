@@ -1,0 +1,36 @@
+channels:
+  - conda-forge
+dependencies:
+  - python
+  - jupyter
+  - numpy
+  - pandas
+  - scipy
+  - xarray
+  - zarr
+  - numba
+  - opencv
+  - ffmpeg-python
+  - dask
+  - distributed
+  - black
+  - holoviews
+  - sparse
+  - plotly
+  - python-kaleido
+  - read-roi
+  - scikit-image
+  - netcdf4
+  - pyarrow
+  - seaborn
+  - matplotlib
+  - statsmodels
+  - scikit-learn
+  - colorcet
+  - requests
+  - tqdm
+  - cvxpy == 1.5.1
+  - pymetis
+  - rechunker
+  - natsort
+  - python-levenshtein
