@@ -26,7 +26,7 @@ def convolve_h(s, h):
     return np.real(np.array(H @ s.reshape((-1, 1))).squeeze())
 
 
-def solve_g(y, s, norm="l2", masking=False):
+def solve_g(y, s, norm="l1", masking=False):
     T = len(s)
     theta_1, theta_2 = cp.Variable(), cp.Variable()
     G = (
@@ -101,7 +101,9 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
     return np.concatenate([h.value, np.zeros(T - s_len - 1)])
 
 
-def solve_fit_h(y, s, N=2, s_len=60, norm="l1", tol=1e-3, max_iters: int = 30):
+def solve_fit_h(
+    y, s, N=2, s_len=60, norm="l1", tol=1e-3, max_iters: int = 30, verbose=False
+):
     metric_df = None
     h_df = None
     smth_penal = 0
@@ -114,7 +116,8 @@ def solve_fit_h(y, s, N=2, s_len=60, norm="l1", tol=1e-3, max_iters: int = 30):
             "smth_penal": smth_penal,
             "isreal": (np.imag(lams) == 0).all(),
         }
-        print(met)
+        if verbose:
+            print(met)
         metric_df = pd.concat([metric_df, pd.DataFrame([met])])
         h_df = pd.concat(
             [
@@ -141,6 +144,7 @@ def solve_fit_h(y, s, N=2, s_len=60, norm="l1", tol=1e-3, max_iters: int = 30):
         niter += 1
     else:
         warnings.warn("max smth iteration reached")
+    lams = np.sort(np.real(lams))
     return lams, h, h_fit, metric_df, h_df
 
 
