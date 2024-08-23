@@ -9,6 +9,7 @@ import sparse
 import xarray as xr
 from numpy import random
 from scipy.ndimage import gaussian_filter1d
+from scipy.optimize import root_scalar
 from scipy.stats import multivariate_normal
 
 from .minian_functions import save_minian, shift_perframe, write_video
@@ -344,11 +345,107 @@ def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post
 
 def tau2AR(tau_d, tau_r):
     z1, z2 = np.exp(-1 / tau_d), np.exp(-1 / tau_r)
-    return z1 + z2, -z1 * z2
+    return np.real(z1 + z2), np.real(-z1 * z2)
 
 
 def AR2tau(theta1, theta2):
     rts = np.roots([1, -theta1, -theta2])
-    z1, z2 = rts[0], rts[1]
-    tau_d, tau_r = -1 / np.log(z1), -1 / np.log(z2)
-    return tau_d, tau_r
+    z1, z2 = rts
+    if np.imag(z1) == 0 and np.isclose(z1, 0) and z1 < 0:
+        z1 = np.abs(z1)
+    if np.imag(z2) == 0 and np.isclose(z2, 0) and z2 < 0:
+        z2 = np.abs(z2)
+    return np.nan_to_num([-1 / np.log(z1), -1 / np.log(z2)])
+
+
+def AR2exp(theta1, theta2):
+    tau_d, tau_r = AR2tau(theta1, theta2)
+    if np.imag(tau_d) == 0 and np.imag(tau_r) == 0:  # real exponentials
+        L = np.array([[1, 1], [np.exp(-1 / tau_d), np.exp(-1 / tau_r)]])
+        coef = np.linalg.inv(L) @ np.array([1, theta1])
+        return True, np.array([tau_d, tau_r]), coef
+    else:  # complex exponentials: convert to real solution (exp + trig)
+        a, b = (
+            -np.real(tau_d) / np.absolute(tau_d) ** 2,
+            np.imag(tau_d) / np.absolute(tau_d) ** 2,
+        )
+        coef = np.array([1, (theta1 * np.exp(-a) - np.cos(b)) / np.sin(b)])
+        return False, np.array([a, b]), coef
+
+
+def ar_pulse(theta1, theta2, nsamp):
+    t = np.arange(nsamp).astype(float)
+    pulse = np.zeros_like(t)
+    pulse[0] = 1
+    ar = np.zeros_like(t)
+    for i in range(len(t)):
+        if i > 1:
+            ar[i] = pulse[i] + theta1 * ar[i - 1] + theta2 * ar[i - 2]
+        elif i > 0:
+            ar[i] = pulse[i] + theta1 * ar[i - 1]
+        else:
+            ar[i] = pulse[i]
+    return ar, t
+
+
+def eval_exp(t, is_biexp, tconst, coefs):
+    if is_biexp:
+        tau_d, tau_r = tconst
+        c1, c2 = coefs
+        if tau_r > 0:
+            return c1 * np.exp(-t / tau_d) + c2 * np.exp(-t / tau_r)
+        else:
+            return c1 * np.exp(-t / tau_d) + c2
+    else:
+        a, b = tconst
+        c1, c2 = coefs
+        return np.exp(a * t) * (c1 * np.cos(b * t) + c2 * np.sin(b * t))
+
+
+def find_dhm(is_biexp, tconst, coefs, verbose=False):
+    if is_biexp:
+        tau_d, tau_r = tconst
+        c1, c2 = coefs
+        if tau_r == 0:
+            return (0, -tau_d * np.log(0.5)), 0
+        if c1 > 0 and c2 < 0:
+            t_hat = (
+                (tau_d * tau_r) / (tau_d - tau_r) * np.log(-(c2 * tau_d) / (c1 * tau_r))
+            )
+            fmax = eval_exp(t_hat, is_biexp, tconst, coefs)
+            t_end = -tau_d * np.log(
+                fmax * 0.49 / c1
+            )  # make the target < 0.5 to account for numerical errors
+        else:
+            t_hat = 0
+            fmax = eval_exp(t_hat, is_biexp, tconst, coefs)
+            if c1 > c2:  # use the dominant postive term to determine bracket end
+                t_end = -tau_d * np.log((fmax * 0.49 - max(0, c2)) / c1)
+            else:
+                t_end = -tau_r * np.log((fmax * 0.49 - max(0, c1)) / c2)
+    else:
+        a, b = tconst
+        c1, c2 = coefs
+        t_hat = (1 / b) * np.arctan2(c2 * b + c1 * a, c1 * b - c2 * a)
+        t_end = (1 / b) * np.arctan2(-c1, c2)
+        if t_end <= 0:
+            t_end = (1 / b) * (np.arctan2(-c1, c2) + 2 * np.pi)
+    f0 = eval_exp(0, is_biexp, tconst, coefs)
+    fmax = eval_exp(t_hat, is_biexp, tconst, coefs)
+    if verbose:
+        print("t_hat: {}, t_end: {}".format(t_hat, t_end))
+        print(
+            "f0: {}, fmax: {}, fend: {}".format(
+                f0, fmax, eval_exp(t_end, is_biexp, tconst, coefs)
+            )
+        )
+    rt0 = root_scalar(
+        lambda t: eval_exp(t, is_biexp, tconst, coefs) - (fmax + f0) / 2,
+        bracket=[0, t_hat],
+    )
+    rt1 = root_scalar(
+        lambda t: eval_exp(t, is_biexp, tconst, coefs) - fmax / 2,
+        bracket=[t_hat, t_end],
+    )
+    assert rt0.converged and rt1.converged
+    return (rt0.root, rt1.root), t_hat

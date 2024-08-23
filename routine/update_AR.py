@@ -68,11 +68,11 @@ def fit_sumexp(y, N, x=None):
     A_bar = np.vstack(
         [A[:N], np.hstack([np.eye(N - 1), np.zeros(N - 1).reshape(-1, 1)])]
     )
-    lams = np.linalg.eigvals(A_bar)
+    lams = np.sort(np.linalg.eigvals(A_bar))[::-1]
     X_exp = np.hstack([np.exp(l * x).reshape((-1, 1)) for l in lams])
     ps = np.linalg.inv(X_exp.T @ X_exp) @ X_exp.T @ y
     y_fit = X_exp @ ps
-    return lams, y_fit
+    return lams, ps, y_fit
 
 
 def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
@@ -110,7 +110,7 @@ def solve_fit_h(
     niter = 0
     while niter < max_iters:
         h = solve_h(y, s, s_len, norm, smth_penal)
-        lams, h_fit = fit_sumexp(h, N)
+        lams, ps, h_fit = fit_sumexp(h, N)
         met = {
             "iter": niter,
             "smth_penal": smth_penal,
@@ -123,7 +123,13 @@ def solve_fit_h(
             [
                 h_df,
                 pd.DataFrame(
-                    {"iter": niter, "smth_penal": smth_penal, "h": h, "h_fit": h_fit}
+                    {
+                        "iter": niter,
+                        "smth_penal": smth_penal,
+                        "h": h,
+                        "h_fit": h_fit,
+                        "frame": np.arange(len(h)),
+                    }
                 ),
             ]
         )
@@ -144,8 +150,7 @@ def solve_fit_h(
         niter += 1
     else:
         warnings.warn("max smth iteration reached")
-    lams = np.sort(np.real(lams))
-    return lams, h, h_fit, metric_df, h_df
+    return lams, ps, h, h_fit, metric_df, h_df
 
 
 def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
