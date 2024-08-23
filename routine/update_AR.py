@@ -77,24 +77,31 @@ def fit_sumexp(y, N, x=None):
 
 def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
     y, s = y.squeeze(), s.squeeze()
-    T = len(s)
+    assert y.ndim == s.ndim
+    multi_unit = y.ndim > 1
+    if multi_unit:
+        ncell, T = s.shape
+    else:
+        T = len(s)
     if s_len is None:
         s_len = T
     else:
         s_len = min(s_len, T)
-    b = cp.Variable()
+    if multi_unit:
+        b = cp.Variable((ncell, 1))
+    else:
+        b = cp.Variable()
     h = cp.Variable(s_len)
     h = cp.hstack([h, 0])
-    if norm == "l2":
-        obj = cp.Minimize(
-            cp.norm(y - cp.convolve(s, h)[:T] - b)
-            + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
-        )
-    elif norm == "l1":
-        obj = cp.Minimize(
-            cp.norm(y - cp.convolve(s, h)[:T] - b, 1)
-            + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
-        )
+    if multi_unit:
+        conv_term = cp.vstack([cp.convolve(ss, h)[:T] for ss in s])
+    else:
+        conv_term = cp.convolve(s, h)[:T]
+    norm_ord = {"l1": 1, "l2": 2}[norm]
+    obj = cp.Minimize(
+        cp.norm(y - conv_term - b, norm_ord)
+        + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
+    )
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
     prob.solve()
