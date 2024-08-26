@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sps
 from scipy.integrate import cumulative_trapezoid
+from scipy.optimize import curve_fit
 
 from .update_bin import construct_G
 
@@ -95,6 +96,31 @@ def fit_sumexp_split(y):
     )
 
 
+def fit_sumexp_gd(y, x=None, interp_factor=100):
+    T = len(y)
+    if x is None:
+        x = np.arange(T)
+    x_interp = np.linspace(x[0], x[1], interp_factor * len(x))
+    y_interp = np.interp(x_interp, x, y)
+    idx_max = np.argmax(y)
+    max_val = y[idx_max]
+    tau_r_init = np.argmin(np.abs(y_interp - (1 - 1 / np.e) * max_val)) / interp_factor
+    tau_d_init = np.argmin(np.abs(y_interp - (1 / np.e) * max_val)) / interp_factor
+    res = curve_fit(
+        lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
+        x,
+        y,
+        p0=(tau_d_init, tau_r_init),
+        bounds=(0, np.inf),
+    )
+    tau_d, tau_r = res[0]
+    return (
+        -1 / np.array([tau_d, tau_r]),
+        np.array([1, -1]),
+        np.exp(-x / tau_d) - np.exp(-x / tau_r),
+    )
+
+
 def lst_l1(A, b):
     x = cp.Variable(A.shape[1])
     obj = cp.Minimize(cp.norm(b - A @ x, 1))
@@ -138,7 +164,15 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
 
 
 def solve_fit_h(
-    y, s, N=2, s_len=60, norm="l1", tol=1e-3, max_iters: int = 30, verbose=False
+    y,
+    s,
+    N=2,
+    s_len=60,
+    norm="l1",
+    tol=1e-3,
+    fit_method="numerical",
+    max_iters: int = 30,
+    verbose=False,
 ):
     metric_df = None
     h_df = None
@@ -146,7 +180,14 @@ def solve_fit_h(
     niter = 0
     while niter < max_iters:
         h = solve_h(y, s, s_len, norm, smth_penal)
-        lams, ps, h_fit = fit_sumexp(h, N)
+        if fit_method == "solve":
+            lams, ps, h_fit = fit_sumexp(h, N)
+        elif fit_method == "numerical":
+            lams, ps, h_fit = fit_sumexp_gd(h)
+        else:
+            raise NotImplementedError(
+                "`fit_method` has to be one of ['solve', 'numerical']"
+            )
         met = {
             "iter": niter,
             "smth_penal": smth_penal,

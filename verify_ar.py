@@ -51,12 +51,25 @@ ar, t_ar, pulse = ar_pulse(theta1, theta2, end)
 v = np.exp(-t_ar / tau_d) - np.exp(-t_ar / tau_r)
 biexp = np.convolve(v, pulse, mode="full")[:end]
 # kernel fit
-lams_biexp, ps_biexp, h_biexp, h_fit_biexp, _, _ = solve_fit_h(biexp, pulse)
-lams_ar, ps_ar, h_ar, h_fit_ar, _, _ = solve_fit_h(ar, pulse)
+lams_biexp, ps_biexp, h_biexp, h_fit_biexp, _, _ = solve_fit_h(
+    biexp, pulse, fit_method="solve"
+)
+lams_ar, ps_ar, h_ar, h_fit_ar, _, _ = solve_fit_h(ar, pulse, fit_method="solve")
 print("biexp fit: taus: {}, coefs: {}".format(1 / -lams_biexp, ps_biexp))
 print("biexp fit: taus: {}, coefs: {}".format(1 / -lams_ar, ps_ar))
+# numerical_fit
+lams_biexp_num, ps_biexp_num, h_biexp_num, h_fit_biexp_num, _, _ = solve_fit_h(
+    biexp, pulse, fit_method="numerical"
+)
+lams_ar_num, ps_ar_num, h_ar_num, h_fit_ar_num, _, _ = solve_fit_h(
+    ar, pulse, fit_method="numerical"
+)
+print(
+    "numerical biexp fit: taus: {}, coefs: {}".format(1 / -lams_biexp_num, ps_biexp_num)
+)
+print("numerical biexp fit: taus: {}, coefs: {}".format(1 / -lams_ar_num, ps_ar_num))
 # plotting
-fig, axs = plt.subplots(2, sharey=True, figsize=(5, 8))
+fig, axs = plt.subplots(3, sharey=True, figsize=(5, 8))
 axs[0].plot(biexp, label="biexp", lw=2)
 axs[0].plot(ar, label="ar", lw=3, ls=":")
 axs[0].plot(pulse, label="pulse", lw=1.5)
@@ -66,3 +79,8 @@ axs[1].plot(h_fit_biexp, label="biexp_kernel_fit", lw=3, ls=":")
 axs[1].plot(h_ar, label="ar_kernel", lw=1.5)
 axs[1].plot(h_fit_ar, label="ar_kernel_fit", lw=3, ls=":")
 axs[1].legend()
+axs[2].plot(h_biexp_num, label="biexp_kernel", lw=1.5)
+axs[2].plot(h_fit_biexp_num, label="biexp_kernel_fit", lw=3, ls=":")
+axs[2].plot(h_ar_num, label="ar_kernel", lw=1.5)
+axs[2].plot(h_fit_ar_num, label="ar_kernel_fit", lw=3, ls=":")
+axs[2].legend()
