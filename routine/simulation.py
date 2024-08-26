@@ -385,7 +385,7 @@ def ar_pulse(theta1, theta2, nsamp):
             ar[i] = pulse[i] + theta1 * ar[i - 1]
         else:
             ar[i] = pulse[i]
-    return ar, t
+    return ar, t, pulse
 
 
 def eval_exp(t, is_biexp, tconst, coefs):
