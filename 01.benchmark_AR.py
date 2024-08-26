@@ -268,7 +268,9 @@ c_all, s_all = np.array(C_gt.transpose("unit_id", "frame")), np.array(
     S_gt.transpose("unit_id", "frame")
 )
 y_all = c_all + 10 * (np.random.random(c_all.shape) - 0.5)
-lams, ps, h, h_fit, metric_df, h_df = solve_fit_h(y_all, s_all)
+lams, ps, h, h_fit, metric_df, h_df = solve_fit_h(
+    y_all, s_all, max_iters=10, verbose=True
+)
 h_df_tall = h_df.melt(id_vars=["iter", "smth_penal", "frame"])
 h_df_tall["value"] = np.real(h_df_tall["value"])
 fig = px.line(
