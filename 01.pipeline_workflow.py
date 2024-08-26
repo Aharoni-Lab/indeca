@@ -20,26 +20,37 @@ from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 from routine.simulation import simulate_traces
 
+
+
+# %% 1. Generate or import dataset at normal FPS for calcium imaging
+generate_new_dataset = False
 OUT_PATH = "./intermediate/simulated/simulated.nc"
-
-# %% 1. Generate or inport dataset at normal FPS for calcium imaging
-
-PARAM_TAU_D = 6
-PARAM_TAU_R = 1
+PARAM_TAU_D = 0.2 # units of seconds
+PARAM_TAU_R = 0.04 # units of seconds
 
 os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
 
-np.random.seed(42)
-ds = simulate_traces(
-    num_cells=40,
-    length_in_sec= 30, # at the defined fps
-    tmp_P=np.array([[0.998, 0.002], [0.75, 0.25]]),
-    tmp_tau_d=PARAM_TAU_D,
-    tmp_tau_r=PARAM_TAU_R,
-    approx_fps = 30,
-    spike_sampling_rate = 500,
-
-)
+# Check if the file already exists
+if os.path.isfile(OUT_PATH) and not generate_new_dataset:
+    # Load previously saved dataset
+    ds = pd.read_pickle(OUT_PATH)
+    print(f"Loaded existing dataset from {OUT_PATH}")
+else:
+    # Generate new dataset
+    np.random.seed(42)
+    ds = simulate_traces(
+        num_cells=40,
+        length_in_sec=30, # at the defined fps
+        tmp_P=np.array([[0.998, 0.002], [0.75, 0.25]]),
+        tmp_tau_d=PARAM_TAU_D,
+        tmp_tau_r=PARAM_TAU_R,
+        approx_fps=30,
+        spike_sampling_rate=500,
+    )
+    
+    # Save the generated dataset
+    ds.to_pickle(OUT_PATH)
+    print(f"Generated new dataset and saved to {OUT_PATH}")
 # %% 1.1 Plot initial generated data
 
 # Select a subset of cells to plot (e.g., first 5 cells)

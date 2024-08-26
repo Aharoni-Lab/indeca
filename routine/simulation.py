@@ -153,6 +153,8 @@ def simulate_traces(
     upsample_factor = np.round(spike_sampling_rate / approx_fps).astype(int)
     fps = spike_sampling_rate/upsample_factor
     num_samples = np.round(length_in_sec * fps).astype(int) # number of samples for normal calcium
+    tmp_tau_d = tmp_tau_d * fps
+    tmp_tau_r = tmp_tau_r * fps
 
     traces = []
     for i in tqdm(range(num_cells), desc="Simulating cells", unit="cell"):
