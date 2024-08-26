@@ -263,22 +263,38 @@ C_gt, S_gt = (
     sim_ds["C"].dropna("frame", how="all").isel(unit_id=subset),
     sim_ds["S"].dropna("frame", how="all").isel(unit_id=subset),
 )
-np.random.seed(42)
+plt_df = (
+    sim_ds.isel(unit_id=0)[["C", "S", "C_true", "S_true"]]
+    .to_dataframe()
+    .reset_index()
+    .melt(id_vars=["frame", "unit_id"])
+    .dropna()
+)
+fig = px.line(plt_df, x="frame", y="value", color="variable")
+fig.write_html(os.path.join(FIG_PATH, "dbg-raw_traces.html"))
 c_all, s_all = np.array(C_gt.transpose("unit_id", "frame")), np.array(
     S_gt.transpose("unit_id", "frame")
 )
-y_all = c_all + 10 * (np.random.random(c_all.shape) - 0.5)
-lams, ps, h, h_fit, metric_df, h_df = solve_fit_h(
-    y_all, s_all, max_iters=10, verbose=True
-)
-h_df_tall = h_df.melt(id_vars=["iter", "smth_penal", "frame"])
-h_df_tall["value"] = np.real(h_df_tall["value"])
+res = []
+for ns in [0, 5, 10]:
+    print("noise level: {}".format(ns))
+    np.random.seed(42)
+    y_all = c_all + ns * (np.random.random(c_all.shape) - 0.5)
+    lams, ps, h, h_fit, metric_df, h_df = solve_fit_h(
+        y_all, s_all, max_iters=10, verbose=True
+    )
+    h_df_tall = h_df.melt(id_vars=["iter", "smth_penal", "frame"])
+    h_df_tall["value"] = np.real(h_df_tall["value"])
+    h_df_tall["noise"] = ns
+    res.append(h_df_tall)
+res = pd.concat(res, ignore_index=True)
 fig = px.line(
-    h_df_tall[h_df_tall["iter"] < 5],
+    res,
     x="frame",
     y="value",
     color="smth_penal",
-    facet_row="variable",
+    facet_col="variable",
+    facet_row="noise",
 )
 fig.write_html(os.path.join(FIG_PATH, "dbg-free-all.html"))
 
