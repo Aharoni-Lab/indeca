@@ -12,7 +12,7 @@ import xarray as xr
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
-from src.minian_bin.update_bin import (
+from minian_bin.update_bin import (
     construct_G,
     construct_R,
     estimate_coefs,
@@ -20,7 +20,7 @@ from src.minian_bin.update_bin import (
     solve_deconv,
     solve_deconv_bin,
 )
-from src.minian_bin.utilities import norm
+from minian_bin.utilities import norm
 
 IN_PATH = "./intermediate/simulated/simulated.nc"
 INT_PATH = "./intermediate/benchmark_bin"
