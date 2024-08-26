@@ -160,8 +160,8 @@ def simulate_traces(
     for i in tqdm(range(num_cells), desc="Simulating cells", unit="cell"):
         C_upsampled, S_upsampled, C, S = exp_trace(num_samples, tmp_P, tmp_tau_d, tmp_tau_r, upsample_factor=upsample_factor)
         traces.append({
-            'C_upsampled': C_upsampled,
-            'S_upsampled': S_upsampled,
+            'C_true': C_upsampled,
+            'S_true': S_upsampled,
             'C': C,
             'S': S
         })
@@ -169,6 +169,7 @@ def simulate_traces(
     df = pd.DataFrame(traces)
     df['fps'] = fps
     df['upsample_factor'] = upsample_factor
+    df['spike_sampling_rate'] = spike_sampling_rate
     return df
 
 def simulate_data(
