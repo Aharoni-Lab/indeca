@@ -51,7 +51,8 @@ def solve_g(y, s, norm="l1", masking=False):
     return theta_1.value, theta_2.value
 
 
-def fit_sumexp(y, N, x=None):
+def fit_sumexp(y, N, x=None, use_l1=False):
+    # ref: http://arxiv.org/abs/physics/0305019
     # ref: https://github.juangburgos.com/FitSumExponentials/lab/index.html
     T = len(y)
     if x is None:
@@ -64,15 +65,43 @@ def fit_sumexp(y, N, x=None):
     for i, pow in enumerate(range(N)[::-1]):
         X_pow[:, i] = x**pow
     Y = np.concatenate([Y_int, X_pow], axis=1)
-    A = np.linalg.inv(Y.T @ Y) @ Y.T @ y
+    if use_l1:
+        A = lst_l1(Y, y)
+    else:
+        A = np.linalg.inv(Y.T @ Y) @ Y.T @ y
     A_bar = np.vstack(
         [A[:N], np.hstack([np.eye(N - 1), np.zeros(N - 1).reshape(-1, 1)])]
     )
     lams = np.sort(np.linalg.eigvals(A_bar))[::-1]
     X_exp = np.hstack([np.exp(l * x).reshape((-1, 1)) for l in lams])
-    ps = np.linalg.inv(X_exp.T @ X_exp) @ X_exp.T @ y
+    if use_l1:
+        ps = lst_l1(X_exp, y)
+    else:
+        ps = np.linalg.inv(X_exp.T @ X_exp) @ X_exp.T @ y
     y_fit = X_exp @ ps
     return lams, ps, y_fit
+
+
+def fit_sumexp_split(y):
+    T = len(y)
+    x = np.arange(T)
+    idx_split = np.argmax(y)
+    lam_r, p_r, y_fit_r = fit_sumexp(y[:idx_split], 1, x=x[:idx_split])
+    lam_d, p_d, y_fit_d = fit_sumexp(y[idx_split:], 1, x=x[idx_split:])
+    return (
+        np.array([lam_d, lam_r]),
+        np.array([p_d, p_r]),
+        np.concatenate([y_fit_r, y_fit_d]),
+    )
+
+
+def lst_l1(A, b):
+    x = cp.Variable(A.shape[1])
+    obj = cp.Minimize(cp.norm(b - A @ x, 1))
+    prob = cp.Problem(obj)
+    prob.solve()
+    assert prob.status == cp.OPTIMAL
+    return x.value
 
 
 def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
