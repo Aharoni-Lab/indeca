@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from routine.simulation import generate_data
+from minian_bin.simulation import generate_data
 
 OUT_PATH = "./intermediate/simulated/simulated.nc"
 PARAM_TAU_D = 6

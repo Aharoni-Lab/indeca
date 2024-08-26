@@ -7,8 +7,8 @@ import plotly.express as px
 import xarray as xr
 from tqdm.auto import tqdm
 
-from routine.simulation import AR2tau, tau2AR
-from routine.update_AR import (
+from minian_bin.simulation import AR2tau
+from minian_bin.update_AR import (
     convolve_g,
     convolve_h,
     fit_sumexp,
@@ -16,8 +16,8 @@ from routine.update_AR import (
     solve_g,
     solve_h,
 )
-from routine.update_bin import construct_G, estimate_coefs
-from routine.utilities import scal_like
+from minian_bin.update_bin import construct_G, estimate_coefs
+from minian_bin.utilities import scal_like
 
 IN_PATH = "./intermediate/simulated/simulated.nc"
 INT_PATH = "./intermediate/benchmark_ar"
