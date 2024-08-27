@@ -14,6 +14,7 @@ import os
 
 import numpy as np
 import pandas as pd
+import cvxpy as cp
 import scipy
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -23,11 +24,12 @@ from routine.simulation import simulate_traces
 
 
 # %% 1. Generate or import dataset at normal FPS for calcium imaging
+# TODO: Add noise to the data
 generate_new_dataset = True
 save_new_dataset = True
 
 NUM_CELLS = 5
-LENGTH_IN_SEC = 20 
+LENGTH_IN_SEC = 30 
 SPIKE_SAMPLING_RATE = 200 # Hz
 PARAM_TAU_D = 0.2 # units of seconds
 PARAM_TAU_R = 0.04 # units of seconds
@@ -164,33 +166,21 @@ print(f"Plotted comparison of C and C_upsampled for {num_cells_to_plot} cells")
 
 
 # %% 3.3 Estimate spiking from kernel and upsampled C
-import cvxpy as cp
-import numpy as np
-from tqdm import tqdm
 
+# Function to solve for spike estimates given calcium trace and kernel
 def solve_s(y, h, norm="l1", sparsity_penalty=0):
     y, h = y.squeeze(), h.squeeze()
-    assert y.ndim == h.ndim
-    multi_unit = y.ndim > 1
-    if multi_unit:
-        ncell, T = y.shape
-    else:
-        T = len(y)
-    if multi_unit:
-        b = cp.Variable((ncell, 1))
-    else:
-        b = cp.Variable()
-    s = cp.Variable(T)
-    if multi_unit:
-        conv_term = cp.vstack([cp.conv(s, hh[::-1])[:T] for hh in h])
-    else:
-        conv_term = cp.conv(h, s)[:T]
+    T = len(y)
+    b = cp.Variable()  # Baseline fluorescence
+    s = cp.Variable(T)  # Spike train
+    conv_term = cp.conv(h, s)[:T]  # Convolution of kernel and spike train
     norm_ord = {"l1": 1, "l2": 2}[norm]
+    # Objective function: minimize reconstruction error + sparsity penalty
     obj = cp.Minimize(
         cp.norm(y - conv_term - b, norm_ord)
         + sparsity_penalty * cp.norm(s, 1)
     )
-    cons = [s >= 0, b >= 0]
+    cons = [s >= 0, b >= 0]  # Constraints: non-negative spikes and baseline
     prob = cp.Problem(obj, cons)
     prob.solve()
     return s.value
@@ -198,19 +188,20 @@ def solve_s(y, h, norm="l1", sparsity_penalty=0):
 # Estimate S for each cell
 total_cells = len(ds)
 print(f"Estimating S for {total_cells} cells")
+
+# Vectorize operations for efficiency
+y_values = np.stack(ds['C_upsampled'].values)
 S_estimates = []
-for i, (idx, row) in enumerate(tqdm(ds.iterrows(), total=total_cells, desc="Estimating S")):
-    y = row['C_upsampled']
+
+# Iterate through each cell's calcium trace
+for i, y in enumerate(tqdm(y_values, desc="Estimating S")):
+    # Solve for spike estimates using L2 norm and no sparsity penalty
     S_estimate = solve_s(y, k, norm="l2", sparsity_penalty=0.0)
     S_estimates.append(S_estimate)
     
-    # Display progress every 10% of cells processed
-    if total_cells > 0:
-        if (i + 1) % max(1, total_cells // 10) == 0 or i == total_cells - 1:
-            percent_complete = (i + 1) / total_cells * 100
-            print(f"Progress: {percent_complete:.1f}% complete ({i + 1}/{total_cells} cells processed)")
-    else:
-        percent_complete = 100  # If there are no cells, consider it 100% complete
+    # Print progress every 10% or for the last cell
+    if (i + 1) % max(1, total_cells // 10) == 0 or i == total_cells - 1:
+        percent_complete = (i + 1) / total_cells * 100
         print(f"Progress: {percent_complete:.1f}% complete ({i + 1}/{total_cells} cells processed)")
 
 # Add S_estimate column to the dataframe
@@ -219,15 +210,12 @@ ds['S_estimate'] = S_estimates
 # Generate reconvolved C_estimates
 print("Generating reconvolved C_estimates...")
 
-# Function to convolve S_estimate with kernel k
-def reconvolve_C(S_estimate):
-    return np.convolve(S_estimate, k, mode='full')[:len(S_estimate)]
+# Function to vectorize reconvolution operation
+def reconvolve_C_vectorized(S_estimates, kernel):
+    return np.array([np.convolve(s, kernel, mode='full')[:len(s)] for s in S_estimates])
 
-# Apply reconvolution to each cell's S_estimate
-C_estimates = []
-for S_estimate in tqdm(ds['S_estimate'], desc="Reconvolving C"):
-    C_estimate = reconvolve_C(S_estimate)
-    C_estimates.append(C_estimate)
+# Compute C_estimates by reconvolving S_estimates with the kernel
+C_estimates = reconvolve_C_vectorized(S_estimates, k)
 
 # Add C_estimate column to the dataframe
 ds['C_estimate'] = C_estimates
@@ -252,7 +240,7 @@ for idx, (_, cell) in enumerate(cells_to_plot.iterrows()):
     t = np.arange(len(cell['C_upsampled'])) / spike_sampling_rate
     
     for prop in trace_properties:
-        y_data = cell[prop['name']] if prop['name'] != 'S_estimate' else cell['S_estimate'] * 20
+        y_data = cell[prop['name']] if prop['name'] != 'S_estimate' else cell['S_estimate'] * 2
         fig.add_trace(
             go.Scatter(
                 x=t, 
