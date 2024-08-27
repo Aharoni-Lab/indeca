@@ -14,6 +14,7 @@ import os
 
 import numpy as np
 import pandas as pd
+import scipy
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
@@ -25,8 +26,9 @@ from routine.simulation import simulate_traces
 generate_new_dataset = True
 save_new_dataset = True
 
-NUM_CELLS = 20
-LENGTH_IN_SEC = 30
+NUM_CELLS = 5
+LENGTH_IN_SEC = 20 
+SPIKE_SAMPLING_RATE = 200 # Hz
 PARAM_TAU_D = 0.2 # units of seconds
 PARAM_TAU_R = 0.04 # units of seconds
 
@@ -49,7 +51,7 @@ else:
         tmp_tau_d=PARAM_TAU_D,
         tmp_tau_r=PARAM_TAU_R,
         approx_fps=30,
-        spike_sampling_rate=500, # This results in a 2ms resolution for the spikes (which is roughly the time for a spike and refactory period)
+        spike_sampling_rate=SPIKE_SAMPLING_RATE, # This results in a 2ms resolution for the spikes (which is roughly the time for a spike and refactory period)
     )
     
     # Save the generated dataset
@@ -59,7 +61,7 @@ else:
 # %% 1.1 Plot initial generated data
 
 # Select a subset of cells to plot (e.g., first 5 cells)
-num_cells_to_plot = 10
+num_cells_to_plot = 5
 cells_to_plot = ds.iloc[:num_cells_to_plot]
 
 # Create a figure with subplots for each cell
@@ -72,7 +74,7 @@ for idx, (_, cell) in enumerate(cells_to_plot.iterrows()):
     t_upsampled = np.arange(len(cell['C_true'])) / (cell['fps'] * len(cell['C_true']) / len(cell['C']))
     
     # Plot C and C_upsampled
-    fig.add_trace(go.Scatter(x=t, y=cell['C']/cell['upsample_factor'], name='C', line=dict(color='blue', width=2)), row=idx+1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=cell['C'], name='C', line=dict(color='blue', width=2)), row=idx+1, col=1)
     fig.add_trace(go.Scatter(x=t_upsampled, y=cell['C_true'], name='C_true', line=dict(color='cyan', width=1)), row=idx+1, col=1)
     
     # Plot S and S_upsampled
@@ -93,6 +95,28 @@ fig.show()
 # TODO: Make this more robust by some sort of fitting to initial C data
 TAU_D = 0.2 # units of seconds
 TAU_R = 0.04 # units of seconds
+
+# Define the kernel function
+def kernel(t, A, tau_d, tau_r):
+    return A * (np.exp(-t/tau_d) - np.exp(-t/tau_r))
+
+# Calculate the kernel
+t = np.arange(0, 5*TAU_D, 1/SPIKE_SAMPLING_RATE)  # 5*TAU_D should cover most of the kernel
+k = kernel(t, 1, TAU_D, TAU_R)
+# A = 1 / np.sum(k)  # Normalize the kernel to have area 1
+# k *= A
+# Plot the kernel
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=t, y=k, mode='lines', name='Kernel'))
+fig.update_layout(
+    title='Convolution Kernel',
+    xaxis_title='Time (s)',
+    yaxis_title='Amplitude',
+    showlegend=True
+)
+fig.show()
+
+print("Plotted the convolution kernel")
 
 # We are constraining the bi-exponential to be 0 at t=0.
 # This results in a kernel that follows the form k(t) = A * (exp(-t/TAU_R) - exp(-t/TAU_D))
@@ -125,7 +149,7 @@ for idx, (_, cell) in enumerate(cells_to_plot.iterrows()):
     fig.add_trace(go.Scatter(x=t, y=cell['C'], name='C', line=dict(color='blue', width=2)), row=idx+1, col=1)
     
     # Plot C_upsampled
-    fig.add_trace(go.Scatter(x=t_upsampled, y=cell['C_upsampled'], name='C_upsampled', line=dict(color='red', width=1)), row=idx+1, col=1)
+    fig.add_trace(go.Scatter(x=t_upsampled, y=cell['C_upsampled'], name='C_upsampled', mode='markers', marker=dict(color='red', size=2)), row=idx+1, col=1)
 
 # Update layout
 fig.update_layout(height=200*num_cells_to_plot, title_text='Comparison of C and C_upsampled',
@@ -139,6 +163,109 @@ fig.show()
 print(f"Plotted comparison of C and C_upsampled for {num_cells_to_plot} cells")
 
 
+# %% 3.3 Estimate spiking from kernel and upsampled C
+
+# Function to convolve the kernel with S
+def convolve_kernel(S):
+    return np.convolve(S, k, mode='full')[:len(S)]
+
+# Function to calculate the error
+def calc_error(S, C):
+    return np.sum((C - convolve_kernel(S))**2)
+
+# Function to optimize
+def optimize_S(C):
+    S_init = np.zeros_like(C)
+    result = scipy.optimize.minimize(lambda S: calc_error(S, C), 
+                                     S_init, 
+                                     method='L-BFGS-B', 
+                                     bounds=[(0, None)]*len(C),
+                                     options={'maxiter': 1000, 'ftol': 1e-8, 'gtol': 1e-8})
+    return result.x
+
+# Estimate S for each cell
+total_cells = len(ds)
+print(f"Estimating S for {total_cells} cells")
+S_estimates = []
+for i, (idx, row) in enumerate(tqdm(ds.iterrows(), total=total_cells, desc="Estimating S")):
+    S_estimate = optimize_S(row['C_upsampled'])
+    S_estimates.append(S_estimate)
+    
+    # Display progress every 10% of cells processed
+    if total_cells > 0:
+        if (i + 1) % max(1, total_cells // 10) == 0 or i == total_cells - 1:
+            percent_complete = (i + 1) / total_cells * 100
+    else:
+        percent_complete = 100  # If there are no cells, consider it 100% complete
+        print(f"Progress: {percent_complete:.1f}% complete ({i + 1}/{total_cells} cells processed)")
+
+# Add S_estimate column to the dataframe
+ds['S_estimate'] = S_estimates
+
+# Generate reconvolved C_estimates
+print("Generating reconvolved C_estimates...")
+
+# Function to convolve S_estimate with kernel k
+def reconvolve_C(S_estimate):
+    return np.convolve(S_estimate, k, mode='full')[:len(S_estimate)]
+
+# Apply reconvolution to each cell's S_estimate
+C_estimates = []
+for S_estimate in tqdm(ds['S_estimate'], desc="Reconvolving C"):
+    C_estimate = reconvolve_C(S_estimate)
+    C_estimates.append(C_estimate)
+
+# Add C_estimate column to the dataframe
+ds['C_estimate'] = C_estimates
+
+
+# %% 3.4 Plot comparison of C_upsampled, S_estimate, and S_true for a few cells
+num_cells_to_plot = 5
+cells_to_plot = ds.iloc[:num_cells_to_plot]
+
+fig = make_subplots(rows=num_cells_to_plot, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                    subplot_titles=[f'Cell {i+1}' for i in range(num_cells_to_plot)])
+
+# Define trace properties
+trace_properties = [
+    {'name': 'C_upsampled', 'color': 'blue', 'width': 2, 'dash': None},
+    {'name': 'C_estimate', 'color': 'purple', 'width': 2, 'dash': 'dash'},
+    {'name': 'S_estimate', 'color': 'red', 'width': 1, 'dash': None},
+    {'name': 'S_true', 'color': 'green', 'width': 1, 'dash': None}
+]
+
+for idx, (_, cell) in enumerate(cells_to_plot.iterrows()):
+    t = np.arange(len(cell['C_upsampled'])) / spike_sampling_rate
+    
+    for prop in trace_properties:
+        y_data = cell[prop['name']] if prop['name'] != 'S_estimate' else cell['S_estimate'] * 20
+        fig.add_trace(
+            go.Scatter(
+                x=t, 
+                y=y_data, 
+                name=prop['name'],
+                line=dict(color=prop['color'], width=prop['width'], dash=prop['dash']),
+                legendgroup=prop['name'],
+                showlegend=(idx == 0)  # Only show in legend for the first cell
+            ),
+            row=idx+1, 
+            col=1
+        )
+
+# Update layout
+fig.update_layout(
+    height=200*num_cells_to_plot, 
+    title_text='Comparison of C_upsampled, S_estimate, and S_true',
+    showlegend=True, 
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
+fig.update_xaxes(title_text='Time (s)', row=num_cells_to_plot, col=1)
+fig.update_yaxes(title_text='Fluorescence / Spike Amplitude', col=1)
+
+# Show the plot
+fig.show()
+
+print(f"Plotted comparison of C_upsampled, S_estimate, and S_true for {num_cells_to_plot} cells")
 
 
 # %% 4. Binarize 's' using a single threshold across all cells and determine per cell scaling factor

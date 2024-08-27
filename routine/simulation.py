@@ -82,8 +82,8 @@ def exp_trace(num_samples: int, P: np.ndarray, tau_d: float, tau_r: float, trunc
     
     # Downscale S and C by 1/upsample_factor
     # reshapes and then sums
-    C = C_upsampled.reshape(-1, upsample_factor).sum(axis=1)
-    S = S_upsampled.reshape(-1, upsample_factor).sum(axis=1)
+    C = C_upsampled.reshape(-1, upsample_factor).mean(axis=1)
+    S = S_upsampled.reshape(-1, upsample_factor).mean(axis=1)
     
     # returns both the upscaled and normal FPS S and C
     return C_upsampled, S_upsampled, C, S
