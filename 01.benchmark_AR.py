@@ -30,32 +30,54 @@ PARAM_EST_AR = True
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
+
 # %% benchmark individual update approaches
+def updt_est(y, s, **kwargs):
+    g, _ = estimate_coefs(y, **kwargs)
+    return convolve_g(s, g)
+
+
+def updt_solve(y, s, **kwargs):
+    g = solve_g(y, s, **kwargs)
+    return convolve_g(s, g)
+
+
+def updt_free(y, s, use_fit=True, **kwargs):
+    lams, ps, h, h_fit, mets, h_df = solve_fit_h(y, s, **kwargs)
+    if use_fit:
+        return convolve_h(s, h_fit)
+    else:
+        return convolve_h(s, h)
+
+
 sim_ds = xr.open_dataset(IN_PATH)
-Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
+Y, A, C_gt, S_gt = (
     sim_ds["Y"],
     sim_ds["A"],
     sim_ds["C"].dropna("frame", how="all"),
     sim_ds["S"].dropna("frame", how="all"),
-    sim_ds["C_true"],
-    sim_ds["S_true"],
 )
 c, s = np.array(C_gt.isel(unit_id=0)).reshape((-1, 1)), np.array(
     S_gt.isel(unit_id=0)
 ).reshape((-1, 1))
 noise_lev = [0, 0.5, 1, 2, 3]
-methods = [
-    # "est-smth0",
-    "est-smth20",
-    "est-smth100",
-    "est-naive",
-    "solve-l1",
-    # "solve-l2",
-    "free-l1",
-]
+methods = {
+    "est-smth0.1": lambda y, s: updt_est(
+        y, s, p=2, noise_freq=0.1, use_smooth=True, add_lag=20
+    ),
+    "est-smth0.05": lambda y, s: updt_est(
+        y, s, p=2, noise_freq=0.05, use_smooth=True, add_lag=20
+    ),
+    "est-naive": lambda y, s: updt_est(
+        y, s, p=2, noise_freq=0.5, use_smooth=False, add_lag=20
+    ),
+    "solve": updt_solve,
+    "free": lambda y, s: updt_free(y, s, use_fit=False, fit_method="numerical"),
+    "free-fit": lambda y, s: updt_free(y, s, use_fit=True, fit_method="numerical"),
+}
 res_df = []
 for ns in noise_lev:
-    np.random.seed(0)
+    np.random.seed(42)
     y = c + ns * (np.random.random(c.shape) - 0.5)
     res_df.append(
         pd.DataFrame(
@@ -87,77 +109,15 @@ for ns in noise_lev:
             }
         )
     )
-    for mthd in methods:
-        m, param = mthd.split("-")
-        if m == "est":
-            if param.startswith("smth"):
-                taus, tn = estimate_coefs(
-                    y, p=2, noise_freq=0.1, use_smooth=True, add_lag=int(param[4:])
-                )
-            else:
-                taus, tn = estimate_coefs(
-                    y, p=2, noise_freq=0.5, use_smooth=False, add_lag=0
-                )
-            c_est = scal_like(convolve_g(s, taus), c)
-        elif m == "solve":
-            taus = solve_g(y, s, norm=param)
-            G = construct_G(taus, len(y))
-            y_est = (G @ y).squeeze()
-            res_df.append(
-                pd.DataFrame(
-                    {
-                        "method": mthd + "-y",
-                        "noise": ns,
-                        "frame": np.arange(len(y)),
-                        "value": y_est,
-                    }
-                )
-            )
-            c_est = scal_like(convolve_g(s, taus), c)
-        elif m == "free":
-            h_nopen = solve_h(y, s)
-            _, h_nopen_fit = fit_sumexp(h_nopen, 2)
-            lams, h, h_fit, mets, h_df = solve_fit_h(y, s)
-            c_est = convolve_h(s, h)
-            taus = None
-            res_df.append(
-                pd.DataFrame(
-                    {
-                        "method": mthd + "-no_penal",
-                        "noise": ns,
-                        "frame": np.arange(len(y)),
-                        "value": convolve_h(s, h_nopen),
-                    }
-                )
-            )
-            res_df.append(
-                pd.DataFrame(
-                    {
-                        "method": mthd + "-no_penal-fit",
-                        "noise": ns,
-                        "frame": np.arange(len(y)),
-                        "value": convolve_h(s, h_nopen_fit),
-                    }
-                )
-            )
-            res_df.append(
-                pd.DataFrame(
-                    {
-                        "method": mthd + "-fit",
-                        "noise": ns,
-                        "frame": np.arange(len(y)),
-                        "value": convolve_h(s, h_fit),
-                    }
-                )
-            )
-        print("method: {}, g: {}".format(mthd, taus))
+    for mthd, updt_func in methods.items():
+        y_est = scal_like(updt_func(y, s), c)
         res_df.append(
             pd.DataFrame(
                 {
                     "method": mthd,
                     "noise": ns,
                     "frame": np.arange(len(y)),
-                    "value": c_est,
+                    "value": y_est,
                 }
             )
         )
@@ -165,7 +125,7 @@ res_df = pd.concat(res_df, ignore_index=True)
 fig = px.line(
     res_df, facet_row="noise", x="frame", y="value", color="method", line_group="noise"
 )
-fig.write_html(os.path.join(FIG_PATH, "traces.html"))
+fig.write_html(os.path.join(FIG_PATH, "exp_traces.html"))
 
 
 # %% benchmark update across multiple cells
