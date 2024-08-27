@@ -61,7 +61,10 @@ def ar_trace(frame: int, P: np.ndarray, g: np.ndarray):
 
 
 def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres=1e-6):
-    S = markov_fire(frame, P).astype(float)
+    while True:
+        S = markov_fire(frame, P).astype(float)
+        if S.sum() > 0:
+            break
     t = np.arange(1, frame + 1)
     v = np.exp(-t / tau_d) - np.exp(-t / tau_r)
     v = v[v > trunc_thres]
