@@ -43,7 +43,7 @@ Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
 c, s = np.array(C_gt.isel(unit_id=0)).reshape((-1, 1)), np.array(
     S_gt.isel(unit_id=0)
 ).reshape((-1, 1))
-noise_lev = [0, 1, 2, 5, 10]
+noise_lev = [0, 0.5, 1, 2, 3]
 methods = [
     # "est-smth0",
     "est-smth20",
@@ -169,8 +169,8 @@ fig.write_html(os.path.join(FIG_PATH, "traces.html"))
 
 
 # %% benchmark update across multiple cells
-def free_kn(y, s):
-    res = solve_fit_h(y, s)
+def free_kn(y, s, **kwargs):
+    res = solve_fit_h(y, s, **kwargs)
     taus = -1 / res[0]
     if (np.imag(taus) == 0).all():
         return True, taus, res[1]
@@ -184,10 +184,12 @@ C_gt, S_gt = (
     sim_ds["C"].dropna("frame", how="all").isel(unit_id=subset),
     sim_ds["S"].dropna("frame", how="all").isel(unit_id=subset),
 )
-noise_lev = [0, 1, 2, 5, 10]
+noise_lev = [0, 0.5, 1, 2, 3]
 methods = {
-    "free-full": free_kn,
-    "free-ind": free_kn,
+    "free-full": lambda y, s: free_kn(y, s, fit_method="solve"),
+    "free-full-num": lambda y, s: free_kn(y, s, fit_method="numerical"),
+    "free-ind": lambda y, s: free_kn(y, s, fit_method="solve"),
+    "free-ind-num": lambda y, s: free_kn(y, s, fit_method="numerical"),
     "est-smth0.1": lambda y, s: AR2exp(
         *estimate_coefs(y, p=2, noise_freq=0.1, use_smooth=True, add_lag=20)[0]
     ),
@@ -207,7 +209,7 @@ for ns in noise_lev:
     )
     y_all = c_all + ns * (np.random.random(c_all.shape) - 0.5)
     for mthd, update_func in methods.items():
-        if mthd.endswith("-full"):
+        if "-full" in mthd:
             y_in, s_in = y_all.reshape(
                 (1, y_all.shape[0], y_all.shape[1])
             ), s_all.reshape((1, s_all.shape[0], s_all.shape[1]))
@@ -256,7 +258,17 @@ fig.add_hline(r1_true, line_dash="dot", line_color="grey", line_width=1, opacity
 fig.update_traces(marker={"size": 5, "opacity": 0.8})
 fig.write_html(os.path.join(FIG_PATH, "coefs.html"))
 
+
 # %% debugging all algorithm
+def free_kn(y, s, **kwargs):
+    res = solve_fit_h(y, s, **kwargs)
+    taus = -1 / res[0]
+    if (np.imag(taus) == 0).all():
+        return True, taus, res[1]
+    else:
+        return AR2exp(*tau2AR(*taus))
+
+
 sim_ds = xr.open_dataset(IN_PATH)
 subset = slice(0, 100)
 C_gt, S_gt = (
@@ -264,7 +276,7 @@ C_gt, S_gt = (
     sim_ds["S"].dropna("frame", how="all").isel(unit_id=subset),
 )
 plt_df = (
-    sim_ds.isel(unit_id=0)[["C", "S", "C_true", "S_true"]]
+    sim_ds.isel(unit_id=0)[["C", "S"]]
     .to_dataframe()
     .reset_index()
     .melt(id_vars=["frame", "unit_id"])
@@ -276,18 +288,43 @@ c_all, s_all = np.array(C_gt.transpose("unit_id", "frame")), np.array(
     S_gt.transpose("unit_id", "frame")
 )
 res = []
-for ns in [0, 5, 10]:
+mets = []
+for ns in [0, 0.5, 1, 2, 3]:
     print("noise level: {}".format(ns))
     np.random.seed(42)
     y_all = c_all + ns * (np.random.random(c_all.shape) - 0.5)
     lams, ps, h, h_fit, metric_df, h_df = solve_fit_h(
-        y_all, s_all, max_iters=10, verbose=True
+        y_all, s_all, max_iters=10, verbose=True, fit_method="numerical"
     )
+    taus = -1 / lams
+    if (np.imag(taus) == 0).all():
+        is_biexp, tconst, coefs = True, taus, ps
+    else:
+        is_biexp, tconst, coefs = AR2exp(*tau2AR(*taus))
+    (r0, r1), t_hat = find_dhm(is_biexp, tconst, coefs)
     h_df_tall = h_df.melt(id_vars=["iter", "smth_penal", "frame"])
     h_df_tall["value"] = np.real(h_df_tall["value"])
     h_df_tall["noise"] = ns
+    mets.append(
+        pd.DataFrame(
+            [
+                {
+                    "noise": ns,
+                    "is_biexp": is_biexp,
+                    "tconst0": tconst[0],
+                    "tconst1": tconst[1],
+                    "coef0": coefs[0],
+                    "coef1": coefs[1],
+                    "r0": r0,
+                    "r1": r1,
+                    "t_hat": t_hat,
+                }
+            ]
+        )
+    )
     res.append(h_df_tall)
 res = pd.concat(res, ignore_index=True)
+mets = pd.concat(mets, ignore_index=True)
 fig = px.line(
     res,
     x="frame",
