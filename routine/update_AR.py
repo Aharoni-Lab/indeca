@@ -100,12 +100,25 @@ def fit_sumexp_gd(y, x=None, interp_factor=100):
     T = len(y)
     if x is None:
         x = np.arange(T)
-    x_interp = np.linspace(x[0], x[1], interp_factor * len(x))
+    x_interp = np.linspace(x[0], x[-1], interp_factor * len(x))
     y_interp = np.interp(x_interp, x, y)
     idx_max = np.argmax(y)
-    max_val = y[idx_max]
-    tau_r_init = np.argmin(np.abs(y_interp - (1 - 1 / np.e) * max_val)) / interp_factor
-    tau_d_init = np.argmin(np.abs(y_interp - (1 / np.e) * max_val)) / interp_factor
+    idx_max_interp = np.argmax(y_interp)
+    fmax = y[idx_max]
+    f0 = y[0]
+    if idx_max_interp > 0:
+        tau_r_init = (
+            np.argmin(
+                np.abs(y_interp[:idx_max_interp] - f0 - (1 - 1 / np.e) * (fmax - f0))
+            )
+            / interp_factor
+        )
+    else:
+        tau_r_init = 0
+    tau_d_init = (
+        np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
+        + idx_max_interp
+    ) / interp_factor
     res = curve_fit(
         lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
         x,
@@ -114,6 +127,13 @@ def fit_sumexp_gd(y, x=None, interp_factor=100):
         bounds=(0, np.inf),
     )
     tau_d, tau_r = res[0]
+    if tau_d <= tau_r:
+        warnings.warn(
+            "decaying time smaller than rising time: tau_d: {}, tau_r: {}\nreversing coefficients".format(
+                tau_d, tau_r
+            )
+        )
+        tau_d, tau_r = tau_r, tau_d
     return (
         -1 / np.array([tau_d, tau_r]),
         np.array([1, -1]),
