@@ -164,37 +164,51 @@ print(f"Plotted comparison of C and C_upsampled for {num_cells_to_plot} cells")
 
 
 # %% 3.3 Estimate spiking from kernel and upsampled C
+import cvxpy as cp
+import numpy as np
+from tqdm import tqdm
 
-# Function to convolve the kernel with S
-def convolve_kernel(S):
-    return np.convolve(S, k, mode='full')[:len(S)]
-
-# Function to calculate the error
-def calc_error(S, C):
-    return np.sum((C - convolve_kernel(S))**2)
-
-# Function to optimize
-def optimize_S(C):
-    S_init = np.zeros_like(C)
-    result = scipy.optimize.minimize(lambda S: calc_error(S, C), 
-                                     S_init, 
-                                     method='L-BFGS-B', 
-                                     bounds=[(0, None)]*len(C),
-                                     options={'maxiter': 1000, 'ftol': 1e-8, 'gtol': 1e-8})
-    return result.x
+def solve_s(y, h, norm="l1", sparsity_penalty=0):
+    y, h = y.squeeze(), h.squeeze()
+    assert y.ndim == h.ndim
+    multi_unit = y.ndim > 1
+    if multi_unit:
+        ncell, T = y.shape
+    else:
+        T = len(y)
+    if multi_unit:
+        b = cp.Variable((ncell, 1))
+    else:
+        b = cp.Variable()
+    s = cp.Variable(T)
+    if multi_unit:
+        conv_term = cp.vstack([cp.conv(s, hh[::-1])[:T] for hh in h])
+    else:
+        conv_term = cp.conv(h, s)[:T]
+    norm_ord = {"l1": 1, "l2": 2}[norm]
+    obj = cp.Minimize(
+        cp.norm(y - conv_term - b, norm_ord)
+        + sparsity_penalty * cp.norm(s, 1)
+    )
+    cons = [s >= 0, b >= 0]
+    prob = cp.Problem(obj, cons)
+    prob.solve()
+    return s.value
 
 # Estimate S for each cell
 total_cells = len(ds)
 print(f"Estimating S for {total_cells} cells")
 S_estimates = []
 for i, (idx, row) in enumerate(tqdm(ds.iterrows(), total=total_cells, desc="Estimating S")):
-    S_estimate = optimize_S(row['C_upsampled'])
+    y = row['C_upsampled']
+    S_estimate = solve_s(y, k, norm="l2", sparsity_penalty=0.0)
     S_estimates.append(S_estimate)
     
     # Display progress every 10% of cells processed
     if total_cells > 0:
         if (i + 1) % max(1, total_cells // 10) == 0 or i == total_cells - 1:
             percent_complete = (i + 1) / total_cells * 100
+            print(f"Progress: {percent_complete:.1f}% complete ({i + 1}/{total_cells} cells processed)")
     else:
         percent_complete = 100  # If there are no cells, consider it 100% complete
         print(f"Progress: {percent_complete:.1f}% complete ({i + 1}/{total_cells} cells processed)")
