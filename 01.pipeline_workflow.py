@@ -33,6 +33,7 @@ LENGTH_IN_SEC = 30
 SPIKE_SAMPLING_RATE = 200 # Hz
 PARAM_TAU_D = 0.2 # units of seconds
 PARAM_TAU_R = 0.04 # units of seconds
+NOISE = 0.2 # standard deviation of the noise
 
 OUT_PATH = "./intermediate/simulated/simulated.nc"
 
@@ -54,6 +55,7 @@ else:
         tmp_tau_r=PARAM_TAU_R,
         approx_fps=30,
         spike_sampling_rate=SPIKE_SAMPLING_RATE, # This results in a 2ms resolution for the spikes (which is roughly the time for a spike and refactory period)
+        noise=NOISE,
     )
     
     # Save the generated dataset
@@ -76,7 +78,7 @@ for idx, (_, cell) in enumerate(cells_to_plot.iterrows()):
     t_upsampled = np.arange(len(cell['C_true'])) / (cell['fps'] * len(cell['C_true']) / len(cell['C']))
     
     # Plot C and C_upsampled
-    fig.add_trace(go.Scatter(x=t, y=cell['C'], name='C', line=dict(color='blue', width=2)), row=idx+1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=cell['C_noisy'], name='C_noisy', line=dict(color='blue', width=2)), row=idx+1, col=1)
     fig.add_trace(go.Scatter(x=t_upsampled, y=cell['C_true'], name='C_true', line=dict(color='cyan', width=1)), row=idx+1, col=1)
     
     # Plot S and S_upsampled
@@ -128,9 +130,9 @@ print("Plotted the convolution kernel")
 spike_sampling_rate = ds['fps'].iloc[0] * ds['upsample_factor'].iloc[0]  # Assuming all rows have the same spike_sampling_rate
 
 ds['C_upsampled'] = ds.apply(lambda row: np.interp(
-    np.linspace(0, len(row['C']) - 1, len(row['C']) * row['upsample_factor']),
-    np.arange(len(row['C'])),
-    row['C']
+    np.linspace(0, len(row['C_noisy']) - 1, len(row['C_noisy']) * row['upsample_factor']),
+    np.arange(len(row['C_noisy'])),
+    row['C_noisy']
 ), axis=1)
 
 print(f"Interpolated C to match spike sampling rate of {spike_sampling_rate} Hz")
@@ -144,11 +146,11 @@ fig = make_subplots(rows=num_cells_to_plot, cols=1, shared_xaxes=True, vertical_
 
 for idx, (_, cell) in enumerate(cells_to_plot.iterrows()):
     # Calculate time arrays for both normal and upsampled data
-    t = np.arange(len(cell['C'])) / cell['fps']
+    t = np.arange(len(cell['C_noisy'])) / cell['fps']
     t_upsampled = np.arange(len(cell['C_upsampled'])) / spike_sampling_rate
     
     # Plot C
-    fig.add_trace(go.Scatter(x=t, y=cell['C'], name='C', line=dict(color='blue', width=2)), row=idx+1, col=1)
+    fig.add_trace(go.Scatter(x=t, y=cell['C_noisy'], name='C_noisy', line=dict(color='blue', width=2)), row=idx+1, col=1)
     
     # Plot C_upsampled
     fig.add_trace(go.Scatter(x=t_upsampled, y=cell['C_upsampled'], name='C_upsampled', mode='markers', marker=dict(color='red', size=2)), row=idx+1, col=1)
@@ -170,19 +172,34 @@ print(f"Plotted comparison of C and C_upsampled for {num_cells_to_plot} cells")
 # Function to solve for spike estimates given calcium trace and kernel
 def solve_s(y, h, norm="l1", sparsity_penalty=0):
     y, h = y.squeeze(), h.squeeze()
-    T = len(y)
-    b = cp.Variable()  # Baseline fluorescence
-    s = cp.Variable(T)  # Spike train
-    conv_term = cp.conv(h, s)[:T]  # Convolution of kernel and spike train
+
+    num_samples = len(y)
+    
+    # Baseline fluorescence for each cell
+    b = cp.Variable()
+    
+    # Spike train for each cell and time point
+    s = cp.Variable(num_samples)
+    
+    # Convolution term: applying cp.conv() for each cell separately
+
+    conv_term = cp.conv(h, s)[:num_samples]  # Convolve spike train with kernel for each cell
+
+    # Norm choice (l1 or l2)
     norm_ord = {"l1": 1, "l2": 2}[norm]
+
     # Objective function: minimize reconstruction error + sparsity penalty
     obj = cp.Minimize(
-        cp.norm(y - conv_term - b, norm_ord)
-        + sparsity_penalty * cp.norm(s, 1)
+        cp.norm(y - conv_term - b, norm_ord)  # Properly broadcast baseline
+      #  + sparsity_penalty * cp.norm(s, 1)  # L1 sparsity penalty
     )
-    cons = [s >= 0, b >= 0]  # Constraints: non-negative spikes and baseline
+
+    # Constraints: non-negative spikes and baseline
+    cons = [s >= 0, b >= 0]
+    
+    # Define and solve the problem
     prob = cp.Problem(obj, cons)
-    prob.solve()
+    prob.solve()  # Using SCS solver to handle large-scale problems
     return s.value
 
 # Estimate S for each cell
@@ -191,9 +208,8 @@ print(f"Estimating S for {total_cells} cells")
 
 # Vectorize operations for efficiency
 y_values = np.stack(ds['C_upsampled'].values)
-S_estimates = []
-
 # Iterate through each cell's calcium trace
+S_estimates = []
 for i, y in enumerate(tqdm(y_values, desc="Estimating S")):
     # Solve for spike estimates using L2 norm and no sparsity penalty
     S_estimate = solve_s(y, k, norm="l2", sparsity_penalty=0.0)
@@ -218,7 +234,7 @@ def reconvolve_C_vectorized(S_estimates, kernel):
 C_estimates = reconvolve_C_vectorized(S_estimates, k)
 
 # Add C_estimate column to the dataframe
-ds['C_estimate'] = C_estimates
+ds['C_estimate'] = list(C_estimates)  # Convert to list before assigning
 
 
 # %% 3.4 Plot comparison of C_upsampled, S_estimate, and S_true for a few cells

@@ -148,6 +148,7 @@ def simulate_traces(
     tmp_tau_r: float,
     approx_fps: float = 30,
     spike_sampling_rate = 500,
+    noise: float = 0.01,
 ):
     
     upsample_factor = np.round(spike_sampling_rate / approx_fps).astype(int)
@@ -165,7 +166,16 @@ def simulate_traces(
             'C': C,
             'S': S
         })
+    # Add Gaussian noise to C
+    for trace in traces:
+        noise_array = np.random.normal(0, noise, size=trace['C'].shape)
+        trace['C_noisy'] = trace['C'] + noise_array
     
+    # Add the noisy C to the DataFrame
+    df = pd.DataFrame(traces)
+    df['fps'] = fps
+    df['upsample_factor'] = upsample_factor
+    df['spike_sampling_rate'] = spike_sampling_rate
     df = pd.DataFrame(traces)
     df['fps'] = fps
     df['upsample_factor'] = upsample_factor
