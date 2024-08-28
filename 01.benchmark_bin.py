@@ -12,7 +12,6 @@ import xarray as xr
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
-from routine.minian_functions import open_minian
 from routine.update_bin import (
     construct_G,
     construct_R,
@@ -23,13 +22,15 @@ from routine.update_bin import (
 )
 from routine.utilities import norm
 
-IN_PATH = "./intermediate/simulated/simulated.nc"
+IN_PATH = "./intermediate/simulated/simulated-upsamp.nc"
 INT_PATH = "./intermediate/benchmark_bin"
 FIG_PATH = "./figs/benchmark_bin"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
-PARAM_EST_AR = True
+PARAM_EST_AR = False
+PARAM_SIG_MEAN = 2
+PARAM_SIG_VAR = 2
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
@@ -37,7 +38,7 @@ os.makedirs(FIG_PATH, exist_ok=True)
 # %% temporal update
 sim_ds = xr.open_dataset(IN_PATH)
 subset = sim_ds["A"].coords["unit_id"][:5]
-Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
+Y_solve, A, C_gt, S_gt, C_gt_true, S_gt_true = (
     sim_ds["Y"],
     sim_ds["A"],
     sim_ds["C"],
@@ -47,31 +48,23 @@ Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
 )
 A, C_gt, S_gt = (
     A.sel(unit_id=subset),
-    C_gt.sel(unit_id=subset),
-    S_gt.sel(unit_id=subset),
+    C_gt.sel(unit_id=subset).dropna("frame", how="all"),
+    S_gt.sel(unit_id=subset).dropna("frame", how="all"),
 )
-# b = rechunk_like(
-#     xr.DataArray(
-#         np.zeros((A.sizes["height"], A.sizes["width"])),
-#         dims=["height", "width"],
-#         coords={d: A.coords[d] for d in ["height", "width"]},
-#     ),
-#     A,
-# )
-# f = rechunk_like(
-#     xr.DataArray(
-#         np.zeros((Y.sizes["frame"])),
-#         dims=["frame"],
-#         coords={"frame": Y.coords["frame"]},
-#     ),
-#     C_gt,
-# )
-# YrA = compute_trace(Y, A, b, C_gt, f).compute()
-# updt_ds = [YrA.rename("YrA")]
-Y_solve = C_gt.dropna("frame", how="all")
+np.random.seed(42)
+sig_lev = xr.DataArray(
+    np.random.normal(
+        loc=PARAM_SIG_MEAN, scale=PARAM_SIG_VAR, size=C_gt.sizes["unit_id"]
+    ).clip(0.1, 10),
+    dims=["unit_id"],
+    coords={"unit_id": C_gt.coords["unit_id"]},
+    name="sig_lev",
+)
+noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
+Y_solve = C_gt * sig_lev + noise
+updt_ds = [Y_solve.rename("Y_solve"), sig_lev]
 sps_penal = 10
 max_iters = 50
-updt_ds = []
 metric_df = []
 for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     res = {"C": [], "S": [], "b": [], "C-bin": [], "S-bin": [], "b-bin": [], "scal": []}
@@ -133,7 +126,7 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
                 )
             )
 updt_ds = xr.merge(updt_ds)
-updt_ds.to_netcdf(os.path.join(INT_PATH, "temp_res.nc"))
+updt_ds.to_netcdf(os.path.join(INT_PATH, "updt_ds.nc"))
 metric_df = pd.concat(metric_df, ignore_index=True)
 metric_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
@@ -228,7 +221,7 @@ def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
     return pd.concat(res_ls)
 
 
-updt_ds = xr.open_dataset(os.path.join(INT_PATH, "temp_res.nc"))
+updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds.nc"))
 true_ds = xr.open_dataset(IN_PATH).isel(unit_id=updt_ds.coords["unit_id"])
 subset = updt_ds.coords["unit_id"]
 S_gt, S_gt_true, C_gt = (
@@ -236,12 +229,12 @@ S_gt, S_gt_true, C_gt = (
     true_ds["S_true"],
     true_ds["C"].dropna("frame", how="all"),
 )
-S_org, S_bin_org, S_up, S_bin_up, YrA = (
+S_org, S_bin_org, S_up, S_bin_up, Y_solve = (
     updt_ds["S-org"].dropna("frame", how="all"),
     updt_ds["S-bin-org"].dropna("frame", how="all"),
     updt_ds["S-upsamp"],
     updt_ds["S-bin-upsamp"],
-    C_gt,
+    updt_ds["Y_solve"].dropna("frame", how="all"),
 )
 S_updn, S_bin_updn = (
     S_up.coarsen({"frame": 10}).sum().rename("S-updn"),
@@ -298,8 +291,8 @@ g.tick_params(axis="x", rotation=90)
 g.figure.savefig(os.path.join(FIG_PATH, "metrics.svg"), dpi=500, bbox_inches="tight")
 nsamp = min(10, len(subset))
 fig_dict = {
-    "original": [S_gt, C_gt, YrA, S_org, S_bin_org] + max_thres(S_org, 9),
-    "updn": [S_gt, C_gt, YrA, S_updn, S_bin_updn]
+    "original": [S_gt, C_gt, Y_solve, S_org, S_bin_org] + max_thres(S_org, 9),
+    "updn": [S_gt, C_gt, Y_solve, S_updn, S_bin_updn]
     + [
         s.coarsen({"frame": 10}).sum().assign_coords(frame=S_gt.coords["frame"])
         for s in max_thres(S_up.rename("S-updn"), 9)
