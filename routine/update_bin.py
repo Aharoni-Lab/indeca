@@ -49,6 +49,7 @@ def estimate_coefs(
 def solve_deconv(
     y: np.ndarray,
     G: np.ndarray,
+    use_base: bool = False,
     l1_penal: float = 0,
     scale: float = 1,
     R: np.ndarray = None,
@@ -62,7 +63,10 @@ def solve_deconv(
         T = R.shape[1]
     c = cp.Variable((T, 1))
     s = cp.Variable((T, 1))
-    b = cp.Variable()
+    if use_base:
+        b = cp.Variable()
+    else:
+        b = cp.Constant(0)
     obj = cp.Minimize(cp.norm(y - scale * R @ c - b) + l1_penal * cp.norm(s))
     cons = [s == G @ c, c >= 0, s >= 0, b >= 0]
     prob = cp.Problem(obj, cons)
