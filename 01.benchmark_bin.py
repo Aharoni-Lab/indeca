@@ -37,7 +37,7 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% temporal update
 sim_ds = xr.open_dataset(IN_PATH)
-subset = sim_ds["A"].coords["unit_id"][:5]
+subset = sim_ds["A"].coords["unit_id"]
 Y_solve, A, C_gt, S_gt, C_gt_true, S_gt_true = (
     sim_ds["Y"],
     sim_ds["A"],
