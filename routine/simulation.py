@@ -49,23 +49,29 @@ def gauss_cell(
 @nb.jit(nopython=True, nogil=True, cache=True)
 def apply_arcoef(s: np.ndarray, g: np.ndarray):
     c = np.zeros_like(s)
+    g_r = g[::-1].copy()
     for idx in range(len(g), len(s)):
-        c[idx] = s[idx] + c[idx - len(g) : idx] @ g
+        c[idx] = s[idx] + c[idx - len(g) : idx] @ g_r
     return c
 
 
-def ar_trace(frame: int, P: np.ndarray, g: np.ndarray):
+def ar_trace(
+    frame: int,
+    P: np.ndarray,
+    g: np.ndarray = None,
+    tau_d: float = None,
+    tau_r: float = None,
+):
+    if g is None:
+        g = np.array(tau2AR(tau_d, tau_r))
     S = markov_fire(frame, P).astype(float)
     C = apply_arcoef(S, g)
     return C, S
 
 
 def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres=1e-6):
-    while True:
-        S = markov_fire(frame, P).astype(float)
-        if S.sum() > 0:
-            break
-    t = np.arange(1, frame + 1)
+    S = markov_fire(frame, P).astype(float)
+    t = np.arange(1, frame + 1)  # skip the first 0 from biexponential kernel
     v = np.exp(-t / tau_d) - np.exp(-t / tau_r)
     v = v[v > trunc_thres]
     C = np.convolve(v, S, mode="full")[:frame]
@@ -75,9 +81,12 @@ def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres
 def markov_fire(frame: int, P: np.ndarray):
     assert P.shape == (2, 2)
     assert (P.sum(axis=1) == 1).all()
-    S = np.zeros(frame, dtype=int)
-    for i in range(1, len(S)):
-        S[i] = np.random.choice([0, 1], p=P[S[i - 1], :])
+    while True:
+        S = np.zeros(frame, dtype=int)
+        for i in range(1, len(S)):
+            S[i] = np.random.choice([0, 1], p=P[S[i - 1], :])
+        if S.sum() > 0:
+            break
     return S
 
 
@@ -140,6 +149,7 @@ def simulate_data(
     zero_thres=1e-8,
     chk_size=1000,
     upsample: int = 1,
+    useAR: bool = False,
 ):
     ff, hh, ww = (
         dims["frame"],
@@ -178,10 +188,21 @@ def simulate_data(
     A = darr.from_array(
         sparse.COO.from_numpy(np.where(A > zero_thres, A, 0)), chunks=-1
     )
-    traces = [
-        exp_trace(ff * upsample, tmp_P, tmp_tau_d * upsample, tmp_tau_r * upsample)
-        for _ in range(len(cent))
-    ]
+    if useAR:
+        traces = [
+            ar_trace(
+                ff * upsample,
+                tmp_P,
+                tau_d=tmp_tau_d * upsample,
+                tau_r=tmp_tau_r * upsample,
+            )
+            for _ in range(len(cent))
+        ]
+    else:
+        traces = [
+            exp_trace(ff * upsample, tmp_P, tmp_tau_d * upsample, tmp_tau_r * upsample)
+            for _ in range(len(cent))
+        ]
     if upsample > 1:
         C_true = darr.from_array(
             np.stack([t[0] for t in traces]).T, chunks=(chk_size, -1)
