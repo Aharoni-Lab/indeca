@@ -22,24 +22,23 @@ from routine.update_bin import (
 )
 from routine.utilities import norm
 
-IN_PATH = "./intermediate/simulated/simulated-upsamp.nc"
+IN_PATH = "./intermediate/simulated/simulated-ar-upsamp.nc"
 INT_PATH = "./intermediate/benchmark_bin"
 FIG_PATH = "./figs/benchmark_bin"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
 PARAM_EST_AR = False
-PARAM_SIG_MEAN = 2
-PARAM_SIG_VAR = 2
+PARAM_SIG_MEAN = 0.1
+PARAM_SIG_VAR = 0.2
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% temporal update
 sim_ds = xr.open_dataset(IN_PATH)
-subset = sim_ds["A"].coords["unit_id"]
-Y_solve, A, C_gt, S_gt, C_gt_true, S_gt_true = (
-    sim_ds["Y"],
+subset = sim_ds["A"].coords["unit_id"][:5]
+A, C_gt, S_gt, C_gt_true, S_gt_true = (
     sim_ds["A"],
     sim_ds["C"],
     sim_ds["S"],
@@ -55,7 +54,7 @@ np.random.seed(42)
 sig_lev = xr.DataArray(
     np.random.normal(
         loc=PARAM_SIG_MEAN, scale=PARAM_SIG_VAR, size=C_gt.sizes["unit_id"]
-    ).clip(0.1, 10),
+    ).clip(0.01, 0.5),
     dims=["unit_id"],
     coords={"unit_id": C_gt.coords["unit_id"]},
     name="sig_lev",
@@ -72,7 +71,7 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
         Y_solve.transpose("unit_id", "frame"), total=Y_solve.sizes["unit_id"]
     ):
         # parameters
-        y_norm = np.array(norm(y))
+        y_norm = np.array(y)
         T = len(y_norm)
         g, tn = estimate_coefs(y_norm, p=2, noise_freq=0.4, use_smooth=False, add_lag=0)
         if PARAM_EST_AR:
@@ -136,7 +135,7 @@ def dilate1d(a, kernel):
     return cv2.dilate(a.astype(float), kernel).squeeze()
 
 
-def compute_dist(trueS, newS, metric, corr_dilation=1):
+def compute_dist(trueS, newS, metric, corr_dilation=0):
     if metric == "correlation" and corr_dilation:
         kn = np.ones(2 * corr_dilation + 1)
         trueS = xr.apply_ufunc(
