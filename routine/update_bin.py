@@ -100,28 +100,40 @@ def solve_deconv_bin(
         ]
         opt_idx = np.argmin(th_objs)
         opt_s = th_svals[opt_idx]
-        scale_new = th_scals[opt_idx]
         opt_obj = th_objs[opt_idx]
         try:
-            opt_obj_last = metric_df["obj"].min()
+            opt_obj_idx = metric_df["obj"].idxmin()
+            opt_obj_last = metric_df.loc[opt_obj_idx, "obj"].item()
+            opt_scal_last = metric_df.loc[opt_obj_idx, "scale"].item()
+            scale_dup = metric_df["scale"].duplicated().any()
         except TypeError:
             opt_obj_last = np.inf
+            opt_scal_last = th_scals[opt_idx]
+            scale_dup = False
+        if scale_dup:
+            scale_new = opt_scal_last
+        else:
+            scale_new = (th_scals[opt_idx] + opt_scal_last) / 2
         metric_df = pd.concat(
             [
                 metric_df,
                 pd.DataFrame(
                     [{"scale": scale, "obj": opt_obj, "lb": lb, "iter": niter}]
                 ),
-            ]
+            ],
+            ignore_index=True,
         )
         if np.abs(scale_new - scale) <= tol:
+            metric_df["converged"] = True
             break
         elif abs(opt_obj_last - opt_obj) <= tol:
+            metric_df["converged"] = True
             break
         else:
             scale = scale_new
             niter += 1
     else:
+        metric_df["converged"] = False
         warnings.warn("max scale iteration reached")
     return Gi @ opt_s, opt_s, b_bin, scale, metric_df
 
