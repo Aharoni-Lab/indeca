@@ -37,7 +37,7 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% temporal update
 sim_ds = xr.open_dataset(IN_PATH)
-subset = sim_ds["A"].coords["unit_id"][:5]
+subset = sim_ds["A"].coords["unit_id"]
 A, C_gt, S_gt, C_gt_true, S_gt_true = (
     sim_ds["A"],
     sim_ds["C"],
@@ -62,7 +62,7 @@ sig_lev = xr.DataArray(
 noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = C_gt * sig_lev + noise
 updt_ds = [Y_solve.rename("Y_solve"), sig_lev]
-sps_penal = 10
+sps_penal = 1
 max_iters = 50
 metric_df = []
 for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
