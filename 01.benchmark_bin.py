@@ -10,7 +10,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
 import xarray as xr
+from plotly.subplots import make_subplots
 from scipy.spatial.distance import cdist
+from scipy.stats import zscore
 from tqdm.auto import tqdm
 
 from routine.plotting import map_gofunc
@@ -291,18 +293,132 @@ g.map_dataframe(
 # g.map_dataframe(sns.swarmplot, x="variable", y="dist", edgecolor="auto", linewidth=1)
 g.tick_params(axis="x", rotation=90)
 g.figure.savefig(os.path.join(FIG_PATH, "metrics.svg"), dpi=500, bbox_inches="tight")
+# html violin
+met_res["title"] = ""
 fig = map_gofunc(
-    met_res,
+    met_res[(met_res["metric"] != "hamming") & (met_res["method"] == "updn")],
     go.Violin,
     facet_row="metric",
     facet_col="method",
-    margin_titles=True,
+    margin_titles=False,
     x="variable",
     y="dist",
     points="all",
     box_visible=True,
+    showlegend=False,
+    title_dim="title",
 )
+fig.update_yaxes(title_text="Correlation Distance", row=1)
+fig.update_yaxes(title_text="Edit Distance", row=2)
 fig.write_html(os.path.join(FIG_PATH, "metrics.html"))
+# density plot
+met_den = (
+    met_res[met_res["method"] == "updn"]
+    .pivot(columns="metric", index=["variable", "unit_id"], values="dist")
+    .reset_index()
+    .dropna()
+)
+fig = px.density_contour(
+    met_den,
+    x="correlation",
+    y="edit",
+    facet_col="variable",
+    facet_col_wrap=5,
+    facet_row_spacing=0.1,
+)
+fig.update_traces(contours_coloring="fill", contours_showlabels=True)
+fig.update_traces(showscale=False)
+fig.update_xaxes(title_text="Correlation Distance", row=1)
+fig.update_yaxes(title_text="Edit Distance", col=1)
+fig.write_html(os.path.join(FIG_PATH, "metric_contours.html"))
+
+# %% plot alpha correlations
+sig_scal = updt_ds[["sig_lev", "scal-upsamp"]].to_dataframe()
+sig_scal["S_gt"] = S_gt.mean("frame").to_series()
+sig_scal["S_org"] = S_updn.mean("frame").to_series()
+sig_scal["S_bin"] = S_bin_updn.mean("frame").to_series()
+fig = make_subplots(
+    rows=1,
+    cols=3,
+    shared_xaxes="all",
+    shared_yaxes=False,
+    subplot_titles=["Original", "Binary", "Binary Scale"],
+    horizontal_spacing=0.1,
+)
+fig.add_trace(
+    go.Histogram2dContour(x=sig_scal["sig_lev"], y=sig_scal["S_org"], showscale=False),
+    row=1,
+    col=1,
+)
+fig.add_trace(
+    go.Histogram2dContour(x=sig_scal["sig_lev"], y=sig_scal["S_bin"], showscale=False),
+    row=1,
+    col=2,
+)
+fig.add_trace(
+    go.Histogram2dContour(
+        x=sig_scal["sig_lev"], y=sig_scal["scal-upsamp"], showscale=False
+    ),
+    row=1,
+    col=3,
+)
+fig.add_trace(
+    go.Scatter(
+        x=sig_scal["sig_lev"],
+        y=sig_scal["S_org"],
+        mode="markers",
+        marker=dict(
+            symbol="circle",
+            opacity=0.6,
+            color="white",
+            size=6,
+            line=dict(width=1),
+        ),
+        showlegend=False,
+    ),
+    row=1,
+    col=1,
+)
+fig.add_trace(
+    go.Scatter(
+        x=sig_scal["sig_lev"],
+        y=sig_scal["S_bin"],
+        mode="markers",
+        marker=dict(
+            symbol="circle",
+            opacity=0.6,
+            color="white",
+            size=6,
+            line=dict(width=1),
+        ),
+        showlegend=False,
+    ),
+    row=1,
+    col=2,
+)
+fig.add_trace(
+    go.Scatter(
+        x=sig_scal["sig_lev"],
+        y=sig_scal["scal-upsamp"],
+        mode="markers",
+        marker=dict(
+            symbol="circle",
+            opacity=0.6,
+            color="white",
+            size=6,
+            line=dict(width=1),
+        ),
+        showlegend=False,
+    ),
+    row=1,
+    col=3,
+)
+fig.update_xaxes(title_text="Signal Level")
+fig.update_yaxes(title_text="Mean S", row=1, col=1)
+fig.update_yaxes(title_text="Mean S-bin", row=1, col=2)
+fig.update_yaxes(title_text="Alpha scale", row=1, col=3)
+fig.write_html(os.path.join(FIG_PATH, "scaling.html"))
+
 
 # %% plot examples
 nsamp = min(5, len(subset))
