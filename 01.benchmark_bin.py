@@ -35,6 +35,96 @@ PARAM_SIG_VAR = 0.2
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
+
+def dilate1d(a, kernel):
+    return cv2.dilate(a.astype(float), kernel).squeeze()
+
+
+def compute_dist(trueS, newS, metric, corr_dilation=0):
+    if metric == "correlation" and corr_dilation:
+        kn = np.ones(2 * corr_dilation + 1)
+        trueS = xr.apply_ufunc(
+            dilate1d,
+            trueS.compute(),
+            input_core_dims=[["frame"]],
+            output_core_dims=[["frame"]],
+            vectorize=True,
+            kwargs={"kernel": kn},
+        )
+        newS = xr.apply_ufunc(
+            dilate1d,
+            newS.compute(),
+            input_core_dims=[["frame"]],
+            output_core_dims=[["frame"]],
+            vectorize=True,
+            kwargs={"kernel": kn},
+        )
+    if metric == "edit":
+        dist = np.array(
+            [
+                Levenshtein.distance(
+                    np.array(trueS.sel(unit_id=uid)), np.array(newS.sel(unit_id=uid))
+                )
+                for uid in trueS.coords["unit_id"]
+            ]
+        )
+    else:
+        dist = np.diag(
+            cdist(
+                trueS.transpose("unit_id", "frame"),
+                newS.transpose("unit_id", "frame"),
+                metric=metric,
+            )
+        )
+    Sname = newS.name.split("-")
+    if "org" in Sname:
+        mthd = "original"
+        Sname.remove("org")
+    elif "upsamp" in Sname:
+        mthd = "upsampled"
+        Sname.remove("upsamp")
+    elif "updn" in Sname:
+        mthd = "updn"
+        Sname.remove("updn")
+    else:
+        mthd = "unknown"
+    return pd.DataFrame(
+        {
+            "variable": "-".join(Sname),
+            "method": mthd,
+            "metric": metric,
+            "unit_id": trueS.coords["unit_id"],
+            "dist": dist,
+        }
+    )
+
+
+def norm_per_cell(S):
+    return xr.apply_ufunc(
+        norm,
+        S.astype(float).compute(),
+        input_core_dims=[["frame"]],
+        output_core_dims=[["frame"]],
+        vectorize=True,
+    )
+
+
+def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
+    S, S_true = S.dropna("frame"), S_true.dropna("frame")
+    if nthres is not None:
+        S_ls = max_thres(S, nthres)
+    else:
+        S_ls = [S]
+    if coarsen is not None:
+        S_ls = [s.coarsen(coarsen).sum() for s in S_ls]
+        S_ls = [
+            s.assign_coords({"frame": np.ceil(s.coords["frame"]).astype(int)})
+            for s in S_ls
+        ]
+    res_ls = [compute_dist(S_true, curS, met) for curS, met in itt.product(S_ls, mets)]
+    return pd.concat(res_ls)
+
+
 # %% temporal update
 sim_ds = xr.open_dataset(IN_PATH)
 subset = sim_ds["A"].coords["unit_id"]
@@ -130,96 +220,7 @@ metric_df = pd.concat(metric_df, ignore_index=True)
 metric_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
 
-# %% plot example and metrics
-def dilate1d(a, kernel):
-    return cv2.dilate(a.astype(float), kernel).squeeze()
-
-
-def compute_dist(trueS, newS, metric, corr_dilation=0):
-    if metric == "correlation" and corr_dilation:
-        kn = np.ones(2 * corr_dilation + 1)
-        trueS = xr.apply_ufunc(
-            dilate1d,
-            trueS.compute(),
-            input_core_dims=[["frame"]],
-            output_core_dims=[["frame"]],
-            vectorize=True,
-            kwargs={"kernel": kn},
-        )
-        newS = xr.apply_ufunc(
-            dilate1d,
-            newS.compute(),
-            input_core_dims=[["frame"]],
-            output_core_dims=[["frame"]],
-            vectorize=True,
-            kwargs={"kernel": kn},
-        )
-    if metric == "edit":
-        dist = np.array(
-            [
-                Levenshtein.distance(
-                    np.array(trueS.sel(unit_id=uid)), np.array(newS.sel(unit_id=uid))
-                )
-                for uid in trueS.coords["unit_id"]
-            ]
-        )
-    else:
-        dist = np.diag(
-            cdist(
-                trueS.transpose("unit_id", "frame"),
-                newS.transpose("unit_id", "frame"),
-                metric=metric,
-            )
-        )
-    Sname = newS.name.split("-")
-    if "org" in Sname:
-        mthd = "original"
-        Sname.remove("org")
-    elif "upsamp" in Sname:
-        mthd = "upsampled"
-        Sname.remove("upsamp")
-    elif "updn" in Sname:
-        mthd = "updn"
-        Sname.remove("updn")
-    else:
-        mthd = "unknown"
-    return pd.DataFrame(
-        {
-            "variable": "-".join(Sname),
-            "method": mthd,
-            "metric": metric,
-            "unit_id": trueS.coords["unit_id"],
-            "dist": dist,
-        }
-    )
-
-
-def norm_per_cell(S):
-    return xr.apply_ufunc(
-        norm,
-        S.astype(float).compute(),
-        input_core_dims=[["frame"]],
-        output_core_dims=[["frame"]],
-        vectorize=True,
-    )
-
-
-def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
-    S, S_true = S.dropna("frame"), S_true.dropna("frame")
-    if nthres is not None:
-        S_ls = max_thres(S, nthres)
-    else:
-        S_ls = [S]
-    if coarsen is not None:
-        S_ls = [s.coarsen(coarsen).sum() for s in S_ls]
-        S_ls = [
-            s.assign_coords({"frame": np.ceil(s.coords["frame"]).astype(int)})
-            for s in S_ls
-        ]
-    res_ls = [compute_dist(S_true, curS, met) for curS, met in itt.product(S_ls, mets)]
-    return pd.concat(res_ls)
-
-
+# %% plot metrics
 updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds.nc"))
 true_ds = xr.open_dataset(IN_PATH).isel(unit_id=updt_ds.coords["unit_id"])
 subset = updt_ds.coords["unit_id"]
@@ -288,7 +289,9 @@ g.map_dataframe(
 # g.map_dataframe(sns.swarmplot, x="variable", y="dist", edgecolor="auto", linewidth=1)
 g.tick_params(axis="x", rotation=90)
 g.figure.savefig(os.path.join(FIG_PATH, "metrics.svg"), dpi=500, bbox_inches="tight")
-nsamp = min(10, len(subset))
+
+# %% plot examples
+nsamp = min(5, len(subset))
 fig_dict = {
     "original": [S_gt, C_gt, Y_solve, S_org, S_bin_org] + max_thres(S_org, 9),
     "updn": [S_gt, C_gt, Y_solve, S_updn, S_bin_updn]
