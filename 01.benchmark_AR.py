@@ -203,9 +203,24 @@ res_df = pd.concat(res_df, ignore_index=True)
 res_df.to_feather(os.path.join(INT_PATH, "coefs.feat"))
 
 # %% plot result
+res_df = pd.read_feather(os.path.join(INT_PATH, "coefs.feat"))
+plt_df = res_df[
+    res_df["method"].isin(
+        [
+            "free-full-num",
+            "free-ind-num",
+            "est-smth0.1",
+            "est-smth0.05",
+            "est-naive",
+        ]
+    )
+].copy()
+plt_df["method"] = plt_df["method"].replace(
+    {"free-full-num": "free-full", "free-ind-num": "free-ind"}
+)
 (r0_true, r1_true), _ = find_dhm(*AR2exp(*tau2AR(6, 1)))
 fig = px.scatter(
-    res_df,
+    plt_df,
     x="r0",
     y="r1",
     color="method",

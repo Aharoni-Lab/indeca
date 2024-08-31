@@ -307,6 +307,7 @@ fig = map_gofunc(
     box_visible=True,
     showlegend=False,
     title_dim="title",
+    subplot_args={"shared_xaxes": "all", "vertical_spacing": 0.05},
 )
 fig.update_yaxes(title_text="Correlation Distance", row=1)
 fig.update_yaxes(title_text="Edit Distance", row=2)
