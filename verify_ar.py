@@ -33,7 +33,7 @@ ar, t, pulse = ar_pulse(theta1, theta2, end)
 for ns in [0, 0.5, 1]:
     np.random.seed(0)
     ar_in = ar + ns * (np.random.random(end) - 0.5)
-    lams, ps, ar_fit = fit_sumexp(ar_in)
+    lams, ps, ar_fit = fit_sumexp(ar_in, 2)
     print("noise: {}\nlams: {}\nps: {}".format(ns, lams, ps))
     fig, ax = plt.subplots()
     ax.plot(ar, label="true", lw=2)
@@ -84,3 +84,4 @@ axs[2].plot(h_fit_biexp_num, label="biexp_kernel_fit", lw=3, ls=":")
 axs[2].plot(h_ar_num, label="ar_kernel", lw=1.5)
 axs[2].plot(h_fit_ar_num, label="ar_kernel_fit", lw=3, ls=":")
 axs[2].legend()
+
