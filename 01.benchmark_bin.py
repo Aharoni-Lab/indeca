@@ -7,11 +7,13 @@ import Levenshtein
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import seaborn as sns
 import xarray as xr
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
+from routine.plotting import map_gofunc
 from routine.update_bin import (
     construct_G,
     construct_R,
@@ -289,6 +291,18 @@ g.map_dataframe(
 # g.map_dataframe(sns.swarmplot, x="variable", y="dist", edgecolor="auto", linewidth=1)
 g.tick_params(axis="x", rotation=90)
 g.figure.savefig(os.path.join(FIG_PATH, "metrics.svg"), dpi=500, bbox_inches="tight")
+fig = map_gofunc(
+    met_res,
+    go.Violin,
+    facet_row="metric",
+    facet_col="method",
+    margin_titles=True,
+    x="variable",
+    y="dist",
+    points="all",
+    box_visible=True,
+)
+fig.write_html(os.path.join(FIG_PATH, "metrics.html"))
 
 # %% plot examples
 nsamp = min(5, len(subset))
