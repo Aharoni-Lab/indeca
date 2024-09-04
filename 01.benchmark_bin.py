@@ -26,7 +26,10 @@ from routine.update_bin import (
 )
 from routine.utilities import norm
 
-IN_PATH = "./intermediate/simulated/simulated-ar-upsamp.nc"
+IN_PATH = {
+    "org": "./intermediate/simulated/simulated-ar-samp.nc",
+    "upsamp": "./intermediate/simulated/simulated-ar-upsamp.nc",
+}
 INT_PATH = "./intermediate/benchmark_bin"
 FIG_PATH = "./figs/benchmark_bin"
 PARAM_TAU_D = 6
@@ -130,36 +133,27 @@ def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
 
 
 # %% temporal update
-sim_ds = xr.open_dataset(IN_PATH)
-subset = sim_ds["A"].coords["unit_id"]
-A, C_gt, S_gt, C_gt_true, S_gt_true = (
-    sim_ds["A"],
-    sim_ds["C"],
-    sim_ds["S"],
-    sim_ds["C_true"],
-    sim_ds["S_true"],
-)
-A, C_gt, S_gt = (
-    A.sel(unit_id=subset),
-    C_gt.sel(unit_id=subset).dropna("frame", how="all"),
-    S_gt.sel(unit_id=subset).dropna("frame", how="all"),
-)
-np.random.seed(42)
-sig_lev = xr.DataArray(
-    np.random.normal(
-        loc=PARAM_SIG_MEAN, scale=PARAM_SIG_VAR, size=C_gt.sizes["unit_id"]
-    ).clip(0.01, 0.5),
-    dims=["unit_id"],
-    coords={"unit_id": C_gt.coords["unit_id"]},
-    name="sig_lev",
-)
-noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
-Y_solve = C_gt * sig_lev + noise
-updt_ds = [Y_solve.rename("Y_solve"), sig_lev]
 sps_penal = 1
 max_iters = 50
-metric_df = []
 for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
+    # get data
+    sim_ds = xr.open_dataset(IN_PATH[up_type])
+    C_gt = sim_ds["C"].dropna("frame", how="all")
+    subset = C_gt.coords["unit_id"][:5]
+    np.random.seed(42)
+    sig_lev = xr.DataArray(
+        np.random.normal(
+            loc=PARAM_SIG_MEAN, scale=PARAM_SIG_VAR, size=C_gt.sizes["unit_id"]
+        ).clip(0.01, 0.5),
+        dims=["unit_id"],
+        coords={"unit_id": C_gt.coords["unit_id"]},
+        name="sig_lev",
+    )
+    noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
+    Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset)
+    updt_ds = [Y_solve.rename("Y_solve"), sig_lev.sel(unit_id=subset)]
+    iter_df = []
+    # update
     res = {"C": [], "S": [], "b": [], "C-bin": [], "S-bin": [], "b-bin": [], "scal": []}
     for y in tqdm(
         Y_solve.transpose("unit_id", "frame"), total=Y_solve.sizes["unit_id"]
@@ -179,49 +173,52 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
         R = construct_R(T, up_factor)
         # org algo
         c, s, b = solve_deconv(y_norm, G, l1_penal=sps_penal * tn, R=R)
-        res["C"].append(c)
-        res["S"].append(s)
+        res["C"].append(c.squeeze())
+        res["S"].append(s.squeeze())
         res["b"].append(b)
         # bin algo
-        c_bin, s_bin, b_bin, scale, met_df = solve_deconv_bin(y_norm, G, R)
-        met_df["unit_id"] = y.coords["unit_id"].item()
-        met_df["up_type"] = up_type
-        metric_df.append(met_df)
-        res["C-bin"].append(c_bin)
-        res["S-bin"].append(s_bin)
+        c_bin, s_bin, b_bin, scale, it_df = solve_deconv_bin(y_norm, G, R)
+        it_df["unit_id"] = y.coords["unit_id"].item()
+        it_df["up_type"] = up_type
+        iter_df.append(it_df)
+        res["C-bin"].append(c_bin.squeeze())
+        res["S-bin"].append(s_bin.squeeze())
         res["b-bin"].append(b_bin)
         res["scal"].append(scale)
     # save variables
     for vname, dat in res.items():
-        if vname.startswith("b") or vname.startswith("scal"):
+        dat = np.stack(dat)
+        if dat.ndim == 1:
             updt_ds.append(
                 xr.DataArray(
-                    np.array(dat),
+                    dat,
                     dims="unit_id",
-                    coords={"unit_id": A.coords["unit_id"]},
-                    name="-".join([vname, up_type]),
+                    coords={"unit_id": Y_solve.coords["unit_id"]},
+                    name=vname,
                 )
             )
-        else:
+        elif dat.ndim == 2:
             updt_ds.append(
                 xr.DataArray(
-                    np.concatenate(dat, axis=1),
-                    dims=["frame", "unit_id"],
+                    dat,
+                    dims=["unit_id", "frame"],
                     coords={
+                        "unit_id": Y_solve.coords["unit_id"],
                         "frame": (
-                            C_gt_true.coords["frame"]
+                            sim_ds.coords["frame"]
                             if up_type == "upsamp"
                             else Y_solve.coords["frame"]
                         ),
-                        "unit_id": A.coords["unit_id"],
                     },
-                    name="-".join([vname, up_type]),
+                    name=vname,
                 )
             )
-updt_ds = xr.merge(updt_ds)
-updt_ds.to_netcdf(os.path.join(INT_PATH, "updt_ds.nc"))
-metric_df = pd.concat(metric_df, ignore_index=True)
-metric_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+        else:
+            raise ValueError
+    updt_ds = xr.merge(updt_ds)
+    updt_ds.to_netcdf(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
+    iter_df = pd.concat(iter_df, ignore_index=True)
+    iter_df.to_feather(os.path.join(INT_PATH, "iter_df-{}.feat".format(up_type)))
 
 
 # %% plot metrics
