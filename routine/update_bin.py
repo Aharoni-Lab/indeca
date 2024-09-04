@@ -50,7 +50,7 @@ def solve_deconv(
     y: np.ndarray,
     G: np.ndarray,
     use_base: bool = False,
-    norm: str = "l2",
+    norm: str = "l1",
     l1_penal: float = 0,
     scale: float = 1,
     R: np.ndarray = None,
