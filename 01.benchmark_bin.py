@@ -140,7 +140,7 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     # get data
     sim_ds = xr.open_dataset(IN_PATH[up_type])
     C_gt = sim_ds["C"].dropna("frame", how="all")
-    subset = C_gt.coords["unit_id"][:5]
+    subset = C_gt.coords["unit_id"]
     np.random.seed(42)
     sig_lev = xr.DataArray(
         np.random.normal(
@@ -223,19 +223,26 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
 
 
 # %% compute metrics
-def compute_ROC_percell(S, S_true, nthres=None, ds=None):
+def compute_ROC_percell(S, S_true, nthres=None, ds=None, th_min=0.1, th_max=0.9):
+    S, S_true = np.array(S), np.array(S_true)
     pos_idx, neg_idx = np.where(S_true > 0)[0], np.where(S_true == 0)[0]
     true_pos = np.sum(np.array(S_true[pos_idx]))
     true_neg = len(neg_idx)
     if nthres is not None:
-        S_ls, thres = max_thres(S, nthres, return_thres=True, ds=ds)
+        S_ls, thres = max_thres(
+            S, nthres, th_min=th_min, th_max=th_max, return_thres=True, ds=ds
+        )
     else:
         S_ls = [S]
         thres = [-1]
-    pos = np.array([s[pos_idx].sum() for s in S_ls])
+    pos_dev = np.array([np.abs(s[pos_idx] - S_true[pos_idx]).sum() for s in S_ls])
     false_pos = np.array([(s[neg_idx] > 0).sum() for s in S_ls])
     return pd.DataFrame(
-        {"thres": thres, "true_pos": pos / true_pos, "false_pos": false_pos / true_neg}
+        {
+            "thres": thres,
+            "true_pos": 1 - pos_dev / true_pos,
+            "false_pos": false_pos / true_neg,
+        }
     )
 
 
@@ -252,6 +259,8 @@ def compute_ROC(S, S_true, metadata=None, **kwargs):
     return met_df
 
 
+th_range = (0.01, 0.99)
+nthres = 981
 met_df = []
 for up_type, true_ds in IN_PATH.items():
     updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
@@ -260,7 +269,9 @@ for up_type, true_ds in IN_PATH.items():
         metS = compute_ROC(
             updt_ds["S"],
             true_ds["S"].dropna("frame", how="all"),
-            nthres=801,
+            nthres=nthres,
+            th_min=th_range[0],
+            th_max=th_range[1],
             ds=PARAM_UPSAMP,
             metadata={"method": "CNMF", "dataset": "upsamp-down"},
         )
@@ -272,7 +283,9 @@ for up_type, true_ds in IN_PATH.items():
         metS_up = compute_ROC(
             updt_ds["S"],
             true_ds["S_true"],
-            nthres=801,
+            nthres=nthres,
+            th_min=th_range[0],
+            th_max=th_range[1],
             metadata={"method": "CNMF", "dataset": "upsamp"},
         )
         metS_up_bin = compute_ROC(
@@ -285,7 +298,9 @@ for up_type, true_ds in IN_PATH.items():
         metS = compute_ROC(
             updt_ds["S"],
             true_ds["S"],
-            nthres=801,
+            nthres=nthres,
+            th_min=th_range[0],
+            th_max=th_range[1],
             metadata={"method": "CNMF", "dataset": "org"},
         )
         metS_bin = compute_ROC(
@@ -296,6 +311,7 @@ for up_type, true_ds in IN_PATH.items():
         met_df.extend([metS, metS_bin])
 met_df = pd.concat(met_df, ignore_index=True)
 met_df["thres"] = met_df["thres"].round(5)
+met_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
 
 # %% plot metrics
@@ -303,9 +319,25 @@ def plot_met(data, color=None):
     ax = plt.gca()
     met_cnmf = data[data["method"] == "CNMF"]
     met_bin = data[data["method"] == "minian-bin"]
-    sns.lineplot(met_cnmf, x="false_pos", y="true_pos", hue="unit_id", lw=1, ax=ax)
+    sns.lineplot(
+        met_cnmf,
+        x="false_pos",
+        y="true_pos",
+        hue="unit_id",
+        estimator=None,
+        lw=1,
+        alpha=0.8,
+        ax=ax,
+    )
     sns.scatterplot(
-        met_bin, x="false_pos", y="true_pos", hue="unit_id", s=50, marker="x", ax=ax
+        met_bin,
+        x="false_pos",
+        y="true_pos",
+        hue="unit_id",
+        s=50,
+        marker="X",
+        zorder=2.5,
+        ax=ax,
     )
 
 
@@ -313,21 +345,29 @@ def plot_met_scatter(data, color=None):
     ax = plt.gca()
     met_cnmf = data[data["method"] == "CNMF"]
     met_bin = data[data["method"] == "minian-bin"]
-    sns.scatterplot(met_cnmf, x="false_pos", y="true_pos", hue="thres", s=20, ax=ax)
+    sns.scatterplot(met_cnmf, x="false_pos", y="true_pos", hue="thres", s=10, ax=ax)
     sns.scatterplot(
-        met_bin, x="false_pos", y="true_pos", s=50, c="black", marker="x", ax=ax
+        met_bin, x="false_pos", y="true_pos", s=40, c="black", marker="x", ax=ax
     )
 
 
-g = sns.FacetGrid(met_df, col="dataset")
+met_df = pd.read_feather(os.path.join(INT_PATH, "metrics.feat"))
+np.random.seed(42)
+met_sub = met_df[
+    met_df["unit_id"].isin(np.random.choice(met_df["unit_id"].unique(), 10))
+].astype({"unit_id": str})
+g = sns.FacetGrid(met_sub, col="dataset", sharex=False, sharey=False)
 g.map_dataframe(plot_met)
 met_sub = met_df[
     np.logical_or(
         met_df["thres"].isin(np.linspace(0.1, 0.9, 9)), met_df["method"] == "minian-bin"
     )
-].astype({"thres": "category"})
-g = sns.FacetGrid(met_sub, col="dataset")
+].astype({"thres": str})
+g.figure.savefig(os.path.join(FIG_PATH, "ROC.svg"), bbox_inches="tight")
+g = sns.FacetGrid(met_sub, col="dataset", sharex=False, sharey=False)
 g.map_dataframe(plot_met_scatter)
+g.add_legend()
+g.figure.savefig(os.path.join(FIG_PATH, "ROC_scatter.svg"), bbox_inches="tight")
 
 # %% plot alpha correlations
 sig_scal = updt_ds[["sig_lev", "scal-upsamp"]].to_dataframe()
