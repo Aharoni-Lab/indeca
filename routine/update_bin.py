@@ -97,7 +97,7 @@ def solve_deconv_bin(
     niter = 0
     while niter < max_iters:
         _, s_bin, b_bin, lb = solve_deconv(y, G, scale=scale, R=R, return_obj=True)
-        th_svals = max_thres(s_bin, nthres, rename=False)
+        th_svals = max_thres(s_bin, nthres)
         th_cvals = [RGi @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
         th_objs = [
@@ -144,12 +144,15 @@ def solve_deconv_bin(
     return Gi @ opt_s, opt_s, b_bin, scale, metric_df
 
 
-def max_thres(a: xr.DataArray, nthres: int, rename=True):
+def max_thres(
+    a: xr.DataArray, nthres: int, th_min=0.1, th_max=0.9, ds=None, return_thres=False
+):
     amax = a.max()
-    if rename:
-        return [
-            (a > amax * th).rename(a.name + "-th_{:.1f}".format(th))
-            for th in np.linspace(0.1, 0.9, nthres)
-        ]
+    thres = np.linspace(th_min, th_max, nthres)
+    S_ls = [(a > amax * th) for th in thres]
+    if ds is not None:
+        S_ls = [np.convolve(s, np.ones(ds), mode="full")[ds - 1 :: ds] for s in S_ls]
+    if return_thres:
+        return S_ls, thres
     else:
-        return [(a > amax * th) for th in np.linspace(0.1, 0.9, nthres)]
+        return S_ls

@@ -4,6 +4,7 @@ import os
 
 import cv2
 import Levenshtein
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -221,114 +222,112 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     iter_df.to_feather(os.path.join(INT_PATH, "iter_df-{}.feat".format(up_type)))
 
 
+# %% compute metrics
+def compute_ROC_percell(S, S_true, nthres=None, ds=None):
+    pos_idx, neg_idx = np.where(S_true > 0)[0], np.where(S_true == 0)[0]
+    true_pos = np.sum(np.array(S_true[pos_idx]))
+    true_neg = len(neg_idx)
+    if nthres is not None:
+        S_ls, thres = max_thres(S, nthres, return_thres=True, ds=ds)
+    else:
+        S_ls = [S]
+        thres = [-1]
+    pos = np.array([s[pos_idx].sum() for s in S_ls])
+    false_pos = np.array([(s[neg_idx] > 0).sum() for s in S_ls])
+    return pd.DataFrame(
+        {"thres": thres, "true_pos": pos / true_pos, "false_pos": false_pos / true_neg}
+    )
+
+
+def compute_ROC(S, S_true, metadata=None, **kwargs):
+    met_df = []
+    for uid in S.coords["unit_id"]:
+        met = compute_ROC_percell(S.sel(unit_id=uid), S_true.sel(unit_id=uid), **kwargs)
+        met["unit_id"] = uid.item()
+        met_df.append(met)
+    met_df = pd.concat(met_df, ignore_index=True)
+    if metadata is not None:
+        for key, val in metadata.items():
+            met_df[key] = val
+    return met_df
+
+
+met_df = []
+for up_type, true_ds in IN_PATH.items():
+    updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
+    true_ds = xr.open_dataset(true_ds)
+    if up_type == "upsamp":
+        metS = compute_ROC(
+            updt_ds["S"],
+            true_ds["S"].dropna("frame", how="all"),
+            nthres=801,
+            ds=PARAM_UPSAMP,
+            metadata={"method": "CNMF", "dataset": "upsamp-down"},
+        )
+        metS_bin = compute_ROC(
+            updt_ds["S-bin"].coarsen({"frame": PARAM_UPSAMP}).sum(),
+            true_ds["S"].dropna("frame", how="all"),
+            metadata={"method": "minian-bin", "dataset": "upsamp-down"},
+        )
+        metS_up = compute_ROC(
+            updt_ds["S"],
+            true_ds["S_true"],
+            nthres=801,
+            metadata={"method": "CNMF", "dataset": "upsamp"},
+        )
+        metS_up_bin = compute_ROC(
+            updt_ds["S-bin"],
+            true_ds["S_true"],
+            metadata={"method": "minian-bin", "dataset": "upsamp"},
+        )
+        met_df.extend([metS, metS_bin, metS_up, metS_up_bin])
+    else:
+        metS = compute_ROC(
+            updt_ds["S"],
+            true_ds["S"],
+            nthres=801,
+            metadata={"method": "CNMF", "dataset": "org"},
+        )
+        metS_bin = compute_ROC(
+            updt_ds["S-bin"],
+            true_ds["S"],
+            metadata={"method": "minian-bin", "dataset": "org"},
+        )
+        met_df.extend([metS, metS_bin])
+met_df = pd.concat(met_df, ignore_index=True)
+met_df["thres"] = met_df["thres"].round(5)
+
+
 # %% plot metrics
-updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds.nc"))
-true_ds = xr.open_dataset(IN_PATH).isel(unit_id=updt_ds.coords["unit_id"])
-subset = updt_ds.coords["unit_id"]
-S_gt, S_gt_true, C_gt = (
-    true_ds["S"].dropna("frame", how="all"),
-    true_ds["S_true"],
-    true_ds["C"].dropna("frame", how="all"),
-)
-S_org, S_bin_org, S_up, S_bin_up, Y_solve = (
-    updt_ds["S-org"].dropna("frame", how="all"),
-    updt_ds["S-bin-org"].dropna("frame", how="all"),
-    updt_ds["S-upsamp"],
-    updt_ds["S-bin-upsamp"],
-    updt_ds["Y_solve"].dropna("frame", how="all"),
-)
-S_updn, S_bin_updn = (
-    S_up.coarsen({"frame": 10}).sum().rename("S-updn"),
-    S_bin_up.coarsen({"frame": 10}).sum().rename("S-bin-updn"),
-)
-S_updn = S_updn.assign_coords({"frame": np.ceil(S_updn.coords["frame"]).astype(int)})
-S_bin_updn = S_bin_updn.assign_coords(
-    {"frame": np.ceil(S_bin_updn.coords["frame"]).astype(int)}
-)
-met_ds = [
-    (S_org, S_gt, {"mets": ["correlation"]}),
-    (S_org, S_gt, {"mets": ["correlation", "hamming", "edit"], "nthres": 9}),
-    (S_bin_org, S_gt, {"mets": ["correlation", "hamming", "edit"]}),
-    (S_up, S_gt_true, {"mets": ["correlation"]}),
-    (S_up, S_gt_true, {"mets": ["correlation", "hamming", "edit"], "nthres": 9}),
-    (S_bin_up, S_gt_true, {"mets": ["correlation", "hamming", "edit"]}),
-    (S_updn, S_gt, {"mets": ["correlation"]}),
-    (
-        S_up.rename("S-updn"),
-        S_gt,
-        {
-            "mets": ["correlation", "hamming", "edit"],
-            "nthres": 9,
-            "coarsen": {"frame": 10},
-        },
-    ),
-    (S_bin_updn, S_gt, {"mets": ["correlation", "hamming", "edit"]}),
-]
-met_res = pd.concat(
-    [compute_metrics(m[0], m[1], **m[2]) for m in met_ds], ignore_index=True
-)
-sns.set_theme(style="darkgrid")
-g = sns.FacetGrid(
-    met_res,
-    row="metric",
-    col="method",
-    sharey="row",
-    sharex="col",
-    aspect=2,
-    hue="variable",
-    margin_titles=True,
-)
-g.map_dataframe(
-    sns.violinplot,
-    x="variable",
-    y="dist",
-    bw_adjust=0.5,
-    cut=0.3,
-    saturation=0.6,
-    # log_scale=True,
-)
-# g.map_dataframe(sns.swarmplot, x="variable", y="dist", edgecolor="auto", linewidth=1)
-g.tick_params(axis="x", rotation=90)
-g.figure.savefig(os.path.join(FIG_PATH, "metrics.svg"), dpi=500, bbox_inches="tight")
-# html violin
-met_res["title"] = ""
-fig = map_gofunc(
-    met_res[(met_res["metric"] != "hamming") & (met_res["method"] == "updn")],
-    go.Violin,
-    facet_row="metric",
-    facet_col="method",
-    margin_titles=False,
-    x="variable",
-    y="dist",
-    points="all",
-    box_visible=True,
-    showlegend=False,
-    title_dim="title",
-    subplot_args={"shared_xaxes": "all", "vertical_spacing": 0.05},
-)
-fig.update_yaxes(title_text="Correlation Distance", row=1)
-fig.update_yaxes(title_text="Edit Distance", row=2)
-fig.write_html(os.path.join(FIG_PATH, "metrics.html"))
-# density plot
-met_den = (
-    met_res[met_res["method"] == "updn"]
-    .pivot(columns="metric", index=["variable", "unit_id"], values="dist")
-    .reset_index()
-    .dropna()
-)
-fig = px.density_contour(
-    met_den,
-    x="correlation",
-    y="edit",
-    facet_col="variable",
-    facet_col_wrap=5,
-    facet_row_spacing=0.1,
-)
-fig.update_traces(contours_coloring="fill", contours_showlabels=True)
-fig.update_traces(showscale=False)
-fig.update_xaxes(title_text="Correlation Distance", row=1)
-fig.update_yaxes(title_text="Edit Distance", col=1)
-fig.write_html(os.path.join(FIG_PATH, "metric_contours.html"))
+def plot_met(data, color=None):
+    ax = plt.gca()
+    met_cnmf = data[data["method"] == "CNMF"]
+    met_bin = data[data["method"] == "minian-bin"]
+    sns.lineplot(met_cnmf, x="false_pos", y="true_pos", hue="unit_id", lw=1, ax=ax)
+    sns.scatterplot(
+        met_bin, x="false_pos", y="true_pos", hue="unit_id", s=50, marker="x", ax=ax
+    )
+
+
+def plot_met_scatter(data, color=None):
+    ax = plt.gca()
+    met_cnmf = data[data["method"] == "CNMF"]
+    met_bin = data[data["method"] == "minian-bin"]
+    sns.scatterplot(met_cnmf, x="false_pos", y="true_pos", hue="thres", s=20, ax=ax)
+    sns.scatterplot(
+        met_bin, x="false_pos", y="true_pos", s=50, c="black", marker="x", ax=ax
+    )
+
+
+g = sns.FacetGrid(met_df, col="dataset")
+g.map_dataframe(plot_met)
+met_sub = met_df[
+    np.logical_or(
+        met_df["thres"].isin(np.linspace(0.1, 0.9, 9)), met_df["method"] == "minian-bin"
+    )
+].astype({"thres": "category"})
+g = sns.FacetGrid(met_sub, col="dataset")
+g.map_dataframe(plot_met_scatter)
 
 # %% plot alpha correlations
 sig_scal = updt_ds[["sig_lev", "scal-upsamp"]].to_dataframe()
