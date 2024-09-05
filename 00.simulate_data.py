@@ -10,6 +10,10 @@ OUT_PATH = "./intermediate/simulated/"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
+PARAM_TMP_P = {
+    "samp": np.array([[0.98, 0.02], [0.75, 0.25]]),
+    "upsamp": np.array([[0.998, 0.002], [0.75, 0.25]]),
+}
 
 os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
 
@@ -31,7 +35,7 @@ for (upsamp_lab, upsamp), (useAR_lab, useAR) in itt.product(
         sz_mean=3,
         sz_sigma=0.6,
         sz_min=0.1,
-        tmp_P=np.array([[0.998, 0.002], [0.75, 0.25]]),
+        tmp_P=PARAM_TMP_P[upsamp_lab],
         tmp_tau_d=PARAM_TAU_D,
         tmp_tau_r=PARAM_TAU_R,
         bg_nsrc=0,

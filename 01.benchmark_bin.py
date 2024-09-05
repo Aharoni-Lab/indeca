@@ -37,8 +37,7 @@ PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
 PARAM_EST_AR = False
-PARAM_SIG_MEAN = 0.1
-PARAM_SIG_VAR = 0.2
+PARAM_SIG_LEV = (0.05, 0.5)
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
@@ -143,9 +142,9 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     subset = C_gt.coords["unit_id"]
     np.random.seed(42)
     sig_lev = xr.DataArray(
-        np.random.normal(
-            loc=PARAM_SIG_MEAN, scale=PARAM_SIG_VAR, size=C_gt.sizes["unit_id"]
-        ).clip(0.01, 0.5),
+        np.random.uniform(
+            low=PARAM_SIG_LEV[0], high=PARAM_SIG_LEV[1], size=C_gt.sizes["unit_id"]
+        ),
         dims=["unit_id"],
         coords={"unit_id": C_gt.coords["unit_id"]},
         name="sig_lev",
@@ -236,12 +235,12 @@ def compute_ROC_percell(S, S_true, nthres=None, ds=None, th_min=0.1, th_max=0.9)
         S_ls = [S]
         thres = [-1]
     pos_dev = np.array([np.abs(s[pos_idx] - S_true[pos_idx]).sum() for s in S_ls])
-    false_pos = np.array([(s[neg_idx] > 0).sum() for s in S_ls])
+    neg_dev = np.array([s[neg_idx].sum() for s in S_ls])
     return pd.DataFrame(
         {
             "thres": thres,
-            "true_pos": 1 - pos_dev / true_pos,
-            "false_pos": false_pos / true_neg,
+            "true_pos": (1 - pos_dev / true_pos).clip(0, 1),
+            "false_pos": neg_dev / true_neg,
         }
     )
 
@@ -326,7 +325,7 @@ def plot_met(data, color=None):
         hue="unit_id",
         estimator=None,
         lw=1,
-        alpha=0.8,
+        alpha=0.9,
         ax=ax,
     )
     sns.scatterplot(
@@ -339,6 +338,7 @@ def plot_met(data, color=None):
         zorder=2.5,
         ax=ax,
     )
+    ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
 
 
 def plot_met_scatter(data, color=None):
@@ -349,6 +349,7 @@ def plot_met_scatter(data, color=None):
     sns.scatterplot(
         met_bin, x="false_pos", y="true_pos", s=40, c="black", marker="x", ax=ax
     )
+    ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
 
 
 met_df = pd.read_feather(os.path.join(INT_PATH, "metrics.feat"))
