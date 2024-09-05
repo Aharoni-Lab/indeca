@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sps
 from scipy.integrate import cumulative_trapezoid
+from scipy.optimize import curve_fit
 
 from .update_bin import construct_G
 
@@ -51,7 +52,8 @@ def solve_g(y, s, norm="l1", masking=False):
     return theta_1.value, theta_2.value
 
 
-def fit_sumexp(y, N, x=None):
+def fit_sumexp(y, N, x=None, use_l1=False):
+    # ref: http://arxiv.org/abs/physics/0305019
     # ref: https://github.juangburgos.com/FitSumExponentials/lab/index.html
     T = len(y)
     if x is None:
@@ -64,37 +66,117 @@ def fit_sumexp(y, N, x=None):
     for i, pow in enumerate(range(N)[::-1]):
         X_pow[:, i] = x**pow
     Y = np.concatenate([Y_int, X_pow], axis=1)
-    A = np.linalg.inv(Y.T @ Y) @ Y.T @ y
+    if use_l1:
+        A = lst_l1(Y, y)
+    else:
+        A = np.linalg.inv(Y.T @ Y) @ Y.T @ y
     A_bar = np.vstack(
         [A[:N], np.hstack([np.eye(N - 1), np.zeros(N - 1).reshape(-1, 1)])]
     )
-    lams = np.linalg.eigvals(A_bar)
+    lams = np.sort(np.linalg.eigvals(A_bar))[::-1]
     X_exp = np.hstack([np.exp(l * x).reshape((-1, 1)) for l in lams])
-    ps = np.linalg.inv(X_exp.T @ X_exp) @ X_exp.T @ y
+    if use_l1:
+        ps = lst_l1(X_exp, y)
+    else:
+        ps = np.linalg.inv(X_exp.T @ X_exp) @ X_exp.T @ y
     y_fit = X_exp @ ps
-    return lams, y_fit
+    return lams, ps, y_fit
+
+
+def fit_sumexp_split(y):
+    T = len(y)
+    x = np.arange(T)
+    idx_split = np.argmax(y)
+    lam_r, p_r, y_fit_r = fit_sumexp(y[:idx_split], 1, x=x[:idx_split])
+    lam_d, p_d, y_fit_d = fit_sumexp(y[idx_split:], 1, x=x[idx_split:])
+    return (
+        np.array([lam_d, lam_r]),
+        np.array([p_d, p_r]),
+        np.concatenate([y_fit_r, y_fit_d]),
+    )
+
+
+def fit_sumexp_gd(y, x=None, interp_factor=100):
+    T = len(y)
+    if x is None:
+        x = np.arange(T)
+    x_interp = np.linspace(x[0], x[-1], interp_factor * len(x))
+    y_interp = np.interp(x_interp, x, y)
+    idx_max = np.argmax(y)
+    idx_max_interp = np.argmax(y_interp)
+    fmax = y[idx_max]
+    f0 = y[0]
+    if idx_max_interp > 0:
+        tau_r_init = (
+            np.argmin(
+                np.abs(y_interp[:idx_max_interp] - f0 - (1 - 1 / np.e) * (fmax - f0))
+            )
+            / interp_factor
+        )
+    else:
+        tau_r_init = 0
+    tau_d_init = (
+        np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
+        + idx_max_interp
+    ) / interp_factor
+    res = curve_fit(
+        lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
+        x,
+        y,
+        p0=(tau_d_init, tau_r_init),
+        bounds=(0, np.inf),
+    )
+    tau_d, tau_r = res[0]
+    if tau_d <= tau_r:
+        warnings.warn(
+            "decaying time smaller than rising time: tau_d: {}, tau_r: {}\nreversing coefficients".format(
+                tau_d, tau_r
+            )
+        )
+        tau_d, tau_r = tau_r, tau_d
+    return (
+        -1 / np.array([tau_d, tau_r]),
+        np.array([1, -1]),
+        np.exp(-x / tau_d) - np.exp(-x / tau_r),
+    )
+
+
+def lst_l1(A, b):
+    x = cp.Variable(A.shape[1])
+    obj = cp.Minimize(cp.norm(b - A @ x, 1))
+    prob = cp.Problem(obj)
+    prob.solve()
+    assert prob.status == cp.OPTIMAL
+    return x.value
 
 
 def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
     y, s = y.squeeze(), s.squeeze()
-    T = len(s)
+    assert y.ndim == s.ndim
+    multi_unit = y.ndim > 1
+    if multi_unit:
+        ncell, T = s.shape
+    else:
+        T = len(s)
     if s_len is None:
         s_len = T
     else:
         s_len = min(s_len, T)
-    b = cp.Variable()
+    if multi_unit:
+        b = cp.Variable((ncell, 1))
+    else:
+        b = cp.Variable()
     h = cp.Variable(s_len)
     h = cp.hstack([h, 0])
-    if norm == "l2":
-        obj = cp.Minimize(
-            cp.norm(y - cp.convolve(s, h)[:T] - b)
-            + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
-        )
-    elif norm == "l1":
-        obj = cp.Minimize(
-            cp.norm(y - cp.convolve(s, h)[:T] - b, 1)
-            + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
-        )
+    if multi_unit:
+        conv_term = cp.vstack([cp.convolve(ss, h)[:T] for ss in s])
+    else:
+        conv_term = cp.convolve(s, h)[:T]
+    norm_ord = {"l1": 1, "l2": 2}[norm]
+    obj = cp.Minimize(
+        cp.norm(y - conv_term - b, norm_ord)
+        + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
+    )
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
     prob.solve()
@@ -102,7 +184,15 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
 
 
 def solve_fit_h(
-    y, s, N=2, s_len=60, norm="l1", tol=1e-3, max_iters: int = 30, verbose=False
+    y,
+    s,
+    N=2,
+    s_len=60,
+    norm="l1",
+    tol=1e-3,
+    fit_method="numerical",
+    max_iters: int = 30,
+    verbose=False,
 ):
     metric_df = None
     h_df = None
@@ -110,7 +200,14 @@ def solve_fit_h(
     niter = 0
     while niter < max_iters:
         h = solve_h(y, s, s_len, norm, smth_penal)
-        lams, h_fit = fit_sumexp(h, N)
+        if fit_method == "solve":
+            lams, ps, h_fit = fit_sumexp(h, N)
+        elif fit_method == "numerical":
+            lams, ps, h_fit = fit_sumexp_gd(h)
+        else:
+            raise NotImplementedError(
+                "`fit_method` has to be one of ['solve', 'numerical']"
+            )
         met = {
             "iter": niter,
             "smth_penal": smth_penal,
@@ -123,7 +220,13 @@ def solve_fit_h(
             [
                 h_df,
                 pd.DataFrame(
-                    {"iter": niter, "smth_penal": smth_penal, "h": h, "h_fit": h_fit}
+                    {
+                        "iter": niter,
+                        "smth_penal": smth_penal,
+                        "h": h,
+                        "h_fit": h_fit,
+                        "frame": np.arange(len(h)),
+                    }
                 ),
             ]
         )
@@ -144,8 +247,7 @@ def solve_fit_h(
         niter += 1
     else:
         warnings.warn("max smth iteration reached")
-    lams = np.sort(np.real(lams))
-    return lams, h, h_fit, metric_df, h_df
+    return lams, ps, h, h_fit, metric_df, h_df
 
 
 def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):

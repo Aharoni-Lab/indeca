@@ -1,4 +1,5 @@
 import functools as fct
+import itertools as itt
 import os
 import re
 import shutil
@@ -1334,3 +1335,7 @@ def scal_like(src: np.ndarray, tgt: np.ndarray, zero_center=True):
         return src / (smax - smin) * (tmax - tmin)
     else:
         return (src - smin) / (smax - smin) * (tmax - tmin) + tmin
+
+
+def enumerated_product(*args):
+    yield from zip(itt.product(*(range(len(x)) for x in args)), itt.product(*args))

@@ -4,15 +4,19 @@ import os
 
 import cv2
 import Levenshtein
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import seaborn as sns
 import xarray as xr
+from plotly.subplots import make_subplots
 from scipy.spatial.distance import cdist
+from scipy.stats import zscore
 from tqdm.auto import tqdm
 
-from routine.minian_functions import open_minian
+from routine.plotting import map_gofunc
 from routine.update_bin import (
     construct_G,
     construct_R,
@@ -23,127 +27,27 @@ from routine.update_bin import (
 )
 from routine.utilities import norm
 
-IN_PATH = "./intermediate/simulated/simulated.nc"
+IN_PATH = {
+    "org": "./intermediate/simulated/simulated-ar-samp.nc",
+    "upsamp": "./intermediate/simulated/simulated-ar-upsamp.nc",
+}
 INT_PATH = "./intermediate/benchmark_bin"
 FIG_PATH = "./figs/benchmark_bin"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
-PARAM_EST_AR = True
+PARAM_EST_AR = False
+PARAM_SIG_LEV = (0.05, 0.5)
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
-# %% temporal update
-sim_ds = xr.open_dataset(IN_PATH)
-subset = sim_ds["A"].coords["unit_id"][:5]
-Y, A, C_gt, S_gt, C_gt_true, S_gt_true = (
-    sim_ds["Y"],
-    sim_ds["A"],
-    sim_ds["C"],
-    sim_ds["S"],
-    sim_ds["C_true"],
-    sim_ds["S_true"],
-)
-A, C_gt, S_gt = (
-    A.sel(unit_id=subset),
-    C_gt.sel(unit_id=subset),
-    S_gt.sel(unit_id=subset),
-)
-# b = rechunk_like(
-#     xr.DataArray(
-#         np.zeros((A.sizes["height"], A.sizes["width"])),
-#         dims=["height", "width"],
-#         coords={d: A.coords[d] for d in ["height", "width"]},
-#     ),
-#     A,
-# )
-# f = rechunk_like(
-#     xr.DataArray(
-#         np.zeros((Y.sizes["frame"])),
-#         dims=["frame"],
-#         coords={"frame": Y.coords["frame"]},
-#     ),
-#     C_gt,
-# )
-# YrA = compute_trace(Y, A, b, C_gt, f).compute()
-# updt_ds = [YrA.rename("YrA")]
-Y_solve = C_gt.dropna("frame", how="all")
-sps_penal = 10
-max_iters = 50
-updt_ds = []
-metric_df = []
-for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
-    res = {"C": [], "S": [], "b": [], "C-bin": [], "S-bin": [], "b-bin": [], "scal": []}
-    for y in tqdm(
-        Y_solve.transpose("unit_id", "frame"), total=Y_solve.sizes["unit_id"]
-    ):
-        # parameters
-        y_norm = np.array(norm(y))
-        T = len(y_norm)
-        g, tn = estimate_coefs(y_norm, p=2, noise_freq=0.4, use_smooth=False, add_lag=0)
-        if PARAM_EST_AR:
-            G = construct_G(g, T * up_factor, fromTau=False)
-        else:
-            G = construct_G(
-                (PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor),
-                T * up_factor,
-                fromTau=True,
-            )
-        R = construct_R(T, up_factor)
-        # org algo
-        c, s, b = solve_deconv(y_norm, G, l1_penal=sps_penal * tn, R=R)
-        res["C"].append(c)
-        res["S"].append(s)
-        res["b"].append(b)
-        # bin algo
-        c_bin, s_bin, b_bin, scale, met_df = solve_deconv_bin(y_norm, G, R)
-        met_df["unit_id"] = y.coords["unit_id"].item()
-        met_df["up_type"] = up_type
-        metric_df.append(met_df)
-        res["C-bin"].append(c_bin)
-        res["S-bin"].append(s_bin)
-        res["b-bin"].append(b_bin)
-        res["scal"].append(scale)
-    # save variables
-    for vname, dat in res.items():
-        if vname.startswith("b") or vname.startswith("scal"):
-            updt_ds.append(
-                xr.DataArray(
-                    np.array(dat),
-                    dims="unit_id",
-                    coords={"unit_id": A.coords["unit_id"]},
-                    name="-".join([vname, up_type]),
-                )
-            )
-        else:
-            updt_ds.append(
-                xr.DataArray(
-                    np.concatenate(dat, axis=1),
-                    dims=["frame", "unit_id"],
-                    coords={
-                        "frame": (
-                            C_gt_true.coords["frame"]
-                            if up_type == "upsamp"
-                            else Y_solve.coords["frame"]
-                        ),
-                        "unit_id": A.coords["unit_id"],
-                    },
-                    name="-".join([vname, up_type]),
-                )
-            )
-updt_ds = xr.merge(updt_ds)
-updt_ds.to_netcdf(os.path.join(INT_PATH, "temp_res.nc"))
-metric_df = pd.concat(metric_df, ignore_index=True)
-metric_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
-
-# %% plot example and metrics
 def dilate1d(a, kernel):
     return cv2.dilate(a.astype(float), kernel).squeeze()
 
 
-def compute_dist(trueS, newS, metric, corr_dilation=1):
+def compute_dist(trueS, newS, metric, corr_dilation=0):
     if metric == "correlation" and corr_dilation:
         kn = np.ones(2 * corr_dilation + 1)
         trueS = xr.apply_ufunc(
@@ -228,78 +132,337 @@ def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
     return pd.concat(res_ls)
 
 
-updt_ds = xr.open_dataset(os.path.join(INT_PATH, "temp_res.nc"))
-true_ds = xr.open_dataset(IN_PATH).isel(unit_id=updt_ds.coords["unit_id"])
-subset = updt_ds.coords["unit_id"]
-S_gt, S_gt_true, C_gt = (
-    true_ds["S"].dropna("frame", how="all"),
-    true_ds["S_true"],
-    true_ds["C"].dropna("frame", how="all"),
-)
-S_org, S_bin_org, S_up, S_bin_up, YrA = (
-    updt_ds["S-org"].dropna("frame", how="all"),
-    updt_ds["S-bin-org"].dropna("frame", how="all"),
-    updt_ds["S-upsamp"],
-    updt_ds["S-bin-upsamp"],
-    C_gt,
-)
-S_updn, S_bin_updn = (
-    S_up.coarsen({"frame": 10}).sum().rename("S-updn"),
-    S_bin_up.coarsen({"frame": 10}).sum().rename("S-bin-updn"),
-)
-S_updn = S_updn.assign_coords({"frame": np.ceil(S_updn.coords["frame"]).astype(int)})
-S_bin_updn = S_bin_updn.assign_coords(
-    {"frame": np.ceil(S_bin_updn.coords["frame"]).astype(int)}
-)
-met_ds = [
-    (S_org, S_gt, {"mets": ["correlation"]}),
-    (S_org, S_gt, {"mets": ["correlation", "hamming", "edit"], "nthres": 9}),
-    (S_bin_org, S_gt, {"mets": ["correlation", "hamming", "edit"]}),
-    (S_up, S_gt_true, {"mets": ["correlation"]}),
-    (S_up, S_gt_true, {"mets": ["correlation", "hamming", "edit"], "nthres": 9}),
-    (S_bin_up, S_gt_true, {"mets": ["correlation", "hamming", "edit"]}),
-    (S_updn, S_gt, {"mets": ["correlation"]}),
-    (
-        S_up.rename("S-updn"),
-        S_gt,
+# %% temporal update
+sps_penal = 1
+max_iters = 50
+for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
+    # get data
+    sim_ds = xr.open_dataset(IN_PATH[up_type])
+    C_gt = sim_ds["C"].dropna("frame", how="all")
+    subset = C_gt.coords["unit_id"]
+    np.random.seed(42)
+    sig_lev = xr.DataArray(
+        np.random.uniform(
+            low=PARAM_SIG_LEV[0], high=PARAM_SIG_LEV[1], size=C_gt.sizes["unit_id"]
+        ),
+        dims=["unit_id"],
+        coords={"unit_id": C_gt.coords["unit_id"]},
+        name="sig_lev",
+    )
+    noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
+    Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset)
+    updt_ds = [Y_solve.rename("Y_solve"), sig_lev.sel(unit_id=subset)]
+    iter_df = []
+    # update
+    res = {"C": [], "S": [], "b": [], "C-bin": [], "S-bin": [], "b-bin": [], "scal": []}
+    for y in tqdm(
+        Y_solve.transpose("unit_id", "frame"), total=Y_solve.sizes["unit_id"]
+    ):
+        # parameters
+        y_norm = np.array(y)
+        T = len(y_norm)
+        g, tn = estimate_coefs(y_norm, p=2, noise_freq=0.4, use_smooth=False, add_lag=0)
+        if PARAM_EST_AR:
+            G = construct_G(g, T * up_factor, fromTau=False)
+        else:
+            G = construct_G(
+                (PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor),
+                T * up_factor,
+                fromTau=True,
+            )
+        R = construct_R(T, up_factor)
+        # org algo
+        c, s, b = solve_deconv(y_norm, G, l1_penal=sps_penal * tn, R=R)
+        res["C"].append(c.squeeze())
+        res["S"].append(s.squeeze())
+        res["b"].append(b)
+        # bin algo
+        c_bin, s_bin, b_bin, scale, it_df = solve_deconv_bin(y_norm, G, R)
+        it_df["unit_id"] = y.coords["unit_id"].item()
+        it_df["up_type"] = up_type
+        iter_df.append(it_df)
+        res["C-bin"].append(c_bin.squeeze())
+        res["S-bin"].append(s_bin.squeeze())
+        res["b-bin"].append(b_bin)
+        res["scal"].append(scale)
+    # save variables
+    for vname, dat in res.items():
+        dat = np.stack(dat)
+        if dat.ndim == 1:
+            updt_ds.append(
+                xr.DataArray(
+                    dat,
+                    dims="unit_id",
+                    coords={"unit_id": Y_solve.coords["unit_id"]},
+                    name=vname,
+                )
+            )
+        elif dat.ndim == 2:
+            updt_ds.append(
+                xr.DataArray(
+                    dat,
+                    dims=["unit_id", "frame"],
+                    coords={
+                        "unit_id": Y_solve.coords["unit_id"],
+                        "frame": (
+                            sim_ds.coords["frame"]
+                            if up_type == "upsamp"
+                            else Y_solve.coords["frame"]
+                        ),
+                    },
+                    name=vname,
+                )
+            )
+        else:
+            raise ValueError
+    updt_ds = xr.merge(updt_ds)
+    updt_ds.to_netcdf(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
+    iter_df = pd.concat(iter_df, ignore_index=True)
+    iter_df.to_feather(os.path.join(INT_PATH, "iter_df-{}.feat".format(up_type)))
+
+
+# %% compute metrics
+def compute_ROC_percell(S, S_true, nthres=None, ds=None, th_min=0.1, th_max=0.9):
+    S, S_true = np.array(S), np.array(S_true)
+    pos_idx, neg_idx = np.where(S_true > 0)[0], np.where(S_true == 0)[0]
+    true_pos = np.sum(np.array(S_true[pos_idx]))
+    true_neg = len(neg_idx)
+    if nthres is not None:
+        S_ls, thres = max_thres(
+            S, nthres, th_min=th_min, th_max=th_max, return_thres=True, ds=ds
+        )
+    else:
+        S_ls = [S]
+        thres = [-1]
+    pos_dev = np.array([np.abs(s[pos_idx] - S_true[pos_idx]).sum() for s in S_ls])
+    neg_dev = np.array([s[neg_idx].sum() for s in S_ls])
+    return pd.DataFrame(
         {
-            "mets": ["correlation", "hamming", "edit"],
-            "nthres": 9,
-            "coarsen": {"frame": 10},
-        },
+            "thres": thres,
+            "true_pos": (1 - pos_dev / true_pos).clip(0, 1),
+            "false_pos": neg_dev / true_neg,
+        }
+    )
+
+
+def compute_ROC(S, S_true, metadata=None, **kwargs):
+    met_df = []
+    for uid in S.coords["unit_id"]:
+        met = compute_ROC_percell(S.sel(unit_id=uid), S_true.sel(unit_id=uid), **kwargs)
+        met["unit_id"] = uid.item()
+        met_df.append(met)
+    met_df = pd.concat(met_df, ignore_index=True)
+    if metadata is not None:
+        for key, val in metadata.items():
+            met_df[key] = val
+    return met_df
+
+
+th_range = (0.01, 0.99)
+nthres = 981
+met_df = []
+for up_type, true_ds in IN_PATH.items():
+    updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
+    true_ds = xr.open_dataset(true_ds)
+    if up_type == "upsamp":
+        metS = compute_ROC(
+            updt_ds["S"],
+            true_ds["S"].dropna("frame", how="all"),
+            nthres=nthres,
+            th_min=th_range[0],
+            th_max=th_range[1],
+            ds=PARAM_UPSAMP,
+            metadata={"method": "CNMF", "dataset": "upsamp-down"},
+        )
+        metS_bin = compute_ROC(
+            updt_ds["S-bin"].coarsen({"frame": PARAM_UPSAMP}).sum(),
+            true_ds["S"].dropna("frame", how="all"),
+            metadata={"method": "minian-bin", "dataset": "upsamp-down"},
+        )
+        metS_up = compute_ROC(
+            updt_ds["S"],
+            true_ds["S_true"],
+            nthres=nthres,
+            th_min=th_range[0],
+            th_max=th_range[1],
+            metadata={"method": "CNMF", "dataset": "upsamp"},
+        )
+        metS_up_bin = compute_ROC(
+            updt_ds["S-bin"],
+            true_ds["S_true"],
+            metadata={"method": "minian-bin", "dataset": "upsamp"},
+        )
+        met_df.extend([metS, metS_bin, metS_up, metS_up_bin])
+    else:
+        metS = compute_ROC(
+            updt_ds["S"],
+            true_ds["S"],
+            nthres=nthres,
+            th_min=th_range[0],
+            th_max=th_range[1],
+            metadata={"method": "CNMF", "dataset": "org"},
+        )
+        metS_bin = compute_ROC(
+            updt_ds["S-bin"],
+            true_ds["S"],
+            metadata={"method": "minian-bin", "dataset": "org"},
+        )
+        met_df.extend([metS, metS_bin])
+met_df = pd.concat(met_df, ignore_index=True)
+met_df["thres"] = met_df["thres"].round(5)
+met_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+
+
+# %% plot metrics
+def plot_met(data, color=None):
+    ax = plt.gca()
+    met_cnmf = data[data["method"] == "CNMF"]
+    met_bin = data[data["method"] == "minian-bin"]
+    sns.lineplot(
+        met_cnmf,
+        x="false_pos",
+        y="true_pos",
+        hue="unit_id",
+        estimator=None,
+        lw=1,
+        alpha=0.9,
+        ax=ax,
+    )
+    sns.scatterplot(
+        met_bin,
+        x="false_pos",
+        y="true_pos",
+        hue="unit_id",
+        s=50,
+        marker="X",
+        zorder=2.5,
+        ax=ax,
+    )
+    ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
+
+
+def plot_met_scatter(data, color=None):
+    ax = plt.gca()
+    met_cnmf = data[data["method"] == "CNMF"]
+    met_bin = data[data["method"] == "minian-bin"]
+    sns.scatterplot(met_cnmf, x="false_pos", y="true_pos", hue="thres", s=10, ax=ax)
+    sns.scatterplot(
+        met_bin, x="false_pos", y="true_pos", s=40, c="black", marker="x", ax=ax
+    )
+    ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
+
+
+met_df = pd.read_feather(os.path.join(INT_PATH, "metrics.feat"))
+np.random.seed(42)
+met_sub = met_df[
+    met_df["unit_id"].isin(np.random.choice(met_df["unit_id"].unique(), 10))
+].astype({"unit_id": str})
+g = sns.FacetGrid(met_sub, col="dataset", sharex=False, sharey=False)
+g.map_dataframe(plot_met)
+met_sub = met_df[
+    np.logical_or(
+        met_df["thres"].isin(np.linspace(0.1, 0.9, 9)), met_df["method"] == "minian-bin"
+    )
+].astype({"thres": str})
+g.figure.savefig(os.path.join(FIG_PATH, "ROC.svg"), bbox_inches="tight")
+g = sns.FacetGrid(met_sub, col="dataset", sharex=False, sharey=False)
+g.map_dataframe(plot_met_scatter)
+g.add_legend()
+g.figure.savefig(os.path.join(FIG_PATH, "ROC_scatter.svg"), bbox_inches="tight")
+
+# %% plot alpha correlations
+sig_scal = updt_ds[["sig_lev", "scal-upsamp"]].to_dataframe()
+sig_scal["S_gt"] = S_gt.mean("frame").to_series()
+sig_scal["S_org"] = S_updn.mean("frame").to_series()
+sig_scal["S_bin"] = S_bin_updn.mean("frame").to_series()
+fig = make_subplots(
+    rows=1,
+    cols=3,
+    shared_xaxes="all",
+    shared_yaxes=False,
+    subplot_titles=["Original", "Binary", "Binary Scale"],
+    horizontal_spacing=0.1,
+)
+fig.add_trace(
+    go.Histogram2dContour(x=sig_scal["sig_lev"], y=sig_scal["S_org"], showscale=False),
+    row=1,
+    col=1,
+)
+fig.add_trace(
+    go.Histogram2dContour(x=sig_scal["sig_lev"], y=sig_scal["S_bin"], showscale=False),
+    row=1,
+    col=2,
+)
+fig.add_trace(
+    go.Histogram2dContour(
+        x=sig_scal["sig_lev"], y=sig_scal["scal-upsamp"], showscale=False
     ),
-    (S_bin_updn, S_gt, {"mets": ["correlation", "hamming", "edit"]}),
-]
-met_res = pd.concat(
-    [compute_metrics(m[0], m[1], **m[2]) for m in met_ds], ignore_index=True
+    row=1,
+    col=3,
 )
-sns.set_theme(style="darkgrid")
-g = sns.FacetGrid(
-    met_res,
-    row="metric",
-    col="method",
-    sharey="row",
-    sharex="col",
-    aspect=2,
-    hue="variable",
-    margin_titles=True,
+fig.add_trace(
+    go.Scatter(
+        x=sig_scal["sig_lev"],
+        y=sig_scal["S_org"],
+        mode="markers",
+        marker=dict(
+            symbol="circle",
+            opacity=0.6,
+            color="white",
+            size=6,
+            line=dict(width=1),
+        ),
+        showlegend=False,
+    ),
+    row=1,
+    col=1,
 )
-g.map_dataframe(
-    sns.violinplot,
-    x="variable",
-    y="dist",
-    bw_adjust=0.5,
-    cut=0.3,
-    saturation=0.6,
-    # log_scale=True,
+fig.add_trace(
+    go.Scatter(
+        x=sig_scal["sig_lev"],
+        y=sig_scal["S_bin"],
+        mode="markers",
+        marker=dict(
+            symbol="circle",
+            opacity=0.6,
+            color="white",
+            size=6,
+            line=dict(width=1),
+        ),
+        showlegend=False,
+    ),
+    row=1,
+    col=2,
 )
-# g.map_dataframe(sns.swarmplot, x="variable", y="dist", edgecolor="auto", linewidth=1)
-g.tick_params(axis="x", rotation=90)
-g.figure.savefig(os.path.join(FIG_PATH, "metrics.svg"), dpi=500, bbox_inches="tight")
-nsamp = min(10, len(subset))
+fig.add_trace(
+    go.Scatter(
+        x=sig_scal["sig_lev"],
+        y=sig_scal["scal-upsamp"],
+        mode="markers",
+        marker=dict(
+            symbol="circle",
+            opacity=0.6,
+            color="white",
+            size=6,
+            line=dict(width=1),
+        ),
+        showlegend=False,
+    ),
+    row=1,
+    col=3,
+)
+fig.update_xaxes(title_text="Signal Level")
+fig.update_yaxes(title_text="Mean S", row=1, col=1)
+fig.update_yaxes(title_text="Mean S-bin", row=1, col=2)
+fig.update_yaxes(title_text="Alpha scale", row=1, col=3)
+fig.write_html(os.path.join(FIG_PATH, "scaling.html"))
+
+
+# %% plot examples
+nsamp = min(5, len(subset))
 fig_dict = {
-    "original": [S_gt, C_gt, YrA, S_org, S_bin_org] + max_thres(S_org, 9),
-    "updn": [S_gt, C_gt, YrA, S_updn, S_bin_updn]
+    "original": [S_gt, C_gt, Y_solve, S_org, S_bin_org] + max_thres(S_org, 9),
+    "updn": [S_gt, C_gt, Y_solve, S_updn, S_bin_updn]
     + [
         s.coarsen({"frame": 10}).sum().assign_coords(frame=S_gt.coords["frame"])
         for s in max_thres(S_up.rename("S-updn"), 9)
