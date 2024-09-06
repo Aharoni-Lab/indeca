@@ -28,6 +28,8 @@ dependencies = [
     "rechunker",
     "natsort",
     "colorcet",
+    "netcdf4",
+    "pyarrow",
 ]
 requires-python = ">=3.11,<3.13"
 readme = "README.md"
