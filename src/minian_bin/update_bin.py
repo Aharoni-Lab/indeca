@@ -55,6 +55,7 @@ def solve_deconv(
     scale: float = 1,
     R: np.ndarray = None,
     return_obj: bool = False,
+    amp_constraint=False,
 ):
     y = y.reshape((-1, 1))
     if R is None:
@@ -71,6 +72,8 @@ def solve_deconv(
     p = {"l1": 1, "l2": 2}[norm]
     obj = cp.Minimize(cp.norm(y - scale * R @ c - b, p=p) + l1_penal * cp.norm(s))
     cons = [s == G @ c, c >= 0, s >= 0, b >= 0]
+    if amp_constraint:
+        cons.append(s <= 1)
     prob = cp.Problem(obj, cons)
     prob.solve()
     if return_obj:
@@ -96,7 +99,9 @@ def solve_deconv_bin(
     metric_df = None
     niter = 0
     while niter < max_iters:
-        _, s_bin, b_bin, lb = solve_deconv(y, G, scale=scale, R=R, return_obj=True)
+        _, s_bin, b_bin, lb = solve_deconv(
+            y, G, scale=scale, R=R, return_obj=True, amp_constraint=True
+        )
         th_svals = max_thres(s_bin, nthres)
         th_cvals = [RGi @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
