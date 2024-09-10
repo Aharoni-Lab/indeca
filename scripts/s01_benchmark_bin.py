@@ -459,22 +459,49 @@ fig.write_html(os.path.join(FIG_PATH, "scaling.html"))
 
 
 # %% plot examples
-nsamp = min(5, len(subset))
-fig_dict = {
-    "original": [S_gt, C_gt, Y_solve, S_org, S_bin_org] + max_thres(S_org, 9),
-    "updn": [S_gt, C_gt, Y_solve, S_updn, S_bin_updn]
-    + [
-        s.coarsen({"frame": 10}).sum().assign_coords(frame=S_gt.coords["frame"])
-        for s in max_thres(S_up.rename("S-updn"), 9)
-    ],
-}
-met_sub = (
-    met_res[met_res["variable"] == "S-bin"]
-    .sort_values(["method", "metric"])
-    .set_index(["method", "metric"])
+met_df = (
+    pd.read_feather("./intermediate/benchmark_bin/metrics.feat")
+    .sort_values(["method", "dataset"])
+    .set_index(["method", "dataset"])
 )
-for mthd, plt_trs in fig_dict.items():
-    cur_uids = met_sub.loc[mthd, "edit"].sort_values("dist")["unit_id"]
+for up_type, true_ds in IN_PATH.items():
+    updt_ds = xr.open_dataset(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
+    true_ds = xr.open_dataset(true_ds)
+    nsamp = min(5, updt_ds.sizes["unit_id"])
+    C_gt, S_gt = true_ds["C"].dropna("frame", how="all"), true_ds["S"].dropna(
+        "frame", how="all"
+    ).rename("S_gt")
+    Y_solve, S, S_bin = (
+        updt_ds["Y_solve"].dropna("frame", how="all"),
+        updt_ds["S"].dropna("frame", how="all"),
+        updt_ds["S-bin"].dropna("frame", how="all"),
+    )
+    if up_type == "upsamp":
+        plt_trs = [
+            s.coarsen({"frame": PARAM_UPSAMP})
+            .sum()
+            .assign_coords(frame=Y_solve.coords["frame"])
+            .rename("S_th{:.1f}".format(th))
+            for s, th in zip(*max_thres(S, 3, return_thres=True))
+        ]
+        S = (
+            S.coarsen({"frame": PARAM_UPSAMP})
+            .sum()
+            .assign_coords(frame=Y_solve.coords["frame"])
+        )
+        S_bin = (
+            S_bin.coarsen({"frame": PARAM_UPSAMP})
+            .sum()
+            .assign_coords(frame=Y_solve.coords["frame"])
+        )
+    else:
+        plt_trs = [
+            s.rename("S_th{:.1f}".format(th))
+            for s, th in zip(*max_thres(S, 3, return_thres=True))
+        ]
+    met_sub = met_df.loc["minian-bin", up_type]
+    cur_uids = met_sub.sort_values("true_pos")["unit_id"]
+    plt_trs.extend([Y_solve, C_gt, S_gt, S, S_bin])
     for met_grp, exp_set in {
         "best": cur_uids[:nsamp],
         "worst": cur_uids[-nsamp:],
@@ -493,5 +520,7 @@ for mthd, plt_trs in fig_dict.items():
         fig = px.line(
             plt_dat, facet_row="unit_id", x="frame", y="value", color="variable"
         )
-        fig.update_layout(height=nsamp * 150)
-        fig.write_html(os.path.join(FIG_PATH, "exp-{}-{}.html".format(mthd, met_grp)))
+        fig.update_layout(height=nsamp * 200)
+        fig.write_html(
+            os.path.join(FIG_PATH, "exp-{}-{}.html".format(up_type, met_grp))
+        )
