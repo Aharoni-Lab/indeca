@@ -312,6 +312,9 @@ for up_type, true_ds in IN_PATH.items():
         met_df.extend([metS, metS_bin])
 met_df = pd.concat(met_df, ignore_index=True)
 met_df["thres"] = met_df["thres"].round(5)
+met_df["f1"] = met_df["true_pos"] / (
+    met_df["true_pos"] + 0.5 * (1 - met_df["true_pos"] + met_df["false_pos"])
+)
 met_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
 
@@ -502,7 +505,7 @@ for up_type, true_ds in IN_PATH.items():
             for s, th in zip(*max_thres(S, 3, return_thres=True))
         ]
     met_sub = met_df.loc["minian-bin", up_type]
-    cur_uids = met_sub.sort_values("true_pos")["unit_id"]
+    cur_uids = met_sub.sort_values("f1", ascending=False)["unit_id"]
     plt_trs.extend([Y_solve, C_gt, S_gt, S, S_bin])
     for met_grp, exp_set in {
         "best": cur_uids[:nsamp],
