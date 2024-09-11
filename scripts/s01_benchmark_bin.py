@@ -37,7 +37,7 @@ PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
 PARAM_EST_AR = False
-PARAM_SIG_LEV = (0.05, 0.5)
+PARAM_SIG_LEV = (1, 10)
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
@@ -139,11 +139,13 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     # get data
     sim_ds = xr.open_dataset(IN_PATH[up_type])
     C_gt = sim_ds["C"].dropna("frame", how="all")
-    subset = C_gt.coords["unit_id"]
+    C_gt = norm_per_cell(C_gt)
     np.random.seed(42)
     sig_lev = xr.DataArray(
-        np.random.uniform(
-            low=PARAM_SIG_LEV[0], high=PARAM_SIG_LEV[1], size=C_gt.sizes["unit_id"]
+        np.sort(
+            np.random.uniform(
+                low=PARAM_SIG_LEV[0], high=PARAM_SIG_LEV[1], size=C_gt.sizes["unit_id"]
+            )
         ),
         dims=["unit_id"],
         coords={"unit_id": C_gt.coords["unit_id"]},
