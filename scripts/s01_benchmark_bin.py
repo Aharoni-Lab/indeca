@@ -434,10 +434,10 @@ def plot_ROC(data, color=None):
         met_bin,
         x="false_pos",
         y="true_pos",
-        hue="unit_id",
         s=50,
         marker="X",
         zorder=2.5,
+        color="black",
         ax=ax,
     )
     ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
@@ -454,24 +454,61 @@ def plot_ROC_scatter(data, color=None):
     ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
 
 
+def plot_corr(data, color=None):
+    ax = plt.gca()
+    met_thres = data[data["method"].isin(["CNMF", "minian-bin-scal"])]
+    met_bin = data[data["method"] == "minian-bin"]
+    sns.lineplot(met_thres, x="thres", y="corr", hue="method", ax=ax)
+    ax.axhline(met_bin["corr"].item(), lw=2, alpha=0.8, color="black", ls=":")
+
+
 if __name__ == "__main__":
     met_df = pd.read_feather(os.path.join(INT_PATH, "metrics.feat"))
     np.random.seed(42)
     plt_uids = np.random.choice(met_df["unit_id"].unique(), 10)
+    # ROC plot
     met_sub = met_df[met_df["unit_id"].isin(plt_uids)].astype({"unit_id": str})
     g = sns.FacetGrid(met_sub, row="unit_id", col="dataset", sharex=False, sharey=False)
     g.map_dataframe(plot_ROC)
+    g.add_legend()
+    g.figure.savefig(os.path.join(FIG_PATH, "ROC.svg"), bbox_inches="tight")
+    # corr plot
+    met_sub = met_df[met_df["unit_id"].isin(plt_uids)].astype({"unit_id": str})
+    g = sns.FacetGrid(met_sub, row="unit_id", col="dataset", sharex=False, sharey=False)
+    g.map_dataframe(plot_corr)
+    g.add_legend()
+    g.figure.savefig(os.path.join(FIG_PATH, "corr.svg"), bbox_inches="tight")
+    # ROC scatter plot
     met_sub = met_df[
         np.logical_or(
             met_df["thres"].isin(np.linspace(0.1, 0.9, 9)),
             met_df["method"] == "minian-bin",
         )
     ].astype({"thres": str})
-    g.figure.savefig(os.path.join(FIG_PATH, "ROC.svg"), bbox_inches="tight")
     g = sns.FacetGrid(met_sub, col="dataset", sharex=False, sharey=False)
     g.map_dataframe(plot_ROC_scatter)
     g.add_legend()
     g.figure.savefig(os.path.join(FIG_PATH, "ROC_scatter.svg"), bbox_inches="tight")
+    # corr violin plot
+    met_sub = met_df[
+        np.logical_or(
+            met_df["thres"].isin(np.linspace(0.1, 0.9, 9)),
+            met_df["method"] == "minian-bin",
+        )
+    ].astype({"thres": str})
+    g = sns.catplot(
+        met_sub,
+        row="dataset",
+        x="thres",
+        y="corr",
+        hue="method",
+        kind="violin",
+        aspect=4,
+        height=2.5,
+        sharey=False,
+        sharex=False,
+    )
+    g.figure.savefig(os.path.join(FIG_PATH, "corr_violin.svg"), bbox_inches="tight")
 
 # %% plot alpha correlations
 if __name__ == "__main__":
@@ -645,3 +682,64 @@ if __name__ == "__main__":
                 os.path.join(FIG_PATH, "exp-{}-{}.html".format(up_type, met_grp))
             )
 
+# %% debugging
+if __name__ == "__main__":
+    uid = 15
+    subset = -1
+    thres = 0.11
+    updt_ds = xr.open_dataset("./intermediate/benchmark_bin/updt_ds-upsamp.nc")
+    true_ds = xr.open_dataset("./intermediate/simulated/simulated-ar-upsamp.nc")
+    s_gt, s_gt_true = true_ds["S"].sel(unit_id=uid).dropna("frame"), true_ds[
+        "S_true"
+    ].sel(unit_id=uid)
+    s, s_bin, s_bin_scal = (
+        updt_ds["S"].sel(unit_id=uid).dropna("frame"),
+        updt_ds["S-bin"].sel(unit_id=uid).dropna("frame"),
+        updt_ds["S-bin-scal"].sel(unit_id=uid).dropna("frame"),
+    )
+    s_bin_cs = s_bin.coarsen({"frame": PARAM_UPSAMP}).sum()
+    s_bin_cs_warp = apply_dtw(s_bin_cs, s_gt)
+    # met_cnmf = compute_ROC_percell(
+    #     s,
+    #     s_gt,
+    #     nthres=int(980 / 5 + 1),
+    #     th_min=0.01,
+    #     th_max=0.99,
+    #     ds=PARAM_UPSAMP,
+    #     use_warp=True,
+    # )
+    met_cnmf_up = compute_ROC_percell(
+        s, s_gt_true, nthres=981, th_min=0.01, th_max=0.99
+    )
+    met_bin = compute_ROC_percell(s_bin_cs, s_gt)
+    met_bin_warp = compute_ROC_percell(s_bin_cs_warp, s_gt)
+    met_bin_up = compute_ROC_percell(s_bin, s_gt_true)
+    met_cnmf_exp = met_cnmf.set_index("thres").loc[thres]
+    met_cnmf_up_exp = met_cnmf_up.set_index("thres").loc[thres]
+    s_th = max_thres(s, th_min=thres, th_max=thres, nthres=1, ds=PARAM_UPSAMP)[0]
+    s_th_warp = apply_dtw(s_th, s_gt)
+    fig = go.Figure(
+        data=[
+            go.Scatter(y=s_gt[:subset], name="gt"),
+            go.Scatter(y=s_bin_cs[:subset], name="s_bin"),
+            go.Scatter(y=s_bin_cs_warp[:subset], name="s_bin_warp"),
+            go.Scatter(y=s_th[:subset], name="th"),
+            go.Scatter(y=s_th_warp[:subset], name="th_warp"),
+        ]
+    )
+    fig.show()
+    # fig = go.Figure(
+    #     data=[
+    #         go.Scatter(y=s_gt_true[: subset * PARAM_UPSAMP], name="gt"),
+    #         go.Scatter(
+    #             y=np.array(s_bin[: subset * PARAM_UPSAMP]).astype(float), name="s_bin"
+    #         ),
+    #         go.Scatter(
+    #             y=np.array(max_thres(s, th_min=thres, th_max=thres, nthres=1)[0])[
+    #                 : subset * PARAM_UPSAMP
+    #             ].astype(float),
+    #             name="s_th",
+    #         ),
+    #     ]
+    # )
+    # fig.show()
