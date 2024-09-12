@@ -5,12 +5,14 @@ import warnings
 import dask.array as darr
 import numba as nb
 import numpy as np
+import pandas as pd
 import sparse
 import xarray as xr
 from numpy import random
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import root_scalar
 from scipy.stats import multivariate_normal
+from tqdm.auto import tqdm
 
 from .minian_functions import save_minian, shift_perframe, write_video
 
@@ -70,21 +72,29 @@ def ar_trace(
 
 
 def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres=1e-6):
+    # uses a 2 state markov model to generate more 'bursty' spike trains
     S = markov_fire(frame, P).astype(float)
     t = np.arange(1, frame + 1)  # skip the first 0 from biexponential kernel
+    # Creates bi-exponential convolution kernel
     v = np.exp(-t / tau_d) - np.exp(-t / tau_r)
+    # Trims the length of the kernel once it reaches a small value
     v = v[v > trunc_thres]
+    # Convolves spiking with kernel to generate upscaled calcium
     C = np.convolve(v, S, mode="full")[:frame]
     return C, S
 
 
 def markov_fire(frame: int, P: np.ndarray):
+    # makes sure markov probabilities are correct shape
     assert P.shape == (2, 2)
+    # make sure probabilities sum to 1
     assert (P.sum(axis=1) == 1).all()
     while True:
+        # allocate array for spiking and generate
         S = np.zeros(frame, dtype=int)
         for i in range(1, len(S)):
             S[i] = np.random.choice([0, 1], p=P[S[i - 1], :])
+        # make sure at least one firing exists
         if S.sum() > 0:
             break
     return S
@@ -125,6 +135,48 @@ def random_walk(
     elif nn:
         walk = np.clip(walk, 0, None)
     return walk
+
+
+def simulate_traces(
+    num_cells: int,
+    length_in_sec: float,
+    tmp_P: np.ndarray,
+    tmp_tau_d: float,
+    tmp_tau_r: float,
+    approx_fps: float = 30,
+    spike_sampling_rate=500,
+    noise: float = 0.01,
+):
+    # TODO: make this compatibale with exp_trace and incorporate this with rest of the simulation pipeline
+    upsample_factor = np.round(spike_sampling_rate / approx_fps).astype(int)
+    fps = spike_sampling_rate / upsample_factor
+    num_samples = np.round(length_in_sec * fps).astype(
+        int
+    )  # number of samples for normal calcium
+    tmp_tau_d = tmp_tau_d * fps
+    tmp_tau_r = tmp_tau_r * fps
+
+    traces = []
+    for i in tqdm(range(num_cells), desc="Simulating cells", unit="cell"):
+        C_upsampled, S_upsampled, C, S = exp_trace(
+            num_samples, tmp_P, tmp_tau_d, tmp_tau_r, upsample_factor=upsample_factor
+        )
+        traces.append({"C_true": C_upsampled, "S_true": S_upsampled, "C": C, "S": S})
+    # Add Gaussian noise to C
+    for trace in traces:
+        noise_array = np.random.normal(0, noise, size=trace["C"].shape)
+        trace["C_noisy"] = trace["C"] + noise_array
+
+    # Add the noisy C to the DataFrame
+    df = pd.DataFrame(traces)
+    df["fps"] = fps
+    df["upsample_factor"] = upsample_factor
+    df["spike_sampling_rate"] = spike_sampling_rate
+    df = pd.DataFrame(traces)
+    df["fps"] = fps
+    df["upsample_factor"] = upsample_factor
+    df["spike_sampling_rate"] = spike_sampling_rate
+    return df
 
 
 def simulate_data(
