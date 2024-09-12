@@ -146,7 +146,7 @@ def solve_deconv_bin(
     else:
         metric_df["converged"] = False
         warnings.warn("max scale iteration reached")
-    return Gi @ opt_s, opt_s, b_bin, scale, metric_df
+    return Gi @ opt_s, opt_s, b_bin, scale, s_bin, metric_df
 
 
 def max_thres(
