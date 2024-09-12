@@ -1,26 +1,21 @@
 # %% import and definition
-import itertools as itt
 import os
 
-import cv2
-import dask as da
-import Levenshtein
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import seaborn as sns
 import xarray as xr
 from distributed import LocalCluster
-from dtaidistance import dtw
-from plotly.subplots import make_subplots
-from scipy.spatial.distance import cdist
-from scipy.stats import zscore
-from sklearn.metrics.pairwise import cosine_similarity
 from tqdm.auto import tqdm
 
-from minian_bin.plotting import map_gofunc
+from minian_bin.benchmark_utils import (
+    compute_ROC,
+    norm_per_cell,
+    plot_corr,
+    plot_ROC,
+    plot_ROC_scatter,
+)
 from minian_bin.update_bin import (
     construct_G,
     construct_R,
@@ -29,7 +24,6 @@ from minian_bin.update_bin import (
     solve_deconv,
     solve_deconv_bin,
 )
-from minian_bin.utilities import norm
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-ar-samp.nc",
@@ -42,170 +36,6 @@ PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
 PARAM_EST_AR = False
 PARAM_SIG_LEV = (1, 10)
-
-
-def dilate1d(a, kernel):
-    return cv2.dilate(a.astype(float), kernel).squeeze()
-
-
-def compute_dist(trueS, newS, metric, corr_dilation=0):
-    if metric == "correlation" and corr_dilation:
-        kn = np.ones(2 * corr_dilation + 1)
-        trueS = xr.apply_ufunc(
-            dilate1d,
-            trueS.compute(),
-            input_core_dims=[["frame"]],
-            output_core_dims=[["frame"]],
-            vectorize=True,
-            kwargs={"kernel": kn},
-        )
-        newS = xr.apply_ufunc(
-            dilate1d,
-            newS.compute(),
-            input_core_dims=[["frame"]],
-            output_core_dims=[["frame"]],
-            vectorize=True,
-            kwargs={"kernel": kn},
-        )
-    if metric == "edit":
-        dist = np.array(
-            [
-                Levenshtein.distance(
-                    np.array(trueS.sel(unit_id=uid)), np.array(newS.sel(unit_id=uid))
-                )
-                for uid in trueS.coords["unit_id"]
-            ]
-        )
-    else:
-        dist = np.diag(
-            cdist(
-                trueS.transpose("unit_id", "frame"),
-                newS.transpose("unit_id", "frame"),
-                metric=metric,
-            )
-        )
-    Sname = newS.name.split("-")
-    if "org" in Sname:
-        mthd = "original"
-        Sname.remove("org")
-    elif "upsamp" in Sname:
-        mthd = "upsampled"
-        Sname.remove("upsamp")
-    elif "updn" in Sname:
-        mthd = "updn"
-        Sname.remove("updn")
-    else:
-        mthd = "unknown"
-    return pd.DataFrame(
-        {
-            "variable": "-".join(Sname),
-            "method": mthd,
-            "metric": metric,
-            "unit_id": trueS.coords["unit_id"],
-            "dist": dist,
-        }
-    )
-
-
-def norm_per_cell(S):
-    return xr.apply_ufunc(
-        norm,
-        S.astype(float).compute(),
-        input_core_dims=[["frame"]],
-        output_core_dims=[["frame"]],
-        vectorize=True,
-    )
-
-
-def compute_metrics(S, S_true, mets, nthres: int = None, coarsen=None):
-    S, S_true = S.dropna("frame"), S_true.dropna("frame")
-    if nthres is not None:
-        S_ls = max_thres(S, nthres)
-    else:
-        S_ls = [S]
-    if coarsen is not None:
-        S_ls = [s.coarsen(coarsen).sum() for s in S_ls]
-        S_ls = [
-            s.assign_coords({"frame": np.ceil(s.coords["frame"]).astype(int)})
-            for s in S_ls
-        ]
-    res_ls = [compute_dist(S_true, curS, met) for curS, met in itt.product(S_ls, mets)]
-    return pd.concat(res_ls)
-
-
-def apply_dtw(src_arr, dst_arr, psi=0, window=10, **kwargs):
-    src_arr, dst_arr = np.array(src_arr).astype(float), np.array(dst_arr).astype(float)
-    best_path = dtw.warping_path_fast(
-        src_arr,
-        dst_arr,
-        psi=psi,
-        window=window,
-        **kwargs,
-    )
-    best_path = pd.DataFrame(best_path, columns=["src", "tgt"])
-    best_path["src_val"] = np.nan
-    for src_idx, src_df in best_path.groupby("src"):
-        idx = src_df.index
-        best_path.loc[idx, "src_val"] = src_arr[src_idx] / len(idx)
-    warp = best_path.groupby("tgt")["src_val"].sum()
-    # assert src_arr.sum() == warp.sum()
-    return warp
-
-
-def compute_ROC_percell(
-    S, S_true, nthres=None, ds=None, th_min=0.1, th_max=0.9, use_warp=False, meta=dict()
-):
-    S, S_true = np.array(S), np.array(S_true)
-    pos_idx, neg_idx = np.where(S_true > 0)[0], np.where(S_true == 0)[0]
-    true_pos = np.sum(np.array(S_true[pos_idx]))
-    true_neg = len(neg_idx)
-    if nthres is not None:
-        S_ls, thres = max_thres(
-            S, nthres, th_min=th_min, th_max=th_max, return_thres=True, ds=ds
-        )
-    else:
-        S_ls = [S]
-        thres = [-1]
-    if use_warp:
-        S_ls = [np.array(apply_dtw(s, S_true)) for s in S_ls]
-    pos_dev = np.array([np.abs(s[pos_idx] - S_true[pos_idx]).sum() for s in S_ls])
-    neg_dev = np.array([s[neg_idx].sum() for s in S_ls])
-    corr = np.array([np.corrcoef(s, S_true)[0, 1] for s in S_ls])
-    cos = np.array(
-        [
-            cosine_similarity(s.reshape((1, -1)), S_true.reshape((1, -1))).item()
-            for s in S_ls
-        ]
-    )
-    return pd.DataFrame(
-        {
-            "thres": thres,
-            "true_pos": (1 - pos_dev / true_pos).clip(0, 1),
-            "false_pos": neg_dev / true_neg,
-            "corr": corr,
-            "cosine": cos,
-            **meta,
-        }
-    )
-
-
-def compute_ROC(S, S_true, metadata=None, **kwargs):
-    met_df = []
-    for uid in S.coords["unit_id"]:
-        met = da.delayed(compute_ROC_percell)(
-            S.sel(unit_id=uid),
-            S_true.sel(unit_id=uid),
-            meta={"unit_id": uid.item()},
-            **kwargs,
-        )
-        met_df.append(met)
-    met_df = da.compute(met_df)[0]
-    met_df = pd.concat(met_df, ignore_index=True)
-    if metadata is not None:
-        for key, val in metadata.items():
-            met_df[key] = val
-    return met_df
-
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
@@ -416,52 +246,6 @@ if __name__ == "__main__":
 
 
 # %% plot metrics
-def plot_ROC(data, color=None):
-    ax = plt.gca()
-    met_thres = data[data["method"].isin(["CNMF", "minian-bin-scal"])]
-    met_bin = data[data["method"] == "minian-bin"]
-    sns.lineplot(
-        met_thres,
-        x="false_pos",
-        y="true_pos",
-        hue="method",
-        estimator=None,
-        lw=1,
-        alpha=0.9,
-        ax=ax,
-    )
-    sns.scatterplot(
-        met_bin,
-        x="false_pos",
-        y="true_pos",
-        s=50,
-        marker="X",
-        zorder=2.5,
-        color="black",
-        ax=ax,
-    )
-    ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
-
-
-def plot_ROC_scatter(data, color=None):
-    ax = plt.gca()
-    met_cnmf = data[data["method"] == "CNMF"]
-    met_bin = data[data["method"] == "minian-bin"]
-    sns.scatterplot(met_cnmf, x="false_pos", y="true_pos", hue="thres", s=10, ax=ax)
-    sns.scatterplot(
-        met_bin, x="false_pos", y="true_pos", s=40, c="black", marker="x", ax=ax
-    )
-    ax.axline((0, 0), slope=1, lw=1, alpha=0.8, color="black", ls=":")
-
-
-def plot_corr(data, color=None):
-    ax = plt.gca()
-    met_thres = data[data["method"].isin(["CNMF", "minian-bin-scal"])]
-    met_bin = data[data["method"] == "minian-bin"]
-    sns.lineplot(met_thres, x="thres", y="corr", hue="method", ax=ax)
-    ax.axhline(met_bin["corr"].item(), lw=2, alpha=0.8, color="black", ls=":")
-
-
 if __name__ == "__main__":
     met_df = pd.read_feather(os.path.join(INT_PATH, "metrics.feat"))
     np.random.seed(42)
@@ -622,65 +406,3 @@ if __name__ == "__main__":
             fig.write_html(
                 os.path.join(FIG_PATH, "exp-{}-{}.html".format(up_type, met_grp))
             )
-
-# %% debugging
-if __name__ == "__main__":
-    uid = 15
-    subset = -1
-    thres = 0.11
-    updt_ds = xr.open_dataset("./intermediate/benchmark_bin/updt_ds-upsamp.nc")
-    true_ds = xr.open_dataset("./intermediate/simulated/simulated-ar-upsamp.nc")
-    s_gt, s_gt_true = true_ds["S"].sel(unit_id=uid).dropna("frame"), true_ds[
-        "S_true"
-    ].sel(unit_id=uid)
-    s, s_bin, s_bin_scal = (
-        updt_ds["S"].sel(unit_id=uid).dropna("frame"),
-        updt_ds["S-bin"].sel(unit_id=uid).dropna("frame"),
-        updt_ds["S-bin-scal"].sel(unit_id=uid).dropna("frame"),
-    )
-    s_bin_cs = s_bin.coarsen({"frame": PARAM_UPSAMP}).sum()
-    s_bin_cs_warp = apply_dtw(s_bin_cs, s_gt)
-    # met_cnmf = compute_ROC_percell(
-    #     s,
-    #     s_gt,
-    #     nthres=int(980 / 5 + 1),
-    #     th_min=0.01,
-    #     th_max=0.99,
-    #     ds=PARAM_UPSAMP,
-    #     use_warp=True,
-    # )
-    met_cnmf_up = compute_ROC_percell(
-        s, s_gt_true, nthres=981, th_min=0.01, th_max=0.99
-    )
-    met_bin = compute_ROC_percell(s_bin_cs, s_gt)
-    met_bin_warp = compute_ROC_percell(s_bin_cs_warp, s_gt)
-    met_bin_up = compute_ROC_percell(s_bin, s_gt_true)
-    met_cnmf_exp = met_cnmf.set_index("thres").loc[thres]
-    met_cnmf_up_exp = met_cnmf_up.set_index("thres").loc[thres]
-    s_th = max_thres(s, th_min=thres, th_max=thres, nthres=1, ds=PARAM_UPSAMP)[0]
-    s_th_warp = apply_dtw(s_th, s_gt)
-    fig = go.Figure(
-        data=[
-            go.Scatter(y=s_gt[:subset], name="gt"),
-            go.Scatter(y=s_bin_cs[:subset], name="s_bin"),
-            go.Scatter(y=s_bin_cs_warp[:subset], name="s_bin_warp"),
-            go.Scatter(y=s_th[:subset], name="th"),
-            go.Scatter(y=s_th_warp[:subset], name="th_warp"),
-        ]
-    )
-    fig.show()
-    # fig = go.Figure(
-    #     data=[
-    #         go.Scatter(y=s_gt_true[: subset * PARAM_UPSAMP], name="gt"),
-    #         go.Scatter(
-    #             y=np.array(s_bin[: subset * PARAM_UPSAMP]).astype(float), name="s_bin"
-    #         ),
-    #         go.Scatter(
-    #             y=np.array(max_thres(s, th_min=thres, th_max=thres, nthres=1)[0])[
-    #                 : subset * PARAM_UPSAMP
-    #             ].astype(float),
-    #             name="s_th",
-    #         ),
-    #     ]
-    # )
-    # fig.show()
