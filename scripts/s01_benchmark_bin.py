@@ -512,95 +512,36 @@ if __name__ == "__main__":
 
 # %% plot alpha correlations
 if __name__ == "__main__":
-    sig_scal = updt_ds[["sig_lev", "scal-upsamp"]].to_dataframe()
-    sig_scal["S_gt"] = S_gt.mean("frame").to_series()
-    sig_scal["S_org"] = S_updn.mean("frame").to_series()
-    sig_scal["S_bin"] = S_bin_updn.mean("frame").to_series()
-    fig = make_subplots(
-        rows=1,
-        cols=3,
-        shared_xaxes="all",
-        shared_yaxes=False,
-        subplot_titles=["Original", "Binary", "Binary Scale"],
-        horizontal_spacing=0.1,
+    met_df = (
+        pd.read_feather("./intermediate/benchmark_bin/metrics.feat")
+        .sort_values(["method", "dataset"])
+        .set_index(["method", "dataset"])
     )
-    fig.add_trace(
-        go.Histogram2dContour(
-            x=sig_scal["sig_lev"], y=sig_scal["S_org"], showscale=False
-        ),
-        row=1,
-        col=1,
-    )
-    fig.add_trace(
-        go.Histogram2dContour(
-            x=sig_scal["sig_lev"], y=sig_scal["S_bin"], showscale=False
-        ),
-        row=1,
-        col=2,
-    )
-    fig.add_trace(
-        go.Histogram2dContour(
-            x=sig_scal["sig_lev"], y=sig_scal["scal-upsamp"], showscale=False
-        ),
-        row=1,
-        col=3,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=sig_scal["sig_lev"],
-            y=sig_scal["S_org"],
-            mode="markers",
-            marker=dict(
-                symbol="circle",
-                opacity=0.6,
-                color="white",
-                size=6,
-                line=dict(width=1),
-            ),
-            showlegend=False,
-        ),
-        row=1,
-        col=1,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=sig_scal["sig_lev"],
-            y=sig_scal["S_bin"],
-            mode="markers",
-            marker=dict(
-                symbol="circle",
-                opacity=0.6,
-                color="white",
-                size=6,
-                line=dict(width=1),
-            ),
-            showlegend=False,
-        ),
-        row=1,
-        col=2,
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=sig_scal["sig_lev"],
-            y=sig_scal["scal-upsamp"],
-            mode="markers",
-            marker=dict(
-                symbol="circle",
-                opacity=0.6,
-                color="white",
-                size=6,
-                line=dict(width=1),
-            ),
-            showlegend=False,
-        ),
-        row=1,
-        col=3,
-    )
-    fig.update_xaxes(title_text="Signal Level")
-    fig.update_yaxes(title_text="Mean S", row=1, col=1)
-    fig.update_yaxes(title_text="Mean S-bin", row=1, col=2)
-    fig.update_yaxes(title_text="Alpha scale", row=1, col=3)
-    fig.write_html(os.path.join(FIG_PATH, "scaling.html"))
+    for up_type, true_ds in IN_PATH.items():
+        updt_ds = xr.open_dataset(
+            os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type))
+        )
+        true_ds = xr.open_dataset(true_ds)
+        sig_scal = updt_ds[["sig_lev", "scal"]].to_dataframe()
+        sig_scal["S_gt"] = true_ds["S"].mean("frame").to_series()
+        sig_scal["S"] = updt_ds["S"].mean("frame").to_series()
+        sig_scal["S-bin"] = updt_ds["S-bin"].mean("frame").to_series()
+        x_dat = sig_scal.reset_index().melt(
+            id_vars=["unit_id"],
+            value_vars=["sig_lev", "S_gt"],
+            var_name="x_var",
+            value_name="x",
+        )
+        y_dat = sig_scal.reset_index().melt(
+            id_vars=["unit_id"],
+            value_vars=["scal", "S", "S-bin"],
+            var_name="y_var",
+            value_name="y",
+        )
+        scal_df = x_dat.merge(y_dat, on="unit_id")
+        g = sns.FacetGrid(scal_df, row="x_var", col="y_var", sharex=False, sharey=False)
+        g.map_dataframe(sns.regplot, x="x", y="y", scatter_kws={"s": 10})
+        g.figure.savefig(os.path.join(FIG_PATH, "alpha-{}.svg".format(up_type)))
 
 
 # %% plot examples
