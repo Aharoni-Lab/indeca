@@ -156,8 +156,12 @@ def max_thres(
     thres = np.linspace(th_min, th_max, nthres)
     S_ls = [(a > amax * th) for th in thres]
     if ds is not None:
-        S_ls = [np.convolve(s, np.ones(ds), mode="full")[ds - 1 :: ds] for s in S_ls]
+        S_ls = [sum_downsample(s, ds) for s in S_ls]
     if return_thres:
         return S_ls, thres
     else:
         return S_ls
+
+
+def sum_downsample(a, factor):
+    return np.convolve(a, np.ones(factor), mode="full")[factor - 1 :: factor]
