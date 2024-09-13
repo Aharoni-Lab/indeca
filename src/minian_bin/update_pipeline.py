@@ -132,7 +132,7 @@ def pipeline_bin(
         C_ls.append(C)
         S_ls.append(S)
         # 2.4 check convergence
-        metric_last = metric_df[metric_df["iter"] < i_iter]
+        metric_last = metric_df[metric_df["iter"] < i_iter].dropna()
         if len(metric_last) > 0:
             err_cur = cur_metric.set_index("cell")["err"]
             err_best = metric_last.groupby("cell")["err"].min()
