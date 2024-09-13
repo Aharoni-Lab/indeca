@@ -62,13 +62,13 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     updt_ds = [Y_solve.rename("Y_solve"), sig_lev.sel(unit_id=subset)]
     iter_df = []
     # update
-    C_bin_iter, S_bin_iter, iter_df = pipeline_bin(
+    C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter = pipeline_bin(
         np.array(Y_solve),
         up_factor,
         max_iters=10,
         tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
-        save_iter=True,
-        ar_use_all=False,
+        return_iter=True,
+        ar_use_all=True,
     )
     res = {"C": C_bin_iter, "S": S_bin_iter}
     # save variables

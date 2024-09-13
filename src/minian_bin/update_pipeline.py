@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm, trange
@@ -12,7 +14,7 @@ def pipeline_bin(
     up_factor=1,
     p=2,
     tau_init=None,
-    save_iter=False,
+    return_iter=False,
     max_iters=50,
     err_tol=1e-3,
     est_noise_freq=0.4,
@@ -47,9 +49,8 @@ def pipeline_bin(
             )
             g[icell, :] = cur_g
     # 2. iteration loop
-    if save_iter:
-        C_ls = []
-        S_ls = []
+    C_ls = []
+    S_ls = []
     metric_df = pd.DataFrame(
         {
             "iter": -1,
@@ -118,19 +119,39 @@ def pipeline_bin(
             }
         )
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
-        if save_iter:
-            C_ls.append(C)
-            S_ls.append(S)
+        C_ls.append(C)
+        S_ls.append(S)
         # 2.4 check convergence
         metric_last = metric_df[metric_df["iter"] < i_iter]
         if len(metric_last) > 0:
-            metric_best = metric_last.groupby("cell")["err"].min()
-            if (np.abs(cur_metric["err"] - metric_best) < err_tol).all():
+            err_cur = cur_metric.set_index("cell")["err"]
+            err_best = metric_last.groupby("cell")["err"].min()
+            # converged
+            if (np.abs(err_cur - err_best) < err_tol).all():
                 break
-    if save_iter:
-        return C_ls, S_ls, metric_df
+            # trapped
+            err_all = metric_last.pivot(columns="iter", index="cell", values="err")
+            if (
+                np.nanmin(
+                    np.abs(err_cur.values.reshape((-1, 1)) - err_all.values), axis=1
+                )
+                < err_tol
+            ).all():
+                warnings.warn("Solution trapped in local optimal")
+                break
     else:
-        return C, S, metric_df
+        warnings.warn("Max interation reached")
+    opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
+    for icell in range(ncell):
+        opt_idx = metric_df.loc[
+            metric_df[metric_df["cell"] == icell]["err"].idxmin(), "iter"
+        ]
+        opt_C[icell, :] = C_ls[opt_idx][icell, :]
+        opt_S[icell, :] = S_ls[opt_idx][icell, :]
+    if return_iter:
+        return opt_C, opt_S, metric_df, C_ls, S_ls
+    else:
+        return opt_C, opt_S, metric_df
 
 
 def pipeline_cnmf():
