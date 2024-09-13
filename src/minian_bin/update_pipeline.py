@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm, trange
 
-from .simulation import tau2AR
+from .simulation import AR2tau, tau2AR
 from .update_AR import construct_G, solve_fit_h
 from .update_bin import construct_R, estimate_coefs, solve_deconv_bin, sum_downsample
 
@@ -33,12 +33,14 @@ def pipeline_bin(
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         g = np.array(tau2AR(tau_init[0], tau_init[1]))
+        tau = tau_init
     else:
         if up_factor > 1:
             raise NotImplementedError(
                 "Estimation of AR coefficient with upsampling is not implemented"
             )
         g = np.empty((ncell, p))
+        tau = np.empty((ncell, p))
         for icell, y in enumerate(Y):
             cur_g, _ = estimate_coefs(
                 y,
@@ -48,6 +50,7 @@ def pipeline_bin(
                 add_lag=est_add_lag,
             )
             g[icell, :] = cur_g
+            tau[icell, :] = AR2tau(*cur_g)
     # 2. iteration loop
     C_ls = []
     S_ls = []
@@ -57,6 +60,8 @@ def pipeline_bin(
             "cell": np.arange(ncell),
             "g0": g.T[0],
             "g1": g.T[1],
+            "tau_d": tau.T[0],
+            "tau_r": tau.T[1],
             "err": np.nan,
             "scale": np.nan,
         }
@@ -99,13 +104,16 @@ def pipeline_bin(
             lams, ps, _, _, _, _ = solve_fit_h(
                 Y, S_ds, N=p, s_len=ar_kn_len, norm=ar_norm
             )
-            g = np.array(tau2AR(*(-1 / lams)))
+            tau = -1 / lams
+            g = np.array(tau2AR(*tau))
         else:
             g = np.empty((ncell, p))
-            for icell, (y, s) in enumerate(zip(Y, S_ds)):
+            tau = np.empty((ncell, p))
+            for icell, (y, s) in enumerate(zip(Y, S_ar)):
                 lams, ps, _, _, _, _ = solve_fit_h(
                     y, s, N=p, s_len=ar_kn_len, norm=ar_norm
                 )
+                tau[icell, :] = -1 / lams
                 g[icell, :] = tau2AR(*(-1 / lams))
         # 2.3 save iteration results
         cur_metric = pd.DataFrame(
@@ -114,6 +122,8 @@ def pipeline_bin(
                 "cell": np.arange(ncell),
                 "g0": g.T[0],
                 "g1": g.T[1],
+                "tau_d": tau.T[0],
+                "tau_r": tau.T[1],
                 "err": err,
                 "scale": scale,
             }
