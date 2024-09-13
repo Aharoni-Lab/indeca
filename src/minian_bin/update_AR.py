@@ -96,7 +96,7 @@ def fit_sumexp_split(y):
     )
 
 
-def fit_sumexp_gd(y, x=None, interp_factor=100):
+def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
     T = len(y)
     if x is None:
         x = np.arange(T)
@@ -119,14 +119,25 @@ def fit_sumexp_gd(y, x=None, interp_factor=100):
         np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
         + idx_max_interp
     ) / interp_factor
-    res = curve_fit(
-        lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
-        x,
-        y,
-        p0=(tau_d_init, tau_r_init),
-        bounds=(0, np.inf),
-    )
-    tau_d, tau_r = res[0]
+    if fit_amp:
+        res = curve_fit(
+            lambda x, p, d, r: p * np.exp(-x / d) - (p - 1) * np.exp(-x / r),
+            x,
+            y,
+            p0=(2, tau_d_init, tau_r_init),
+            bounds=(0, np.inf),
+        )
+        p, tau_d, tau_r = res[0]
+    else:
+        res = curve_fit(
+            lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
+            x,
+            y,
+            p0=(tau_d_init, tau_r_init),
+            bounds=(0, np.inf),
+        )
+        tau_d, tau_r = res[0]
+        p = np.array([1, -1])
     if tau_d <= tau_r:
         warnings.warn(
             "decaying time smaller than rising time: tau_d: {}, tau_r: {}\nreversing coefficients".format(
@@ -136,7 +147,7 @@ def fit_sumexp_gd(y, x=None, interp_factor=100):
         tau_d, tau_r = tau_r, tau_d
     return (
         -1 / np.array([tau_d, tau_r]),
-        np.array([1, -1]),
+        p,
         np.exp(-x / tau_d) - np.exp(-x / tau_r),
     )
 
