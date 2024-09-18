@@ -143,12 +143,8 @@ def pipeline_bin(
                 break
             # trapped
             err_all = metric_last.pivot(columns="iter", index="cell", values="err")
-            if (
-                np.nanmin(
-                    np.abs(err_cur.values.reshape((-1, 1)) - err_all.values), axis=1
-                )
-                < err_tol
-            ).all():
+            diff_all = np.abs(err_cur.values.reshape((-1, 1)) - err_all.values)
+            if (diff_all.min(axis=1) < err_tol).all():
                 warnings.warn("Solution trapped in local optimal")
                 break
     else:
