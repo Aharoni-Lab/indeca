@@ -74,11 +74,11 @@ def ar_trace(
 def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres=1e-6):
     # uses a 2 state markov model to generate more 'bursty' spike trains
     S = markov_fire(frame, P).astype(float)
-    t = np.arange(1, frame + 1)  # skip the first 0 from biexponential kernel
+    t = np.arange(0, frame)
     # Creates bi-exponential convolution kernel
     v = np.exp(-t / tau_d) - np.exp(-t / tau_r)
     # Trims the length of the kernel once it reaches a small value
-    v = v[v > trunc_thres]
+    v = v[: np.where(v > trunc_thres)[0].max()]
     # Convolves spiking with kernel to generate upscaled calcium
     C = np.convolve(v, S, mode="full")[:frame]
     return C, S
@@ -462,6 +462,14 @@ def ar_pulse(theta1, theta2, nsamp):
         else:
             ar[i] = pulse[i]
     return ar, t, pulse
+
+
+def exp_pulse(tau_d, tau_r, nsamp):
+    t = np.arange(nsamp).astype(float)
+    pulse = np.zeros_like(t)
+    pulse[0] = 1
+    kn = np.exp(-t / tau_d) - np.exp(-t / tau_r)
+    return np.convolve(kn, pulse, mode="full")[:nsamp], t, pulse
 
 
 def eval_exp(t, is_biexp, tconst, coefs):
