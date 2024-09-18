@@ -70,7 +70,7 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
         return_iter=True,
         ar_use_all=True,
     )
-    res = {"C": C_bin_iter, "S": S_bin_iter}
+    res = {"C": C_bin, "S": S_bin, "C_iter": C_bin_iter, "S_iter": S_bin_iter}
     # save variables
     for vname, dat in res.items():
         dat = np.stack(dat)
