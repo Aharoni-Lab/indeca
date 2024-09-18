@@ -128,6 +128,7 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
             bounds=(0, np.inf),
         )
         p, tau_d, tau_r = res[0]
+        p = np.array([p, 1 - p])
     else:
         res = curve_fit(
             lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
@@ -148,7 +149,7 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
     return (
         -1 / np.array([tau_d, tau_r]),
         p,
-        np.exp(-x / tau_d) - np.exp(-x / tau_r),
+        p[0] * np.exp(-x / tau_d) + p[1] * np.exp(-x / tau_r),
     )
 
 
