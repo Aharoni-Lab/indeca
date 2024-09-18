@@ -97,12 +97,14 @@ def pipeline_bin(
             err[icell] = np.linalg.norm(y - c_bin.squeeze())
         # 2.2 update AR
         if up_factor > 1:
-            S_ds = np.stack([sum_downsample(s, up_factor) for s in S], axis=0)
+            S_ar = np.stack(
+                [sum_downsample(s, up_factor) for s in S], axis=0
+            ) * scale.reshape((-1, 1))
         else:
-            S_ds = S
+            S_ar = S * scale.reshape((-1, 1))
         if ar_use_all:
             lams, ps, _, _, _, _ = solve_fit_h(
-                Y, S_ds, N=p, s_len=ar_kn_len, norm=ar_norm
+                Y, S_ar, N=p, s_len=ar_kn_len, norm=ar_norm
             )
             tau = -1 / lams
             g = np.array(tau2AR(*tau))
