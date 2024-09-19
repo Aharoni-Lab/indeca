@@ -472,8 +472,12 @@ def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres=0):
         kn = p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r)
     elif tau_d > 0:
         kn = p_d * np.exp(-t / tau_d)
+        kn[0] = 0
+        warnings.warn(
+            "Ignoring rise time, tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r)
+        )
     else:
-        raise ValueError("Invalid taus_d: {}, tau_r: {}".format(tau_d, tau_r))
+        raise ValueError("Invalid tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r))
     tr = np.convolve(kn, pulse, mode="full")[:nsamp]
     tr = tr[: np.where(tr > trunc_thres)[0].max()]
     return tr, t, pulse
