@@ -239,9 +239,6 @@ if __name__ == "__main__":
             met_df.extend([metS, metS_bin_scal, metS_bin])
     met_df = pd.concat(met_df, ignore_index=True)
     met_df["thres"] = met_df["thres"].round(5)
-    met_df["f1"] = met_df["true_pos"] / (
-        met_df["true_pos"] + 0.5 * (1 - met_df["true_pos"] + met_df["false_pos"])
-    )
     met_df.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
 

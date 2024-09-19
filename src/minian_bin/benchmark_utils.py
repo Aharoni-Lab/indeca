@@ -173,6 +173,9 @@ def compute_ROC(S, S_true, metadata=None, **kwargs):
         met_df.append(met)
     met_df = da.compute(met_df)[0]
     met_df = pd.concat(met_df, ignore_index=True)
+    met_df["f1"] = met_df["true_pos"] / (
+        met_df["true_pos"] + 0.5 * (1 - met_df["true_pos"] + met_df["false_pos"])
+    )
     if metadata is not None:
         for key, val in metadata.items():
             met_df[key] = val
