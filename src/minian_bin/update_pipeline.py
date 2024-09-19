@@ -39,9 +39,9 @@ def pipeline_bin(
     R = construct_R(T, up_factor)
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
-        g = np.array(tau2AR(tau_init[0], tau_init[1]))
-        tau = tau_init
-        ps = np.array([1, -1])
+        g = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
+        tau = np.tile(tau_init, (ncell, 1))
+        ps = np.tile([1, -1], (ncell, 1))
     else:
         if up_factor > 1:
             raise NotImplementedError(
@@ -91,27 +91,15 @@ def pipeline_bin(
         ):
             cur_G, cur_kn = None, None
             if ar_mode:
-                if g.ndim == 2:
-                    cur_G = construct_G(g[icell], T * up_factor)
-                elif g.ndim == 1:
-                    cur_G = construct_G(g, T * up_factor)
-                else:
-                    raise ValueError(
-                        "g has wrong number of dimensions: {}".format(g.shape)
-                    )
+                cur_G = construct_G(g[icell], T * up_factor)
             else:
-                if tau.ndim == 2:
-                    cur_kn = exp_pulse(
-                        tau[icell, 0],
-                        tau[icell, 1],
-                        ar_kn_len,
-                        p_d=ps[icell, 0],
-                        p_r=ps[icell, 1],
-                    )[0]
-                elif tau.ndim == 1:
-                    cur_kn = exp_pulse(tau[0], tau[1], ar_kn_len, p_d=ps[0], p_r=ps[1])[
-                        0
-                    ]
+                cur_kn = exp_pulse(
+                    tau[icell, 0],
+                    tau[icell, 1],
+                    ar_kn_len,
+                    p_d=ps[icell, 0],
+                    p_r=ps[icell, 1],
+                )[0]
             c_bin, s_bin, _, scl, _, _ = solve_deconv_bin(
                 y,
                 G=cur_G,
@@ -137,8 +125,9 @@ def pipeline_bin(
             lams, ps, h, h_fit, _, _ = solve_fit_h(
                 Y, S_ar, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
             )
-            tau = -1 / lams
-            g = np.array(tau2AR(*tau))
+            tau = np.tile(-1 / lams, (ncell, 1))
+            g = np.tile(tau2AR(*(-1 / lams)), (ncell, 1))
+            ps = np.tile(ps, (ncell, 1))
         else:
             g = np.empty((ncell, p))
             tau = np.empty((ncell, p))
@@ -159,8 +148,8 @@ def pipeline_bin(
                 "g1": g.T[1],
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
-                "p0": ps[0],
-                "p1": ps[1],
+                "p0": ps.T[0],
+                "p1": ps.T[1],
                 "err": err,
                 "scale": scale,
             }
