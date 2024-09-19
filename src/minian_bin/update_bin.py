@@ -82,7 +82,7 @@ def solve_deconv(
     if ar_mode:
         cons.append(s == G @ c)
     else:
-        cons.append(c[:, 0] == cp.convolve(kn, s[:, 0])[:T])
+        cons.extend([c[:, 0] == cp.convolve(kn, s[:, 0])[:T], s[-1] == 0])
     if amp_constraint:
         cons.append(s <= 1)
     prob = cp.Problem(obj, cons)
