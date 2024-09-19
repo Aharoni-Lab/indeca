@@ -468,7 +468,12 @@ def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres=0):
     t = np.arange(nsamp).astype(float)
     pulse = np.zeros_like(t)
     pulse[0] = 1
-    kn = np.nan_to_num(p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r))
+    if tau_d > tau_r and tau_r > 0:
+        kn = p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r)
+    elif tau_d > 0:
+        kn = p_d * np.exp(-t / tau_d)
+    else:
+        raise ValueError("Invalid taus_d: {}, tau_r: {}".format(tau_d, tau_r))
     tr = np.convolve(kn, pulse, mode="full")[:nsamp]
     tr = tr[: np.where(tr > trunc_thres)[0].max()]
     return tr, t, pulse
