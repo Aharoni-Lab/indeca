@@ -464,12 +464,14 @@ def ar_pulse(theta1, theta2, nsamp):
     return ar, t, pulse
 
 
-def exp_pulse(tau_d, tau_r, nsamp):
+def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres=0):
     t = np.arange(nsamp).astype(float)
     pulse = np.zeros_like(t)
     pulse[0] = 1
-    kn = np.exp(-t / tau_d) - np.exp(-t / tau_r)
-    return np.convolve(kn, pulse, mode="full")[:nsamp], t, pulse
+    kn = p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r)
+    tr = np.convolve(kn, pulse, mode="full")[:nsamp]
+    tr = tr[: np.where(tr > trunc_thres)[0].max()]
+    return tr, t, pulse
 
 
 def eval_exp(t, is_biexp, tconst, coefs):
