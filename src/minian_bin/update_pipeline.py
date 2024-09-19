@@ -175,13 +175,18 @@ def pipeline_bin(
             for uid, udf in metric_last.groupby("cell"):
                 best_iter = udf.set_index("iter")["err"].idxmin()
                 S_best[uid, :] = S_ls[best_iter][uid, :]
-            if np.abs(S - S_best).sum() == 0:
+            if np.abs(S - S_best).sum() < 1:
                 break
             # trapped
             err_all = metric_last.pivot(columns="iter", index="cell", values="err")
             diff_all = np.abs(err_cur.values.reshape((-1, 1)) - err_all.values)
             if (diff_all.min(axis=1) < err_tol).all():
-                warnings.warn("Solution trapped in local optimal")
+                warnings.warn("Solution trapped in local optimal err")
+                break
+            # trapped by s
+            diff_all = np.array([np.abs(S - prev_s).sum() for prev_s in S_ls[:-1]])
+            if (diff_all < 1).sum() > 1:
+                warnings.warn("Solution trapped in local optimal s")
                 break
     else:
         warnings.warn("Max interation reached")
