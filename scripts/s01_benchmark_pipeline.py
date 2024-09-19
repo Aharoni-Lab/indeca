@@ -14,8 +14,11 @@ import os
 
 import cvxpy as cp
 import numpy as np
+import pandas as pd
+import plotly.express as px
 import xarray as xr
 
+from minian_bin.benchmark_utils import compute_ROC
 from minian_bin.update_pipeline import pipeline_bin
 
 IN_PATH = {
@@ -123,6 +126,36 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     updt_ds.to_netcdf(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
     iter_df.to_feather(os.path.join(INT_PATH, "iter_df-{}.feat".format(up_type)))
 
+# %% plot iteration performance
+for up_type, in_path in IN_PATH.items():
+    try:
+        updt_ds = xr.open_dataset(
+            os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type))
+        )
+        iter_df = pd.read_feather(
+            os.path.join(INT_PATH, "iter_df-{}.feat".format(up_type))
+        )
+    except FileNotFoundError:
+        continue
+    sim_ds = xr.open_dataset(in_path)
+    S_iter, S_true = updt_ds["S_iter"], sim_ds["S"]
+    met_df = []
+    for i in np.array(S_iter.coords["iter"]):
+        met = compute_ROC(S_iter.sel(iter=i), S_true, metadata={"iter": i})
+        met_df.append(met)
+    met_df = pd.concat(met_df, ignore_index=True)
+    fig_f1 = px.line(met_df, x="iter", y="f1", color="unit_id")
+    fig_f1.write_html(os.path.join(FIG_PATH, "f1-{}.html".format(up_type)))
+    iter_df["tau_d_diff"] = iter_df["tau_d"] - 6
+    iter_df["tau_r_diff"] = iter_df["tau_r"] - 1
+    itdf = iter_df.melt(
+        id_vars=["iter", "cell"],
+        var_name="coef",
+        value_vars=["tau_d_diff", "tau_r_diff"],
+        value_name="diff",
+    )
+    fig_coef = px.line(itdf, x="iter", y="diff", color="cell", line_dash="coef")
+    fig_coef.write_html(os.path.join(FIG_PATH, "coef-{}.html".format(up_type)))
 
 # %% 3.3 Estimate spiking from kernel and upsampled C
 # Function to solve for spike estimates given calcium trace and kernel
