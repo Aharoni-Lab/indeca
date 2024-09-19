@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm, trange
 
-from .simulation import AR2tau, tau2AR
+from .simulation import AR2tau, exp_pulse, tau2AR
 from .update_AR import construct_G, solve_fit_h
 from .update_bin import construct_R, estimate_coefs, solve_deconv_bin, sum_downsample
 
@@ -13,6 +13,7 @@ def pipeline_bin(
     Y,
     up_factor=1,
     p=2,
+    ar_mode=True,
     tau_init=None,
     return_iter=False,
     max_iters=50,
@@ -34,6 +35,7 @@ def pipeline_bin(
     if tau_init is not None:
         g = np.array(tau2AR(tau_init[0], tau_init[1]))
         tau = tau_init
+        ps = np.array([1, -1])
     else:
         if up_factor > 1:
             raise NotImplementedError(
@@ -41,6 +43,7 @@ def pipeline_bin(
             )
         g = np.empty((ncell, p))
         tau = np.empty((ncell, p))
+        ps = np.empty((ncell, p))
         for icell, y in enumerate(Y):
             cur_g, _ = estimate_coefs(
                 y,
@@ -51,6 +54,7 @@ def pipeline_bin(
             )
             g[icell, :] = cur_g
             tau[icell, :] = AR2tau(*cur_g)
+            ps[icell, :] = np.array([1, -1])
     # 2. iteration loop
     C_ls = []
     S_ls = []
@@ -62,6 +66,8 @@ def pipeline_bin(
             "g1": g.T[1],
             "tau_d": tau.T[0],
             "tau_r": tau.T[1],
+            "p0": ps.T[0],
+            "p1": ps.T[1],
             "err": np.nan,
             "scale": np.nan,
         }
@@ -77,19 +83,38 @@ def pipeline_bin(
         for icell, y in tqdm(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
-            if g.ndim == 2:
-                G = construct_G(g[icell], T * up_factor)
-            elif g.ndim == 1:
-                G = construct_G(g, T * up_factor)
+            cur_G, cur_kn = None, None
+            if ar_mode:
+                if g.ndim == 2:
+                    cur_G = construct_G(g[icell], T * up_factor)
+                elif g.ndim == 1:
+                    cur_G = construct_G(g, T * up_factor)
+                else:
+                    raise ValueError(
+                        "g has wrong number of dimensions: {}".format(g.shape)
+                    )
             else:
-                raise ValueError("g has wrong number of dimensions: {}".format(g.shape))
+                if tau.ndim == 2:
+                    cur_kn = exp_pulse(
+                        tau[icell, 0],
+                        tau[icell, 1],
+                        ar_kn_len,
+                        p_d=ps[icell, 0],
+                        p_r=ps[icell, 1],
+                    )[0]
+                elif tau.ndim == 1:
+                    cur_kn = exp_pulse(tau[0], tau[1], ar_kn_len, p_d=ps[0], p_r=ps[1])[
+                        0
+                    ]
             c_bin, s_bin, _, scl, _, _ = solve_deconv_bin(
                 y,
-                G,
-                R,
+                G=cur_G,
+                kn=cur_kn,
+                R=R,
                 nthres=deconv_nthres,
                 tol=deconv_scal_tol,
                 max_iters=deconv_max_iters,
+                ar_mode=ar_mode,
             )
             C[icell, :] = c_bin.squeeze()
             S[icell, :] = s_bin.squeeze()
@@ -103,20 +128,22 @@ def pipeline_bin(
         else:
             S_ar = S * scale.reshape((-1, 1))
         if ar_use_all:
-            lams, ps, _, _, _, _ = solve_fit_h(
-                Y, S_ar, N=p, s_len=ar_kn_len, norm=ar_norm
+            lams, ps, h, h_fit, _, _ = solve_fit_h(
+                Y, S_ar, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
             )
             tau = -1 / lams
             g = np.array(tau2AR(*tau))
         else:
             g = np.empty((ncell, p))
             tau = np.empty((ncell, p))
+            ps = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
-                lams, ps, _, _, _, _ = solve_fit_h(
-                    y, s, N=p, s_len=ar_kn_len, norm=ar_norm
+                lams, cur_ps, _, _, _, _ = solve_fit_h(
+                    y, s, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
                 )
                 tau[icell, :] = -1 / lams
                 g[icell, :] = tau2AR(*(-1 / lams))
+                ps[icell, :] = cur_ps
         # 2.3 save iteration results
         cur_metric = pd.DataFrame(
             {
@@ -126,6 +153,8 @@ def pipeline_bin(
                 "g1": g.T[1],
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
+                "p0": ps[0],
+                "p1": ps[1],
                 "err": err,
                 "scale": scale,
             }
@@ -157,7 +186,7 @@ def pipeline_bin(
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
     if return_iter:
-        return opt_C, opt_S, metric_df, C_ls, S_ls
+        return opt_C, opt_S, metric_df, C_ls, S_ls, h, h_fit
     else:
         return opt_C, opt_S, metric_df
 

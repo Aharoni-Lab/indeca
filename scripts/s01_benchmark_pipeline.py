@@ -19,8 +19,8 @@ import xarray as xr
 from minian_bin.update_pipeline import pipeline_bin
 
 IN_PATH = {
-    "org": "./intermediate/simulated/simulated-ar-samp.nc",
-    "upsamp": "./intermediate/simulated/simulated-ar-upsamp.nc",
+    "org": "./intermediate/simulated/simulated-exp-samp.nc",
+    "upsamp": "./intermediate/simulated/simulated-exp-upsamp.nc",
 }
 INT_PATH = "./intermediate/benchmark_pipeline"
 FIG_PATH = "./figs/benchmark_pipeline"
@@ -62,13 +62,14 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
     updt_ds = [Y_solve.rename("Y_solve"), sig_lev.sel(unit_id=subset)]
     iter_df = []
     # update
-    C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter = pipeline_bin(
+    C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h, h_fit = pipeline_bin(
         np.array(Y_solve),
         up_factor,
-        max_iters=10,
+        max_iters=max_iters,
         tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
         return_iter=True,
         ar_use_all=True,
+        ar_mode=False,
     )
     res = {"C": C_bin, "S": S_bin, "C_iter": C_bin_iter, "S_iter": S_bin_iter}
     # save variables

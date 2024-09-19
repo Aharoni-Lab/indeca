@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
+from scipy.linalg import convolution_matrix
 
 from .cnmf import filt_fft, get_ar_coef, noise_fft
 from .simulation import tau2AR
@@ -48,7 +49,9 @@ def estimate_coefs(
 
 def solve_deconv(
     y: np.ndarray,
-    G: np.ndarray,
+    G: np.ndarray = None,
+    kn: np.ndarray = None,
+    ar_mode: bool = True,
     use_base: bool = False,
     norm: str = "l1",
     l1_penal: float = 0,
@@ -57,6 +60,10 @@ def solve_deconv(
     return_obj: bool = False,
     amp_constraint=False,
 ):
+    if ar_mode:
+        assert G is not None, "deconv matrix `G` must be provided in ar mode"
+    else:
+        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
     y = y.reshape((-1, 1))
     if R is None:
         T = y.shape[0]
@@ -70,8 +77,12 @@ def solve_deconv(
     else:
         b = cp.Constant(0)
     p = {"l1": 1, "l2": 2}[norm]
+    cons = [c >= 0, s >= 0, b >= 0]
     obj = cp.Minimize(cp.norm(y - scale * R @ c - b, p=p) + l1_penal * cp.norm(s))
-    cons = [s == G @ c, c >= 0, s >= 0, b >= 0]
+    if ar_mode:
+        cons.append(s == G @ c)
+    else:
+        cons.append(c[:, 0] == cp.convolve(kn, s[:, 0])[:T])
     if amp_constraint:
         cons.append(s <= 1)
     prob = cp.Problem(obj, cons)
@@ -84,26 +95,40 @@ def solve_deconv(
 
 def solve_deconv_bin(
     y: np.ndarray,
-    G: np.ndarray,
+    G: np.ndarray = None,
+    kn: np.ndarray = None,
+    ar_mode: bool = True,
     R: np.ndarray = None,
     nthres=1000,
     tol: float = 1e-6,
     max_iters: int = 50,
 ):
     # parameters
-    Gi = sps.linalg.inv(G)
-    RGi = (R @ Gi).todense()
-    _, s_init, _ = solve_deconv(y, G, R=R)
+    if ar_mode:
+        assert G is not None, "deconv matrix `G` must be provided in ar mode"
+        K = sps.linalg.inv(G)
+    else:
+        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
+        K = sps.csc_matrix(convolution_matrix(kn, R.shape[1])[: R.shape[1], :])
+    RK = (R @ K).todense()
+    _, s_init, _ = solve_deconv(y, G=G, kn=kn, R=R, ar_mode=ar_mode)
     scale = np.ptp(s_init)
     # interations
     metric_df = None
     niter = 0
     while niter < max_iters:
         _, s_bin, b_bin, lb = solve_deconv(
-            y, G, scale=scale, R=R, return_obj=True, amp_constraint=True
+            y,
+            G=G,
+            kn=kn,
+            scale=scale,
+            R=R,
+            return_obj=True,
+            amp_constraint=True,
+            ar_mode=ar_mode,
         )
         th_svals = max_thres(s_bin, nthres)
-        th_cvals = [RGi @ ss for ss in th_svals]
+        th_cvals = [RK @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
         th_objs = [
             np.linalg.norm(y - scl * np.array(cc).squeeze() - b_bin)
@@ -146,7 +171,7 @@ def solve_deconv_bin(
     else:
         metric_df["converged"] = False
         warnings.warn("max scale iteration reached")
-    return Gi @ opt_s, opt_s, b_bin, scale, s_bin, metric_df
+    return K @ opt_s, opt_s, b_bin, scale, s_bin, metric_df
 
 
 def max_thres(

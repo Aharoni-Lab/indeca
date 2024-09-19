@@ -96,7 +96,7 @@ def fit_sumexp_split(y):
     )
 
 
-def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
+def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = True):
     T = len(y)
     if x is None:
         x = np.arange(T)
@@ -120,15 +120,18 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
         + idx_max_interp
     ) / interp_factor
     if fit_amp:
+        if ar_mode:
+            fit_func = lambda x, p, d, r: p * np.exp(-x / d) - (p - 1) * np.exp(-x / r)
+        else:
+            fit_func = lambda x, p, d, r: p * np.exp(-x / d) - p * np.exp(-x / r)
         res = curve_fit(
-            lambda x, p, d, r: p * np.exp(-x / d) - (p - 1) * np.exp(-x / r),
-            x,
-            y,
-            p0=(2, tau_d_init, tau_r_init),
-            bounds=(0, np.inf),
+            fit_func, x, y, p0=(2, tau_d_init, tau_r_init), bounds=(0, np.inf)
         )
         p, tau_d, tau_r = res[0]
-        p = np.array([p, 1 - p])
+        if ar_mode:
+            p = np.array([p, 1 - p])
+        else:
+            p = np.array([p, -p])
     else:
         res = curve_fit(
             lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
@@ -205,6 +208,7 @@ def solve_fit_h(
     fit_method="numerical",
     max_iters: int = 30,
     verbose=False,
+    ar_mode: bool = True,
 ):
     metric_df = None
     h_df = None
@@ -215,7 +219,7 @@ def solve_fit_h(
         if fit_method == "solve":
             lams, ps, h_fit = fit_sumexp(h, N)
         elif fit_method == "numerical":
-            lams, ps, h_fit = fit_sumexp_gd(h)
+            lams, ps, h_fit = fit_sumexp_gd(h, ar_mode=ar_mode)
         else:
             raise NotImplementedError(
                 "`fit_method` has to be one of ['solve', 'numerical']"
