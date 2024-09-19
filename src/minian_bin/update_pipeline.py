@@ -167,8 +167,15 @@ def pipeline_bin(
         if len(metric_last) > 0:
             err_cur = cur_metric.set_index("cell")["err"]
             err_best = metric_last.groupby("cell")["err"].min()
-            # converged
+            # converged by err
             if (np.abs(err_cur - err_best) < err_tol).all():
+                break
+            # converged by s
+            S_best = np.empty((ncell, T * up_factor))
+            for uid, udf in metric_last.groupby("cell"):
+                best_iter = udf.set_index("iter")["err"].idxmin()
+                S_best[uid, :] = S_ls[best_iter][uid, :]
+            if np.abs(S - S_best).sum() == 0:
                 break
             # trapped
             err_all = metric_last.pivot(columns="iter", index="cell", values="err")
