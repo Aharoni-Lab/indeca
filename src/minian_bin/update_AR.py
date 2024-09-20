@@ -127,7 +127,12 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = Tr
             fit_func = lambda x, p, d, r: p * np.exp(-x / d) - p * np.exp(-x / r)
             p0 = 1
         res = curve_fit(
-            fit_func, x, y, p0=(p0, tau_d_init, tau_r_init), bounds=(0, np.inf)
+            fit_func,
+            x,
+            y,
+            p0=(p0, tau_d_init, tau_r_init),
+            bounds=(0, np.inf),
+            max_nfev=1e6,
         )
         p, tau_d, tau_r = res[0]
         if ar_mode:
