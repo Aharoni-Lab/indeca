@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm, trange
 
-from .simulation import AR2tau, exp_pulse, tau2AR
-from .update_AR import construct_G, solve_fit_h
+from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
+from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h
 from .update_bin import (
     construct_R,
     estimate_coefs,
@@ -59,8 +59,16 @@ def pipeline_bin(
                 add_lag=est_add_lag,
             )
             g[icell, :] = cur_g
-            tau[icell, :] = AR2tau(*cur_g)
-            ps[icell, :] = np.array([1, -1])
+            cur_tau = AR2tau(*cur_g)
+            if not ar_mode and (np.imag(cur_tau) != 0).any():
+                tr = ar_pulse(*cur_g, nsamp=ar_kn_len)[0]
+                tr[0] = 0
+                lams, cur_p, tr_fit = fit_sumexp_gd(tr, ar_mode=ar_mode)
+                tau[icell, :] = -1 / lams
+                ps[icell, :] = cur_p
+            else:
+                tau[icell, :] = cur_tau
+                ps[icell, :] = np.array([1, -1])
     # 2. iteration loop
     C_ls = []
     S_ls = []
