@@ -72,6 +72,8 @@ def pipeline_bin(
     # 2. iteration loop
     C_ls = []
     S_ls = []
+    h_ls = []
+    h_fit_ls = []
     metric_df = pd.DataFrame(
         {
             "iter": -1,
@@ -165,6 +167,8 @@ def pipeline_bin(
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
         C_ls.append(C)
         S_ls.append(S)
+        h_ls.append(h)
+        h_fit_ls.append(h_fit)
         # 2.4 check convergence
         metric_last = metric_df[metric_df["iter"] < i_iter].dropna()
         if len(metric_last) > 0:
@@ -201,7 +205,7 @@ def pipeline_bin(
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
     if return_iter:
-        return opt_C, opt_S, metric_df, C_ls, S_ls, h, h_fit
+        return opt_C, opt_S, metric_df, C_ls, S_ls, h_ls, h_fit_ls
     else:
         return opt_C, opt_S, metric_df
 
