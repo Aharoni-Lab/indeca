@@ -175,11 +175,20 @@ def solve_deconv_bin(
 
 
 def max_thres(
-    a: xr.DataArray, nthres: int, th_min=0.1, th_max=0.9, ds=None, return_thres=False
+    a: xr.DataArray,
+    nthres: int,
+    th_min=0.1,
+    th_max=0.9,
+    ds=None,
+    return_thres=False,
+    th_amplitude=False,
 ):
     amax = a.max()
     thres = np.linspace(th_min, th_max, nthres)
-    S_ls = [(a > amax * th) for th in thres]
+    if th_amplitude:
+        S_ls = [np.floor_divide(a, amax * th) for th in thres]
+    else:
+        S_ls = [(a > amax * th) for th in thres]
     if ds is not None:
         S_ls = [sum_downsample(s, ds) for s in S_ls]
     if return_thres:
