@@ -200,10 +200,12 @@ fig.tight_layout()
 
 # %%
 import plotly.graph_objects as go
+import scipy.sparse as sps
 from plotly.subplots import make_subplots
+from scipy.linalg import convolution_matrix
 
 from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_bin import solve_deconv
+from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv
 
 uid = 0
 iiter = 0
@@ -211,26 +213,72 @@ ar_coef = tau2AR(6, 1)
 sig = iter_df.set_index(["cell", "iter"]).loc[uid, iiter]["scale"]
 sig_gt = sig_lev.sel(unit_id=subset[uid]).item()
 y = Y_solve.isel(unit_id=uid)
-# s = updt_ds["S_iter"].isel(iter=iiter, unit_id=uid)
-# c = updt_ds["C_iter"].isel(iter=iiter, unit_id=uid) * sig
+s = updt_ds["S_iter"].isel(iter=iiter, unit_id=uid)
+c = updt_ds["C_iter"].isel(iter=iiter, unit_id=uid) * sig
 c_gt = sim_ds["C"].sel(unit_id=subset[uid]) * sig_gt
 s_gt = sim_ds["S"].sel(unit_id=subset[uid])
 # test mixin
 kn = exp_pulse(6, 1, 60, p_d=1, p_r=-1)[0]
-c, s, _ = solve_deconv(np.array(y), kn=kn, ar_mode=False, scale=sig_gt)
-c_mixin, s_mixin, _ = solve_deconv(
-    np.array(y), kn=kn, ar_mode=False, scale=sig_gt, mixin=True, solver="ECOS_BB"
+K = sps.csc_matrix(convolution_matrix(kn, len(y))[: len(y), :])
+nthres = 1000
+c_val, s_val, _ = solve_deconv(
+    np.array(y), kn=kn, ar_mode=False, scale=sig_gt, amp_constraint=True
 )
+c_val, s_val = c_val.squeeze(), s_val.squeeze()
+csizes = np.array([1, 3, 5, 7, 9])
+res = []
+svals = np.empty((len(csizes), len(s_val)))
+for ics, csize in enumerate(csizes):
+    hw_csize = int(csize / 2)
+    s_conv = np.convolve(s_val, np.ones(csize) / csize)[
+        hw_csize : len(s_val) + hw_csize
+    ]
+    th_svals, thres = max_thres(
+        np.abs(s_conv), nthres, th_min=1e-4, th_max=1 - 1e-4, return_thres=True
+    )
+    th_cvals = [K @ ss for ss in th_svals]
+    th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
+    th_objs = [
+        np.linalg.norm(y - scl * np.array(cc).squeeze())
+        for scl, cc in zip(th_scals, th_cvals)
+    ]
+    opt_idx = np.argmin(th_objs)
+    opt_s = th_svals[opt_idx].astype(float)
+    opt_c = th_cvals[opt_idx].astype(float)
+    opt_obj = th_objs[opt_idx]
+    opt_scal = th_scals[opt_idx]
+    svals[ics, :] = opt_s
+    res.append(
+        pd.DataFrame({"csize": csize, "thres": thres, "scal": th_scals, "err": th_objs})
+    )
+res = pd.concat(res, ignore_index=True)
+# c_mixin, s_mixin, _ = solve_deconv(
+#     np.array(y), kn=kn, ar_mode=False, scale=sig_gt, mixin=True, solver="ECOS_BB"
+# )
+# res_pvt = (
+#     res[["csize", "scal", "err"]]
+#     .drop_duplicates()
+#     .pivot(index="csize", columns="scal", values="err")
+# )
+# fig = px.imshow(res_pvt, x=res_pvt.columns, y=res_pvt.index)
+err_gt = np.linalg.norm(y - c_gt)
+fig = px.line(res, x="scal", y="err", facet_row="csize")
+fig.add_hline(y=err_gt, line_color="grey", line_dash="dash", line_width=2)
+fig.write_html("dbg-obj.html")
 fig = make_subplots(2, 1, shared_xaxes=False, shared_yaxes=False)
 fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
-fig.add_trace(go.Scatter(y=s.squeeze(), mode="lines", name="s"), row=1, col=1)
-fig.add_trace(go.Scatter(y=c.squeeze() * sig_gt, mode="lines", name="c"), row=1, col=1)
-fig.add_trace(
-    go.Scatter(y=s_mixin.squeeze(), mode="lines", name="s_mixin"), row=1, col=1
-)
-fig.add_trace(
-    go.Scatter(y=c_mixin.squeeze() * sig_gt, mode="lines", name="c_mixin"), row=1, col=1
-)
+fig.add_trace(go.Scatter(y=s, mode="lines", name="s"), row=1, col=1)
+fig.add_trace(go.Scatter(y=c, mode="lines", name="c"), row=1, col=1)
+fig.add_trace(go.Scatter(y=s_val, mode="lines", name="s_val"), row=1, col=1)
+fig.add_trace(go.Scatter(y=s_conv, mode="lines", name="s_conv"), row=1, col=1)
+fig.add_trace(go.Scatter(y=opt_s, mode="lines", name="opt_s"), row=1, col=1)
+fig.add_trace(go.Scatter(y=opt_c, mode="lines", name="opt_c"), row=1, col=1)
+# fig.add_trace(
+#     go.Scatter(y=s_mixin.squeeze(), mode="lines", name="s_mixin"), row=1, col=1
+# )
+# fig.add_trace(
+#     go.Scatter(y=c_mixin.squeeze() * sig_gt, mode="lines", name="c_mixin"), row=1, col=1
+# )
 fig.add_trace(go.Scatter(y=s_gt, mode="lines", name="s_gt"), row=1, col=1)
 fig.add_trace(go.Scatter(y=c_gt, mode="lines", name="c_gt"), row=1, col=1)
 fig.add_trace(go.Scatter(y=h_iter[iiter], mode="lines", name="h_free"), row=2, col=1)
