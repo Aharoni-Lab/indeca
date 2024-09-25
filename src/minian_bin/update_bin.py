@@ -55,6 +55,7 @@ def solve_deconv(
     use_base: bool = False,
     norm: str = "l1",
     l1_penal: float = 0,
+    diff_penal: float = 0,
     scale: float = 1,
     R: np.ndarray = None,
     return_obj: bool = False,
@@ -83,7 +84,11 @@ def solve_deconv(
         b = cp.Constant(0)
     p = {"l1": 1, "l2": 2}[norm]
     cons = [c >= 0, s >= 0, b >= 0]
-    obj = cp.Minimize(cp.norm(y - scale * R @ c - b, p=p) + l1_penal * cp.norm(s))
+    obj = cp.Minimize(
+        cp.norm(y - scale * R @ c - b, p=p)
+        + l1_penal * cp.norm(s, 1)
+        + diff_penal * cp.norm(cp.diff(s), 1)
+    )
     if ar_mode:
         cons.append(s == G @ c)
     else:

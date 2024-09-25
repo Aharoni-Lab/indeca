@@ -198,7 +198,7 @@ sns.scatterplot(
 axs[1].set_title("taus")
 fig.tight_layout()
 
-# %%
+# %% test conv before thresholding
 import plotly.graph_objects as go
 import scipy.sparse as sps
 from plotly.subplots import make_subplots
@@ -271,6 +271,106 @@ fig.add_trace(go.Scatter(y=s, mode="lines", name="s"), row=1, col=1)
 fig.add_trace(go.Scatter(y=c, mode="lines", name="c"), row=1, col=1)
 fig.add_trace(go.Scatter(y=s_val, mode="lines", name="s_val"), row=1, col=1)
 fig.add_trace(go.Scatter(y=s_conv, mode="lines", name="s_conv"), row=1, col=1)
+fig.add_trace(go.Scatter(y=opt_s, mode="lines", name="opt_s"), row=1, col=1)
+fig.add_trace(go.Scatter(y=opt_c, mode="lines", name="opt_c"), row=1, col=1)
+# fig.add_trace(
+#     go.Scatter(y=s_mixin.squeeze(), mode="lines", name="s_mixin"), row=1, col=1
+# )
+# fig.add_trace(
+#     go.Scatter(y=c_mixin.squeeze() * sig_gt, mode="lines", name="c_mixin"), row=1, col=1
+# )
+fig.add_trace(go.Scatter(y=s_gt, mode="lines", name="s_gt"), row=1, col=1)
+fig.add_trace(go.Scatter(y=c_gt, mode="lines", name="c_gt"), row=1, col=1)
+fig.add_trace(go.Scatter(y=h_iter[iiter], mode="lines", name="h_free"), row=2, col=1)
+fig.add_trace(go.Scatter(y=h_fit_iter[iiter], mode="lines", name="h_fit"), row=2, col=1)
+# fig.add_trace(
+#     go.Scatter(
+#         y=ar_pulse(ar_coef[0], ar_coef[1], len(h))[0], mode="lines", name="h_gt_ar"
+#     )
+# )
+fig.add_trace(
+    go.Scatter(y=exp_pulse(6, 1, len(h_iter[iiter]))[0], mode="lines", name="h_gt_exp"),
+    row=2,
+    col=1,
+)
+fig.write_html("./dbg-iter.html")
+
+# %% test diff penal
+import plotly.graph_objects as go
+import scipy.sparse as sps
+from plotly.subplots import make_subplots
+from scipy.linalg import convolution_matrix
+
+from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
+from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv
+
+uid = 0
+iiter = 0
+sig = iter_df.set_index(["cell", "iter"]).loc[uid, iiter]["scale"]
+sig_gt = sig_lev.sel(unit_id=subset[uid]).item()
+y = Y_solve.isel(unit_id=uid)
+s = updt_ds["S_iter"].isel(iter=iiter, unit_id=uid)
+c = updt_ds["C_iter"].isel(iter=iiter, unit_id=uid) * sig
+c_gt = sim_ds["C"].sel(unit_id=subset[uid]) * sig_gt
+s_gt = sim_ds["S"].sel(unit_id=subset[uid])
+# test mixin
+kn = exp_pulse(6, 1, 60, p_d=1, p_r=-1)[0]
+K = sps.csc_matrix(convolution_matrix(kn, len(y))[: len(y), :])
+nthres = 1000
+c_val, s_val, _ = solve_deconv(
+    np.array(y), kn=kn, ar_mode=False, scale=sig_gt, amp_constraint=True
+)
+c_val, s_val = c_val.squeeze(), s_val.squeeze()
+diff_penal = np.linspace(0, 1, 11)
+res = []
+svals = np.empty((len(diff_penal), len(s_val)))
+for i, df in enumerate(diff_penal):
+    c_penal, s_penal, _ = solve_deconv(
+        np.array(y),
+        kn=kn,
+        ar_mode=False,
+        scale=sig_gt,
+        amp_constraint=True,
+        diff_penal=df,
+    )
+    c_penal, s_penal = c_penal.squeeze(), s_penal.squeeze()
+    th_svals, thres = max_thres(
+        np.abs(s_penal), nthres, th_min=1e-4, th_max=1 - 1e-4, return_thres=True
+    )
+    th_cvals = [K @ ss for ss in th_svals]
+    th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
+    th_objs = [
+        np.linalg.norm(y - scl * np.array(cc).squeeze())
+        for scl, cc in zip(th_scals, th_cvals)
+    ]
+    opt_idx = np.argmin(th_objs)
+    opt_s = th_svals[opt_idx].astype(float).squeeze()
+    opt_c = th_cvals[opt_idx].astype(float).squeeze()
+    opt_obj = th_objs[opt_idx]
+    opt_scal = th_scals[opt_idx]
+    svals[ics, :] = opt_s
+    res.append(
+        pd.DataFrame(
+            {"diff_penal": df, "thres": thres, "scal": th_scals, "err": th_objs}
+        )
+    )
+res = pd.concat(res, ignore_index=True)
+# res_pvt = (
+#     res[["csize", "scal", "err"]]
+#     .drop_duplicates()
+#     .pivot(index="csize", columns="scal", values="err")
+# )
+# fig = px.imshow(res_pvt, x=res_pvt.columns, y=res_pvt.index)
+err_gt = np.linalg.norm(y - c_gt)
+fig = px.line(res, x="scal", y="err", facet_row="diff_penal")
+fig.add_hline(y=err_gt, line_color="grey", line_dash="dash", line_width=2)
+fig.write_html("dbg-obj.html")
+fig = make_subplots(2, 1, shared_xaxes=False, shared_yaxes=False)
+fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
+fig.add_trace(go.Scatter(y=s, mode="lines", name="s"), row=1, col=1)
+fig.add_trace(go.Scatter(y=c, mode="lines", name="c"), row=1, col=1)
+fig.add_trace(go.Scatter(y=s_val, mode="lines", name="s_val"), row=1, col=1)
+fig.add_trace(go.Scatter(y=s_penal, mode="lines", name="s_penal"), row=1, col=1)
 fig.add_trace(go.Scatter(y=opt_s, mode="lines", name="opt_s"), row=1, col=1)
 fig.add_trace(go.Scatter(y=opt_c, mode="lines", name="opt_c"), row=1, col=1)
 # fig.add_trace(
