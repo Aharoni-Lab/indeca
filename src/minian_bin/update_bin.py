@@ -127,7 +127,7 @@ def solve_deconv_bin(
             amp_constraint=True,
             ar_mode=ar_mode,
         )
-        th_svals = max_thres(s_bin, nthres)
+        th_svals = max_thres(np.abs(s_bin), nthres, th_min=0, th_max=1)
         th_cvals = [RK @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
         th_objs = [
@@ -137,6 +137,7 @@ def solve_deconv_bin(
         opt_idx = np.argmin(th_objs)
         opt_s = th_svals[opt_idx]
         opt_obj = th_objs[opt_idx]
+        opt_scal = th_scals[opt_idx]
         try:
             opt_obj_idx = metric_df["obj"].idxmin()
             opt_obj_last = metric_df.loc[opt_obj_idx, "obj"].item()
@@ -144,12 +145,12 @@ def solve_deconv_bin(
             scale_dup = metric_df["scale"].duplicated().any()
         except TypeError:
             opt_obj_last = np.inf
-            opt_scal_last = th_scals[opt_idx]
+            opt_scal_last = opt_scal
             scale_dup = False
         if scale_dup:
             scale_new = opt_scal_last
         else:
-            scale_new = (th_scals[opt_idx] + opt_scal_last) / 2
+            scale_new = (opt_scal + opt_scal_last) / 2
         metric_df = pd.concat(
             [
                 metric_df,
