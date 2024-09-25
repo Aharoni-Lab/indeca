@@ -59,6 +59,8 @@ def solve_deconv(
     R: np.ndarray = None,
     return_obj: bool = False,
     amp_constraint=False,
+    mixin=False,
+    solver=None,
 ):
     if ar_mode:
         assert G is not None, "deconv matrix `G` must be provided in ar mode"
@@ -71,7 +73,10 @@ def solve_deconv(
     else:
         T = R.shape[1]
     c = cp.Variable((T, 1))
-    s = cp.Variable((T, 1))
+    if mixin:
+        s = cp.Variable((T, 1), boolean=True)
+    else:
+        s = cp.Variable((T, 1))
     if use_base:
         b = cp.Variable()
     else:
@@ -86,7 +91,7 @@ def solve_deconv(
     if amp_constraint:
         cons.append(s <= 1)
     prob = cp.Problem(obj, cons)
-    prob.solve()
+    prob.solve(solver=solver)
     if return_obj:
         return c.value, s.value, b.value, prob.value
     else:
@@ -200,3 +205,65 @@ def max_thres(
 
 def sum_downsample(a, factor):
     return np.convolve(a, np.ones(factor), mode="full")[factor - 1 :: factor]
+
+
+def solve_deconv_mixin(
+    y: np.ndarray,
+    G: np.ndarray = None,
+    kn: np.ndarray = None,
+    ar_mode: bool = True,
+    R: np.ndarray = None,
+    nthres=1000,
+):
+    # parameters
+    if ar_mode:
+        assert G is not None, "deconv matrix `G` must be provided in ar mode"
+        K = sps.linalg.inv(G)
+    else:
+        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
+        K = sps.csc_matrix(convolution_matrix(kn, R.shape[1])[: R.shape[1], :])
+    RK = (R @ K).todense()
+    _, s_init, _, lb = solve_deconv(
+        y, G=G, kn=kn, R=R, ar_mode=ar_mode, return_obj=True
+    )
+    th_svals = max_thres(np.abs(s_init), nthres, th_min=0, th_max=1)
+    th_cvals = [RK @ ss for ss in th_svals]
+    th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
+    svals = np.empty((nthres, R.shape[1]))
+    cvals = np.empty((nthres, R.shape[1]))
+    bvals = np.empty(nthres)
+    objvals = np.empty(nthres)
+    for i, scl in enumerate(th_scals):
+        cur_c, cur_s, cur_b, cur_obj = solve_deconv(
+            y,
+            G=G,
+            kn=kn,
+            R=R,
+            ar_mode=ar_mode,
+            scale=scl,
+            return_obj=True,
+            mixin=True,
+            solver="ECOS_BB",
+        )
+        cvals[i, :] = cur_c.squeeze()
+        svals[i, :] = cur_s.squeeze()
+        bvals[i] = cur_b
+        objvals[i] = cur_obj
+    opt_idx = np.argmin(objvals)
+    opt_obj = objvals[opt_idx]
+    opt_c = cvals[opt_idx, :]
+    opt_s = svals[opt_idx, :]
+    opt_scal = th_scals[opt_idx]
+    opt_b = bvals[opt_idx]
+    metric_df = pd.DataFrame(
+        [
+            {
+                "scale": opt_scal,
+                "obj": opt_obj,
+                "lb": lb,
+                "iter": 0,
+                "converged": True,
+            }
+        ]
+    )
+    return opt_c, opt_s, opt_b, opt_scal, s_init, metric_df
