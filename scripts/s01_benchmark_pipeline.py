@@ -18,20 +18,20 @@ import pandas as pd
 import plotly.express as px
 import xarray as xr
 
-from minian_bin.benchmark_utils import compute_ROC
-from minian_bin.update_pipeline import pipeline_bin
+from minian_bin.benchmark_utils import compute_ROC, norm_per_cell
+from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-exp-samp.nc",
     "upsamp": "./intermediate/simulated/simulated-exp-upsamp.nc",
 }
-INT_PATH = "./intermediate/benchmark_pipeline"
-FIG_PATH = "./figs/benchmark_pipeline"
+INT_PATH = "./intermediate/benchmark_pipeline_5best_init"
+FIG_PATH = "./figs/benchmark_pipeline_5best_init"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
 PARAM_EST_AR = False
-PARAM_SIG_LEV = (1, 10)
+PARAM_SIG_LEV = (1, 5)
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
@@ -39,8 +39,9 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% 1. Generate or import dataset at normal FPS for calcium imaging
 sps_penal = 1
-max_iters = 50
-for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
+max_iters = 1
+# for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
+for up_type, up_factor in {"org": 1}.items():
     # get data
     sim_ds = xr.open_dataset(IN_PATH[up_type])
     C_gt = sim_ds["C"].dropna("frame", how="all")
@@ -60,12 +61,20 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
         name="sig_lev",
     )
     noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
-    # Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset)
-    Y_solve = C_gt.sel(unit_id=subset).transpose("unit_id", "frame")
+    Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset).transpose("unit_id", "frame")
     updt_ds = [Y_solve.rename("Y_solve"), sig_lev.sel(unit_id=subset)]
     iter_df = []
     # update
-    C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h, h_fit = pipeline_bin(
+    (C_cnmf, S_cnmf) = pipeline_cnmf(
+        np.array(Y_solve),
+        up_factor,
+        ar_mode=False,
+        sps_penal=1,
+        est_noise_freq=0.06,
+        est_use_smooth=True,
+        est_add_lag=50,
+    )
+    C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h_iter, h_fit_iter = pipeline_bin(
         np.array(Y_solve),
         up_factor,
         max_iters=max_iters,
@@ -73,8 +82,18 @@ for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
         return_iter=True,
         ar_use_all=True,
         ar_mode=False,
+        est_noise_freq=0.06,
+        est_use_smooth=True,
+        est_add_lag=50,
     )
-    res = {"C": C_bin, "S": S_bin, "C_iter": C_bin_iter, "S_iter": S_bin_iter}
+    res = {
+        "C": C_bin,
+        "S": S_bin,
+        "C_iter": C_bin_iter,
+        "S_iter": S_bin_iter,
+        "C_cnmf": C_cnmf,
+        "S_cnmf": S_cnmf,
+    }
     # save variables
     for vname, dat in res.items():
         dat = np.stack(dat)
@@ -156,6 +175,78 @@ for up_type, in_path in IN_PATH.items():
     )
     fig_coef = px.line(itdf, x="iter", y="diff", color="cell", line_dash="coef")
     fig_coef.write_html(os.path.join(FIG_PATH, "coef-{}.html".format(up_type)))
+
+# %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+iter_df = pd.read_feather(os.path.join(INT_PATH, "iter_df-org.feat"))
+tau_path = iter_df.groupby("iter").median().reset_index()
+fig, axs = plt.subplots(2, figsize=(4, 6))
+sns.lineplot(iter_df, x="iter", y="err", ax=axs[0])
+axs[0].axhline(y=np.linalg.norm(noise, axis=1).mean(), c="black", lw=2, ls=":")
+axs[0].set_title("error")
+axs[1].plot(tau_path["tau_d"], tau_path["tau_r"], c="grey")
+sns.scatterplot(
+    tau_path,
+    x="tau_d",
+    y="tau_r",
+    hue="iter",
+    ax=axs[1],
+    zorder=2.5,
+)
+axs[1].set_title("taus")
+fig.tight_layout()
+
+# %%
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
+from minian_bin.update_bin import solve_deconv
+
+uid = 0
+iiter = 0
+ar_coef = tau2AR(6, 1)
+sig = iter_df.set_index(["cell", "iter"]).loc[uid, iiter]["scale"]
+sig_gt = sig_lev.sel(unit_id=subset[uid]).item()
+y = Y_solve.isel(unit_id=uid)
+# s = updt_ds["S_iter"].isel(iter=iiter, unit_id=uid)
+# c = updt_ds["C_iter"].isel(iter=iiter, unit_id=uid) * sig
+c_gt = sim_ds["C"].sel(unit_id=subset[uid]) * sig_gt
+s_gt = sim_ds["S"].sel(unit_id=subset[uid])
+# test mixin
+kn = exp_pulse(6, 1, 60, p_d=1, p_r=-1)[0]
+c, s, _ = solve_deconv(np.array(y), kn=kn, ar_mode=False, scale=sig_gt)
+c_mixin, s_mixin, _ = solve_deconv(
+    np.array(y), kn=kn, ar_mode=False, scale=sig_gt, mixin=True, solver="ECOS_BB"
+)
+fig = make_subplots(2, 1, shared_xaxes=False, shared_yaxes=False)
+fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
+fig.add_trace(go.Scatter(y=s.squeeze(), mode="lines", name="s"), row=1, col=1)
+fig.add_trace(go.Scatter(y=c.squeeze() * sig_gt, mode="lines", name="c"), row=1, col=1)
+fig.add_trace(
+    go.Scatter(y=s_mixin.squeeze(), mode="lines", name="s_mixin"), row=1, col=1
+)
+fig.add_trace(
+    go.Scatter(y=c_mixin.squeeze() * sig_gt, mode="lines", name="c_mixin"), row=1, col=1
+)
+fig.add_trace(go.Scatter(y=s_gt, mode="lines", name="s_gt"), row=1, col=1)
+fig.add_trace(go.Scatter(y=c_gt, mode="lines", name="c_gt"), row=1, col=1)
+fig.add_trace(go.Scatter(y=h_iter[iiter], mode="lines", name="h_free"), row=2, col=1)
+fig.add_trace(go.Scatter(y=h_fit_iter[iiter], mode="lines", name="h_fit"), row=2, col=1)
+# fig.add_trace(
+#     go.Scatter(
+#         y=ar_pulse(ar_coef[0], ar_coef[1], len(h))[0], mode="lines", name="h_gt_ar"
+#     )
+# )
+fig.add_trace(
+    go.Scatter(y=exp_pulse(6, 1, len(h_iter[iiter]))[0], mode="lines", name="h_gt_exp"),
+    row=2,
+    col=1,
+)
+fig.write_html("./dbg-iter.html")
+
 
 # %% 3.3 Estimate spiking from kernel and upsampled C
 # Function to solve for spike estimates given calcium trace and kernel
