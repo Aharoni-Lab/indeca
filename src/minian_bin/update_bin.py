@@ -103,6 +103,106 @@ def solve_deconv(
         return c.value, s.value, b.value
 
 
+def solve_deconv_l0(
+    y: np.ndarray,
+    G: np.ndarray = None,
+    kn: np.ndarray = None,
+    ar_mode: bool = True,
+    use_base: bool = False,
+    norm: str = "l1",
+    l0_penal: float = 0,
+    scale: float = 1,
+    R: np.ndarray = None,
+    return_obj: bool = False,
+    amp_constraint=False,
+    max_iters=50,
+    delta=1e-6,
+    rtol=1e-4,
+    verbose=False,
+):
+    if ar_mode:
+        assert G is not None, "deconv matrix `G` must be provided in ar mode"
+    else:
+        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
+    y = y.reshape((-1, 1))
+    if R is None:
+        T = y.shape[0]
+        R = np.eye(T)
+    else:
+        T = R.shape[1]
+    c = cp.Variable((T, 1), nonneg=True)
+    s = cp.Variable((T, 1), nonneg=True)
+    if use_base:
+        b = cp.Variable(nonneg=True)
+    else:
+        b = cp.Constant(0)
+    p = {"l1": 1, "l2": 2}[norm]
+    w = cp.Parameter(shape=T, nonneg=True)
+    w.value = np.ones(T)
+    obj = cp.Minimize(cp.norm(y - scale * R @ c - b, p=p) + l0_penal * w.T @ cp.abs(s))
+    if ar_mode:
+        cons = [s == G @ c]
+    else:
+        cons = [c[:, 0] == cp.convolve(kn, s[:, 0])[:T]]
+    if amp_constraint:
+        cons.append(s <= 1)
+    prob = cp.Problem(obj, cons)
+    i = 0
+    metric_df = None
+    while i < max_iters:
+        try:
+            obj_best = metric_df["obj"][1:].min()
+        except TypeError:
+            obj_best = np.inf
+        try:
+            prob.solve()
+        except cp.SolverError:
+            prob.solve(
+                solver=cp.OSQP,
+                max_iter=int(1e6),
+                eps_abs=1e-4,
+                eps_rel=1e-4,
+                verbose=True,
+            )
+        s_new = np.where(s.value > delta, s.value, 0)
+        if verbose:
+            print(
+                "l0_penal: {:.3f}, iter: {}, nnz: {}".format(
+                    l0_penal, i, (s_new > 0).sum()
+                )
+            )
+        obj_gap = prob.value - obj_best
+        metric_df = pd.concat(
+            [
+                metric_df,
+                pd.DataFrame(
+                    [
+                        {
+                            "obj": prob.value,
+                            "iter": i,
+                            "nnz": (s_new > 0).sum(),
+                            "obj_gap": obj_gap,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        if np.abs(obj_gap) < rtol * obj_best:
+            break
+        else:
+            w.value = np.ones(T) / (delta * np.ones(T) + np.abs(s.value.squeeze()))
+            i += 1
+    else:
+        warnings.warn(
+            "l0 heuristic did not converge in {} iterations".format(max_iters)
+        )
+    if return_obj:
+        return c.value, s_new, b.value, prob.value, metric_df
+    else:
+        return c.value, s_new, b.value, metric_df
+
+
 def solve_deconv_bin(
     y: np.ndarray,
     G: np.ndarray = None,

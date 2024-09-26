@@ -295,14 +295,14 @@ fig.add_trace(
 )
 fig.write_html("./dbg-iter.html")
 
-# %% test diff penal
+# %% test l0 penal
 import plotly.graph_objects as go
 import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
 from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv
+from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
 
 uid = 0
 iiter = 0
@@ -313,7 +313,6 @@ s = updt_ds["S_iter"].isel(iter=iiter, unit_id=uid)
 c = updt_ds["C_iter"].isel(iter=iiter, unit_id=uid) * sig
 c_gt = sim_ds["C"].sel(unit_id=subset[uid]) * sig_gt
 s_gt = sim_ds["S"].sel(unit_id=subset[uid])
-# test mixin
 kn = exp_pulse(6, 1, 60, p_d=1, p_r=-1)[0]
 K = sps.csc_matrix(convolution_matrix(kn, len(y))[: len(y), :])
 nthres = 1000
@@ -321,17 +320,18 @@ c_val, s_val, _ = solve_deconv(
     np.array(y), kn=kn, ar_mode=False, scale=sig_gt, amp_constraint=True
 )
 c_val, s_val = c_val.squeeze(), s_val.squeeze()
-diff_penal = np.linspace(0, 1, 11)
+l0_penal = np.linspace(0, 3, 15)
 res = []
-svals = np.empty((len(diff_penal), len(s_val)))
-for i, df in enumerate(diff_penal):
-    c_penal, s_penal, _ = solve_deconv(
+svals = np.empty((len(l0_penal), len(s_val)))
+for i, l0_pen in enumerate(l0_penal):
+    c_penal, s_penal, _, met_df = solve_deconv_l0(
         np.array(y),
         kn=kn,
         ar_mode=False,
         scale=sig_gt,
         amp_constraint=True,
-        diff_penal=df,
+        l0_penal=l0_pen,
+        verbose=False,
     )
     c_penal, s_penal = c_penal.squeeze(), s_penal.squeeze()
     th_svals, thres = max_thres(
@@ -348,10 +348,15 @@ for i, df in enumerate(diff_penal):
     opt_c = th_cvals[opt_idx].astype(float).squeeze()
     opt_obj = th_objs[opt_idx]
     opt_scal = th_scals[opt_idx]
-    svals[ics, :] = opt_s
+    print(
+        "l0 penal: {:.4f}, nnz: {}, scal: {:.3f}, opt_nnz: {}".format(
+            l0_pen, np.array(met_df["nnz"])[-1], opt_scal, (opt_s > 0).sum()
+        )
+    )
+    svals[i, :] = opt_s
     res.append(
         pd.DataFrame(
-            {"diff_penal": df, "thres": thres, "scal": th_scals, "err": th_objs}
+            {"l0_penal": l0_pen, "thres": thres, "scal": th_scals, "err": th_objs}
         )
     )
 res = pd.concat(res, ignore_index=True)
@@ -362,8 +367,9 @@ res = pd.concat(res, ignore_index=True)
 # )
 # fig = px.imshow(res_pvt, x=res_pvt.columns, y=res_pvt.index)
 err_gt = np.linalg.norm(y - c_gt)
-fig = px.line(res, x="scal", y="err", facet_row="diff_penal")
+fig = px.line(res, x="scal", y="err", facet_row="l0_penal", facet_row_spacing=1e-2)
 fig.add_hline(y=err_gt, line_color="grey", line_dash="dash", line_width=2)
+fig.update_layout(height=len(l0_penal) * 150)
 fig.write_html("dbg-obj.html")
 fig = make_subplots(2, 1, shared_xaxes=False, shared_yaxes=False)
 fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
