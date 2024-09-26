@@ -321,17 +321,20 @@ c_val, s_val, _ = solve_deconv(
     np.array(y), kn=kn, ar_mode=False, scale=sig_gt, amp_constraint=True
 )
 c_val, s_val = c_val.squeeze(), s_val.squeeze()
-l0_penal = np.linspace(0, 4.3, 15)
+l0_penal = 1
+max_iters = 10
 res = []
-svals = np.empty((len(l0_penal), len(s_val)))
-for i, l0_pen in enumerate(l0_penal):
+svals = []
+metric_df = None
+i = 0
+while i < max_iters:
     c_penal, s_penal, _, met_df = solve_deconv_l0(
         np.array(y),
         kn=kn,
         ar_mode=False,
         scale=sig_gt,
         amp_constraint=True,
-        l0_penal=l0_pen,
+        l0_penal=l0_penal,
         verbose=False,
     )
     c_penal, s_penal = c_penal.squeeze(), s_penal.squeeze()
@@ -349,17 +352,51 @@ for i, l0_pen in enumerate(l0_penal):
     opt_c = th_cvals[opt_idx].astype(float).squeeze()
     opt_obj = th_objs[opt_idx]
     opt_scal = th_scals[opt_idx]
+    nnz_l0 = (s_penal > 0).sum()
+    nnz_opt = (opt_s > 0).sum()
     print(
-        "l0 penal: {:.4f}, nnz: {}, scal: {:.3f}, opt_nnz: {}".format(
-            l0_pen, np.array(met_df["nnz"])[-1], opt_scal, (opt_s > 0).sum()
+        "l0 penal: {:.4f}, nnz_l0: {}, scal: {:.3f}, nnz_opt: {}".format(
+            l0_penal, nnz_l0, opt_scal, nnz_opt
         )
     )
-    svals[i, :] = opt_s
+    svals.append(opt_s)
     res.append(
         pd.DataFrame(
-            {"l0_penal": l0_pen, "thres": thres, "scal": th_scals, "err": th_objs}
+            {
+                "l0_penal": l0_penal,
+                "thres": thres,
+                "scal": th_scals,
+                "err": th_objs,
+                "iter": i,
+            }
         )
     )
+    metric_df = pd.concat(
+        [
+            metric_df,
+            pd.DataFrame(
+                [
+                    {
+                        "l0_penal": l0_penal,
+                        "scale": opt_scal,
+                        "obj": opt_obj,
+                        "iter": i,
+                        "same_nnz": nnz_l0 == nnz_opt,
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+    l0_ub = metric_df[metric_df["same_nnz"]]["l0_penal"].min()
+    l0_lb = metric_df[~metric_df["same_nnz"]]["l0_penal"].max()
+    if np.isnan(l0_ub):
+        l0_penal = l0_lb * 2
+    elif np.isnan(l0_lb):
+        l0_penal = l0_ub / 2
+    else:
+        l0_penal = (l0_ub + l0_lb) / 2
+    i += 1
 res = pd.concat(res, ignore_index=True)
 lams_l0, ps_l0, h_l0, h_fit_l0, _, _ = solve_fit_h(
     np.array(y) / sig_gt, opt_s, N=2, s_len=60, ar_mode=False
@@ -376,7 +413,7 @@ lams, ps, h, h_fit, _, _ = solve_fit_h(
 err_gt = np.linalg.norm(y - c_gt)
 fig = px.line(res, x="scal", y="err", facet_row="l0_penal", facet_row_spacing=1e-2)
 fig.add_hline(y=err_gt, line_color="grey", line_dash="dash", line_width=2)
-fig.update_layout(height=len(l0_penal) * 150)
+fig.update_layout(height=res["l0_penal"].nunique() * 150)
 fig.write_html("dbg-obj.html")
 fig = make_subplots(2, 1, shared_xaxes=False, shared_yaxes=False)
 fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
