@@ -30,6 +30,7 @@ def pipeline_bin(
     deconv_nthres=1000,
     deconv_scal_tol=1e-5,
     deconv_max_iters=50,
+    deconv_use_l0=True,
     ar_use_all=True,
     ar_kn_len=60,
     ar_norm="l1",
@@ -119,6 +120,7 @@ def pipeline_bin(
                 tol=deconv_scal_tol,
                 max_iters=deconv_max_iters,
                 ar_mode=ar_mode,
+                use_l0=deconv_use_l0,
             )
             C[icell, :] = c_bin.squeeze()
             S[icell, :] = s_bin.squeeze()

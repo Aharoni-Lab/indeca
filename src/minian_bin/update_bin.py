@@ -212,6 +212,7 @@ def solve_deconv_bin(
     nthres=1000,
     tol: float = 1e-6,
     max_iters: int = 50,
+    use_l0=True,
 ):
     # parameters
     if ar_mode:
@@ -223,20 +224,37 @@ def solve_deconv_bin(
     RK = (R @ K).todense()
     _, s_init, _ = solve_deconv(y, G=G, kn=kn, R=R, ar_mode=ar_mode)
     scale = np.ptp(s_init)
-    # interations
+    if use_l0:
+        l0_penal = 1
+    else:
+        l0_penal = np.nan
+    # iterations
     metric_df = None
     niter = 0
     while niter < max_iters:
-        _, s_bin, b_bin, lb = solve_deconv(
-            y,
-            G=G,
-            kn=kn,
-            scale=scale,
-            R=R,
-            return_obj=True,
-            amp_constraint=True,
-            ar_mode=ar_mode,
-        )
+        if use_l0:
+            _, s_bin, b_bin, lb, _ = solve_deconv_l0(
+                y,
+                G=G,
+                kn=kn,
+                scale=scale,
+                R=R,
+                return_obj=True,
+                amp_constraint=True,
+                ar_mode=ar_mode,
+                l0_penal=l0_penal,
+            )
+        else:
+            _, s_bin, b_bin, lb = solve_deconv(
+                y,
+                G=G,
+                kn=kn,
+                scale=scale,
+                R=R,
+                return_obj=True,
+                amp_constraint=True,
+                ar_mode=ar_mode,
+            )
         th_svals = max_thres(np.abs(s_bin), nthres, th_min=0, th_max=1)
         th_cvals = [RK @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
@@ -261,11 +279,24 @@ def solve_deconv_bin(
             scale_new = opt_scal_last
         else:
             scale_new = (opt_scal + opt_scal_last) / 2
+        nnz_bin = (s_bin > 0).sum()
+        nnz_th = (opt_s > 0).sum()
         metric_df = pd.concat(
             [
                 metric_df,
                 pd.DataFrame(
-                    [{"scale": scale, "obj": opt_obj, "lb": lb, "iter": niter}]
+                    [
+                        {
+                            "scale": scale,
+                            "obj": opt_obj,
+                            "lb": lb,
+                            "iter": niter,
+                            "nnz_bin": nnz_bin,
+                            "nnz_th": nnz_th,
+                            "same_nnz": nnz_bin == nnz_th,
+                            "l0_penal": l0_penal,
+                        }
+                    ]
                 ),
             ],
             ignore_index=True,
@@ -277,6 +308,15 @@ def solve_deconv_bin(
             metric_df["converged"] = True
             break
         else:
+            if use_l0:
+                l0_ub = metric_df[metric_df["same_nnz"]]["l0_penal"].min()
+                l0_lb = metric_df[~metric_df["same_nnz"]]["l0_penal"].max()
+                if np.isnan(l0_ub):
+                    l0_penal = l0_lb * 2
+                elif np.isnan(l0_lb):
+                    l0_penal = l0_ub / 2
+                else:
+                    l0_penal = (l0_ub + l0_lb) / 2
             scale = scale_new
             niter += 1
     else:

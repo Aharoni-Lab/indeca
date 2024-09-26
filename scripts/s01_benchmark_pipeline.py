@@ -85,6 +85,7 @@ for up_type, up_factor in {"org": 1}.items():
         est_noise_freq=0.06,
         est_use_smooth=True,
         est_add_lag=50,
+        deconv_use_l0=True,
     )
     res = {
         "C": C_bin,
@@ -355,8 +356,8 @@ while i < max_iters:
     nnz_l0 = (s_penal > 0).sum()
     nnz_opt = (opt_s > 0).sum()
     print(
-        "l0 penal: {:.4f}, nnz_l0: {}, scal: {:.3f}, nnz_opt: {}".format(
-            l0_penal, nnz_l0, opt_scal, nnz_opt
+        "l0 penal: {:.4f}, nnz_l0: {}, scal: {:.3f}, nnz_opt: {}, obj: {}".format(
+            l0_penal, nnz_l0, opt_scal, nnz_opt, opt_obj
         )
     )
     svals.append(opt_s)
