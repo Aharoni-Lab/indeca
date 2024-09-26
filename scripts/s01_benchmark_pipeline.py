@@ -302,6 +302,7 @@ from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
 from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
+from minian_bin.update_AR import solve_fit_h
 from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
 
 uid = 0
@@ -360,6 +361,12 @@ for i, l0_pen in enumerate(l0_penal):
         )
     )
 res = pd.concat(res, ignore_index=True)
+lams_l0, ps_l0, h_l0, h_fit_l0, _, _ = solve_fit_h(
+    np.array(y) / sig_gt, opt_s, N=2, s_len=60, ar_mode=False
+)
+lams, ps, h, h_fit, _, _ = solve_fit_h(
+    np.array(y) / sig_gt, s, N=2, s_len=60, ar_mode=False
+)
 # res_pvt = (
 #     res[["csize", "scal", "err"]]
 #     .drop_duplicates()
@@ -387,8 +394,10 @@ fig.add_trace(go.Scatter(y=opt_c, mode="lines", name="opt_c"), row=1, col=1)
 # )
 fig.add_trace(go.Scatter(y=s_gt, mode="lines", name="s_gt"), row=1, col=1)
 fig.add_trace(go.Scatter(y=c_gt, mode="lines", name="c_gt"), row=1, col=1)
-fig.add_trace(go.Scatter(y=h_iter[iiter], mode="lines", name="h_free"), row=2, col=1)
-fig.add_trace(go.Scatter(y=h_fit_iter[iiter], mode="lines", name="h_fit"), row=2, col=1)
+fig.add_trace(go.Scatter(y=h, mode="lines", name="h_free"), row=2, col=1)
+fig.add_trace(go.Scatter(y=h_fit, mode="lines", name="h_fit"), row=2, col=1)
+fig.add_trace(go.Scatter(y=h_l0, mode="lines", name="h_free_l0"), row=2, col=1)
+fig.add_trace(go.Scatter(y=h_fit_l0, mode="lines", name="h_fit_l0"), row=2, col=1)
 # fig.add_trace(
 #     go.Scatter(
 #         y=ar_pulse(ar_coef[0], ar_coef[1], len(h))[0], mode="lines", name="h_gt_ar"
