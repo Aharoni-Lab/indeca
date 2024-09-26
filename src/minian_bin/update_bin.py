@@ -162,7 +162,7 @@ def solve_deconv_l0(
                 max_iter=int(1e6),
                 eps_abs=1e-4,
                 eps_rel=1e-4,
-                verbose=True,
+                verbose=False,
             )
         s_new = np.where(s.value > delta, s.value, 0)
         if verbose:

@@ -320,7 +320,7 @@ c_val, s_val, _ = solve_deconv(
     np.array(y), kn=kn, ar_mode=False, scale=sig_gt, amp_constraint=True
 )
 c_val, s_val = c_val.squeeze(), s_val.squeeze()
-l0_penal = np.linspace(0, 3, 15)
+l0_penal = np.linspace(0, 4.3, 15)
 res = []
 svals = np.empty((len(l0_penal), len(s_val)))
 for i, l0_pen in enumerate(l0_penal):
