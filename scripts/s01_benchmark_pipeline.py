@@ -39,7 +39,7 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% 1. Generate or import dataset at normal FPS for calcium imaging
 sps_penal = 1
-max_iters = 10
+max_iters = 50
 # for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
 for up_type, up_factor in {"org": 1}.items():
     # get data
