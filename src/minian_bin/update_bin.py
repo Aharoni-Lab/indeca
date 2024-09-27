@@ -191,7 +191,7 @@ def solve_deconv_l0(
         if np.abs(obj_gap) < rtol * obj_best:
             break
         else:
-            w.value = np.ones(T) / (delta * np.ones(T) + np.abs(s.value.squeeze()))
+            w.value = np.ones(T) / (delta * np.ones(T) + s_new.squeeze())
             i += 1
     else:
         warnings.warn(
