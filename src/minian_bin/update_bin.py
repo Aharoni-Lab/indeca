@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
+from line_profiler import profile
 from scipy.linalg import convolution_matrix
 
 from .cnmf import filt_fft, get_ar_coef, noise_fft
@@ -47,6 +48,7 @@ def estimate_coefs(
     return g, tn
 
 
+@profile
 def solve_deconv(
     y: np.ndarray,
     G: np.ndarray = None,
@@ -103,6 +105,7 @@ def solve_deconv(
         return c.value, s.value, b.value
 
 
+@profile
 def solve_deconv_l0(
     y: np.ndarray,
     G: np.ndarray = None,
@@ -213,6 +216,7 @@ def solve_deconv_l0(
         return c.value, s_new, b.value, metric_df
 
 
+@profile
 def solve_deconv_bin(
     y: np.ndarray,
     G: np.ndarray = None,

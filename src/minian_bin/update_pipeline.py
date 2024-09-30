@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
 from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
@@ -15,6 +16,7 @@ from .update_bin import (
 )
 
 
+@profile
 def pipeline_bin(
     Y,
     up_factor=1,
