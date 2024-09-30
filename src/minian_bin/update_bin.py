@@ -202,7 +202,13 @@ def solve_deconv_l0(
             "l0 heuristic did not converge in {} iterations".format(max_iters)
         )
     if return_obj:
-        return c.value, s_new, b.value, prob.value, metric_df
+        return (
+            c.value,
+            s_new,
+            b.value,
+            np.linalg.norm(y - scale * R @ c.value - b.value, ord=p),
+            metric_df,
+        )
     else:
         return c.value, s_new, b.value, metric_df
 
@@ -217,6 +223,7 @@ def solve_deconv_bin(
     tol: float = 1e-6,
     max_iters: int = 50,
     use_l0=True,
+    norm="l1",
 ):
     # parameters
     if ar_mode:
@@ -247,6 +254,7 @@ def solve_deconv_bin(
                 amp_constraint=True,
                 ar_mode=ar_mode,
                 l0_penal=l0_penal,
+                norm=norm,
             )
         else:
             _, s_bin, b_bin, lb = solve_deconv(
@@ -258,12 +266,15 @@ def solve_deconv_bin(
                 return_obj=True,
                 amp_constraint=True,
                 ar_mode=ar_mode,
+                norm=norm,
             )
         th_svals = max_thres(np.abs(s_bin), nthres, th_min=0, th_max=1)
         th_cvals = [RK @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
         th_objs = [
-            np.linalg.norm(y - scl * np.array(cc).squeeze() - b_bin)
+            np.linalg.norm(
+                y - scl * np.array(cc).squeeze() - b_bin, ord={"l1": 1, "l2": 2}[norm]
+            )
             for scl, cc in zip(th_scals, th_cvals)
         ]
         opt_idx = np.argmin(th_objs)
