@@ -149,13 +149,14 @@ def solve_deconv_l0(
     prob = cp.Problem(obj, cons)
     i = 0
     metric_df = None
+    s_last = None
     while i < max_iters:
         try:
             obj_best = metric_df["obj"][1:].min()
         except TypeError:
             obj_best = np.inf
         try:
-            prob.solve()
+            prob.solve(solver=cp.CLARABEL)
         except cp.SolverError:
             prob.solve(
                 solver=cp.OSQP,
@@ -190,8 +191,11 @@ def solve_deconv_l0(
         )
         if np.abs(obj_gap) < rtol * obj_best:
             break
+        elif s_last is not None and ((s_new > 0) == (s_last > 0)).all():
+            break
         else:
             w.value = np.ones(T) / (delta * np.ones(T) + s_new.squeeze())
+            s_last = s_new
             i += 1
     else:
         warnings.warn(
