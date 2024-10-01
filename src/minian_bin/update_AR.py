@@ -172,7 +172,7 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
+def solve_h(y, s, scal, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
@@ -196,7 +196,7 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
         conv_term = cp.convolve(s, h)[:T]
     norm_ord = {"l1": 1, "l2": 2}[norm]
     obj = cp.Minimize(
-        cp.norm(y - conv_term - b, norm_ord)
+        cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, norm_ord)
         + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
     )
     cons = [b >= 0]
@@ -208,6 +208,7 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
 def solve_fit_h(
     y,
     s,
+    scal,
     N=2,
     s_len=60,
     norm="l1",
@@ -222,7 +223,7 @@ def solve_fit_h(
     smth_penal = 0
     niter = 0
     while niter < max_iters:
-        h = solve_h(y, s, s_len, norm, smth_penal)
+        h = solve_h(y, s, scal, s_len, norm, smth_penal)
         if fit_method == "solve":
             lams, ps, h_fit = fit_sumexp(h, N)
         elif fit_method == "numerical":

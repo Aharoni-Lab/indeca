@@ -144,14 +144,12 @@ def pipeline_bin(
             err[icell] = np.linalg.norm(y - c_bin.squeeze())
         # 2.2 update AR
         if up_factor > 1:
-            S_ar = np.stack(
-                [sum_downsample(s, up_factor) for s in S], axis=0
-            ) * scale.reshape((-1, 1))
+            S_ar = np.stack([sum_downsample(s, up_factor) for s in S], axis=0)
         else:
-            S_ar = S * scale.reshape((-1, 1))
+            S_ar = S
         if ar_use_all:
             lams, ps, h, h_fit, _, _ = solve_fit_h(
-                Y, S_ar, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
+                Y, S_ar, scale, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
             )
             tau = np.tile(-1 / lams, (ncell, 1))
             g = np.tile(tau2AR(*(-1 / lams)), (ncell, 1))
@@ -162,7 +160,7 @@ def pipeline_bin(
             ps = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
                 lams, cur_ps, _, _, _, _ = solve_fit_h(
-                    y, s, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
+                    y, s, scale, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
                 )
                 tau[icell, :] = -1 / lams
                 g[icell, :] = tau2AR(*(-1 / lams))

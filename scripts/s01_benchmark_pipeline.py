@@ -42,7 +42,7 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% 1. Generate or import dataset at normal FPS for calcium imaging
 sps_penal = 1
-max_iters = 50
+max_iters = 10
 # for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
 for up_type, up_factor in {"org": 1}.items():
     # get data
@@ -171,7 +171,7 @@ for up_type, in_path in IN_PATH.items():
     itdf = iter_df.melt(
         id_vars=["iter", "cell"],
         var_name="coef",
-        value_vars=["tau_d_diff", "tau_r_diff", "scale_diff"],
+        value_vars=["tau_d_diff", "tau_r_diff", "scale_diff", "err"],
         value_name="diff",
     )
     fig_coef = px.line(
