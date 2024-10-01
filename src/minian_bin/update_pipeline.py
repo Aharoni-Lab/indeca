@@ -10,6 +10,7 @@ from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h
 from .update_bin import (
     construct_R,
     estimate_coefs,
+    prob_deconv,
     solve_deconv,
     solve_deconv_bin,
     sum_downsample,
@@ -92,6 +93,10 @@ def pipeline_bin(
             "scale": np.nan,
         }
     )
+    prob = prob_deconv(T, kn_len=ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm)
+    prob_cons = prob_deconv(
+        T, kn_len=ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm, amp_constraint=True
+    )
     for i_iter in trange(max_iters, desc="iteration"):
         # 2.1 deconvolution
         C, S, scale, err = (
@@ -116,6 +121,8 @@ def pipeline_bin(
                 )[0]
             c_bin, s_bin, _, scl, _, _ = solve_deconv_bin(
                 y,
+                prob,
+                prob_cons,
                 G=cur_G,
                 kn=cur_kn,
                 R=R,
@@ -254,6 +261,7 @@ def pipeline_cnmf(
         ps = np.tile([1, -1], (ncell, 1))
     C_cnmf, S_cnmf = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
     # 2 cnmf algorithm
+    prob = prob_deconv(T, kn_len=ar_kn_len, ar_mode=ar_mode, use_base=True, R=R)
     for icell, y in enumerate(Y):
         cur_G, cur_kn = None, None
         if ar_mode:
@@ -267,7 +275,7 @@ def pipeline_cnmf(
                 p_r=ps[icell, 1],
             )[0]
         c, s, _ = solve_deconv(
-            y, G=cur_G, kn=cur_kn, R=R, ar_mode=ar_mode, l1_penal=sps_penal * tn[icell]
+            y, prob, G=cur_G, kn=cur_kn, ar_mode=ar_mode, l1_penal=sps_penal * tn[icell]
         )
         C_cnmf[icell, :] = c.squeeze()
         S_cnmf[icell, :] = s.squeeze()

@@ -48,59 +48,89 @@ def estimate_coefs(
     return g, tn
 
 
-@profile
-def solve_deconv(
-    y: np.ndarray,
-    G: np.ndarray = None,
-    kn: np.ndarray = None,
+def prob_deconv(
+    y_len: int,
+    kn_len: int = 60,
     ar_mode: bool = True,
     use_base: bool = False,
-    norm: str = "l1",
-    l1_penal: float = 0,
-    diff_penal: float = 0,
-    scale: float = 1,
     R: np.ndarray = None,
-    return_obj: bool = False,
-    amp_constraint=False,
-    mixin=False,
-    solver=None,
+    norm: str = "l1",
+    amp_constraint: bool = False,
+    mixin: bool = False,
 ):
-    if ar_mode:
-        assert G is not None, "deconv matrix `G` must be provided in ar mode"
-    else:
-        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
-    y = y.reshape((-1, 1))
+
     if R is None:
-        T = y.shape[0]
+        T = y_len
         R = np.eye(T)
     else:
         T = R.shape[1]
-    c = cp.Variable((T, 1))
-    if mixin:
-        s = cp.Variable((T, 1), boolean=True)
-    else:
-        s = cp.Variable((T, 1))
+    y = cp.Parameter((y_len, 1), name="y")
+    c = cp.Variable((T, 1), nonneg=True, name="c")
+    s = cp.Variable((T, 1), nonneg=True, name="s", boolean=mixin)
+    R = cp.Constant(R, name="R")
+    scale = cp.Parameter(value=1, name="scale", nonneg=True)
+    l1_penal = cp.Parameter(value=0, name="l1_penal", nonneg=True)
+    w_l0 = cp.Parameter(
+        shape=T, value=np.ones(T), nonneg=True, name="w_l0"
+    )  # product of l0_penal * w!
     if use_base:
-        b = cp.Variable()
+        b = cp.Variable(nonneg=True, name="b")
     else:
-        b = cp.Constant(0)
-    p = {"l1": 1, "l2": 2}[norm]
-    cons = [c >= 0, s >= 0, b >= 0]
-    obj = cp.Minimize(
-        cp.norm(y - scale * R @ c - b, p=p)
-        + l1_penal * cp.norm(s, 1)
-        + diff_penal * cp.norm(cp.diff(s), 1)
-    )
+        b = cp.Constant(value=0, name="b")
+    err_term = cp.norm(y - scale * R @ c - b, p={"l1": 1, "l2": 2}[norm])
+    obj = cp.Minimize(err_term + w_l0.T @ cp.abs(s) + l1_penal * cp.norm(s))
+    data_dict = {
+        "y": y,
+        "c": c,
+        "s": s,
+        "b": b,
+        "R": R,
+        "scale": scale,
+        "l1_penal": l1_penal,
+        "w_l0": w_l0,
+        "err_term": err_term,
+    }
     if ar_mode:
-        cons.append(s == G @ c)
+        G = cp.Parameter(shape=(T, T), name="G")
+        data_dict["G"] = G
+        cons = [s == G @ c]
     else:
-        cons.extend([c[:, 0] == cp.convolve(kn, s[:, 0])[:T], s[-1] == 0])
+        # TODO: make this dpp compliant. ref: https://github.com/cvxpy/cvxpy/issues/2218
+        kn = cp.Parameter(shape=kn_len, name="kn", nonneg=True)
+        data_dict["kn"] = kn
+        cons = [c[:, 0] == cp.convolve(kn, s[:, 0])[:T], s[-1] == 0]
     if amp_constraint:
         cons.append(s <= 1)
     prob = cp.Problem(obj, cons)
+    prob.data_dict = data_dict
+    return prob
+
+
+@profile
+def solve_deconv(
+    y: np.ndarray,
+    prob: cp.Problem,
+    ar_mode: bool = True,
+    G: np.ndarray = None,
+    kn: np.ndarray = None,
+    l1_penal: float = 0,
+    scale: float = 1,
+    return_obj: bool = False,
+    solver=None,
+):
+    c, s, b = prob.data_dict["c"], prob.data_dict["s"], prob.data_dict["b"]
+    prob.data_dict["y"].value = y.reshape((-1, 1))
+    prob.data_dict["scale"].value = scale
+    prob.data_dict["l1_penal"].value = l1_penal
+    if ar_mode:
+        assert G is not None, "deconv matrix `G` must be provided in ar mode"
+        prob.data_dict["G"].value = G
+    else:
+        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
+        prob.data_dict["kn"].value = kn
     prob.solve(solver=solver)
     if return_obj:
-        return c.value, s.value, b.value, prob.value
+        return c.value, s.value, b.value, prob.data_dict["err_term"].value
     else:
         return c.value, s.value, b.value
 
@@ -108,48 +138,29 @@ def solve_deconv(
 @profile
 def solve_deconv_l0(
     y: np.ndarray,
+    prob: cp.Problem,
+    ar_mode: bool = True,
     G: np.ndarray = None,
     kn: np.ndarray = None,
-    ar_mode: bool = True,
-    use_base: bool = False,
-    norm: str = "l1",
     l0_penal: float = 0,
     scale: float = 1,
-    R: np.ndarray = None,
     return_obj: bool = False,
-    amp_constraint=False,
     max_iters=50,
     delta=1e-6,
     rtol=1e-4,
     verbose=False,
 ):
+    c, s, b = prob.data_dict["c"], prob.data_dict["s"], prob.data_dict["b"]
+    T = c.shape[0]
+    prob.data_dict["y"].value = y.reshape((-1, 1))
+    prob.data_dict["w_l0"].value = l0_penal * np.ones(T)
+    prob.data_dict["scale"].value = scale
     if ar_mode:
         assert G is not None, "deconv matrix `G` must be provided in ar mode"
+        prob.data_dict["G"].value = G
     else:
         assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
-    y = y.reshape((-1, 1))
-    if R is None:
-        T = y.shape[0]
-        R = np.eye(T)
-    else:
-        T = R.shape[1]
-    c = cp.Variable((T, 1), nonneg=True)
-    s = cp.Variable((T, 1), nonneg=True)
-    if use_base:
-        b = cp.Variable(nonneg=True)
-    else:
-        b = cp.Constant(0)
-    p = {"l1": 1, "l2": 2}[norm]
-    w = cp.Parameter(shape=T, nonneg=True)
-    w.value = np.ones(T)
-    obj = cp.Minimize(cp.norm(y - scale * R @ c - b, p=p) + l0_penal * w.T @ cp.abs(s))
-    if ar_mode:
-        cons = [s == G @ c]
-    else:
-        cons = [c[:, 0] == cp.convolve(kn, s[:, 0])[:T]]
-    if amp_constraint:
-        cons.append(s <= 1)
-    prob = cp.Problem(obj, cons)
+        prob.data_dict["kn"].value = kn
     i = 0
     metric_df = None
     s_last = None
@@ -159,7 +170,7 @@ def solve_deconv_l0(
         except TypeError:
             obj_best = np.inf
         try:
-            prob.solve(solver=cp.CLARABEL)
+            prob.solve(solver=cp.CLARABEL, warm_start=bool(i))
         except cp.SolverError:
             prob.solve(
                 solver=cp.OSQP,
@@ -167,6 +178,7 @@ def solve_deconv_l0(
                 eps_abs=1e-4,
                 eps_rel=1e-4,
                 verbose=False,
+                warm_start=bool(i),
             )
         s_new = np.where(s.value > delta, s.value, 0)
         if verbose:
@@ -197,7 +209,9 @@ def solve_deconv_l0(
         elif s_last is not None and ((s_new > 0) == (s_last > 0)).all():
             break
         else:
-            w.value = np.ones(T) / (delta * np.ones(T) + s_new.squeeze())
+            prob.data_dict["w_l0"].value = (
+                l0_penal * np.ones(T) / (delta * np.ones(T) + s_new.squeeze())
+            )
             s_last = s_new
             i += 1
     else:
@@ -205,13 +219,7 @@ def solve_deconv_l0(
             "l0 heuristic did not converge in {} iterations".format(max_iters)
         )
     if return_obj:
-        return (
-            c.value,
-            s_new,
-            b.value,
-            np.linalg.norm(y - scale * R @ c.value - b.value, ord=p),
-            metric_df,
-        )
+        return (c.value, s_new, b.value, prob.data_dict["err_term"].value, metric_df)
     else:
         return c.value, s_new, b.value, metric_df
 
@@ -219,6 +227,8 @@ def solve_deconv_l0(
 @profile
 def solve_deconv_bin(
     y: np.ndarray,
+    prob: cp.Problem,
+    prob_cons: cp.Problem,
     G: np.ndarray = None,
     kn: np.ndarray = None,
     ar_mode: bool = True,
@@ -237,7 +247,7 @@ def solve_deconv_bin(
         assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
         K = sps.csc_matrix(convolution_matrix(kn, R.shape[1])[: R.shape[1], :])
     RK = (R @ K).todense()
-    _, s_init, _ = solve_deconv(y, G=G, kn=kn, R=R, ar_mode=ar_mode)
+    _, s_init, _ = solve_deconv(y, prob, G=G, kn=kn, ar_mode=ar_mode)
     scale = np.ptp(s_init)
     if use_l0:
         l0_penal = 1
@@ -250,27 +260,17 @@ def solve_deconv_bin(
         if use_l0:
             _, s_bin, b_bin, lb, _ = solve_deconv_l0(
                 y,
+                prob_cons,
                 G=G,
                 kn=kn,
                 scale=scale,
-                R=R,
                 return_obj=True,
-                amp_constraint=True,
                 ar_mode=ar_mode,
                 l0_penal=l0_penal,
-                norm=norm,
             )
         else:
             _, s_bin, b_bin, lb = solve_deconv(
-                y,
-                G=G,
-                kn=kn,
-                scale=scale,
-                R=R,
-                return_obj=True,
-                amp_constraint=True,
-                ar_mode=ar_mode,
-                norm=norm,
+                y, prob_cons, G=G, kn=kn, scale=scale, return_obj=True, ar_mode=ar_mode
             )
         th_svals = max_thres(np.abs(s_bin), nthres, th_min=0, th_max=1)
         th_cvals = [RK @ ss for ss in th_svals]
