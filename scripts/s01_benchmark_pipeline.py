@@ -16,9 +16,12 @@ import cvxpy as cp
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import xarray as xr
+from plotly.subplots import make_subplots
 
-from minian_bin.benchmark_utils import compute_ROC, norm_per_cell
+from minian_bin.benchmark_utils import compute_ROC
+from minian_bin.simulation import exp_pulse
 from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 
 IN_PATH = {
@@ -94,54 +97,38 @@ for up_type, up_factor in {"org": 1}.items():
         "S_iter": S_bin_iter,
         "C_cnmf": C_cnmf,
         "S_cnmf": S_cnmf,
+        "h_iter": h_iter,
+        "h_fit_iter": h_fit_iter,
+    }
+    dims = {
+        "C": ("unit_id", "frame"),
+        "S": ("unit_id", "frame"),
+        "C_iter": ("iter", "unit_id", "frame"),
+        "S_iter": ("iter", "unit_id", "frame"),
+        "C_cnmf": ("unit_id", "frame"),
+        "S_cnmf": ("unit_id", "frame"),
+        "h_iter": ("iter", "frame"),
+        "h_fit_iter": ("iter", "frame"),
+    }
+    crds = {
+        "unit_id": Y_solve.coords["unit_id"],
+        "frame": (
+            sim_ds.coords["frame"] if up_type == "upsamp" else Y_solve.coords["frame"]
+        ),
+        "iter": np.arange(iter_df["iter"].max() + 1),
     }
     # save variables
+    iter_df["unit_id"] = iter_df["cell"].map(
+        {i: u.item() for i, u in enumerate(Y_solve.coords["unit_id"])}
+    )
     for vname, dat in res.items():
         dat = np.stack(dat)
-        if dat.ndim == 1:
-            updt_ds.append(
-                xr.DataArray(
-                    dat,
-                    dims="unit_id",
-                    coords={"unit_id": Y_solve.coords["unit_id"]},
-                    name=vname,
-                )
+        cur_dims = dims[vname]
+        updt_ds.append(
+            xr.DataArray(
+                dat, dims=cur_dims, coords={d: crds[d] for d in cur_dims}, name=vname
             )
-        elif dat.ndim == 2:
-            updt_ds.append(
-                xr.DataArray(
-                    dat,
-                    dims=["unit_id", "frame"],
-                    coords={
-                        "unit_id": Y_solve.coords["unit_id"],
-                        "frame": (
-                            sim_ds.coords["frame"]
-                            if up_type == "upsamp"
-                            else Y_solve.coords["frame"]
-                        ),
-                    },
-                    name=vname,
-                )
-            )
-        elif dat.ndim == 3:
-            updt_ds.append(
-                xr.DataArray(
-                    dat,
-                    dims=["iter", "unit_id", "frame"],
-                    coords={
-                        "iter": np.arange(dat.shape[0]),
-                        "unit_id": Y_solve.coords["unit_id"],
-                        "frame": (
-                            sim_ds.coords["frame"]
-                            if up_type == "upsamp"
-                            else Y_solve.coords["frame"]
-                        ),
-                    },
-                    name=vname,
-                )
-            )
-        else:
-            raise ValueError
+        )
     updt_ds = xr.merge(updt_ds)
     updt_ds.to_netcdf(os.path.join(INT_PATH, "updt_ds-{}.nc".format(up_type)))
     iter_df.to_feather(os.path.join(INT_PATH, "iter_df-{}.feat".format(up_type)))
@@ -158,24 +145,133 @@ for up_type, in_path in IN_PATH.items():
     except FileNotFoundError:
         continue
     sim_ds = xr.open_dataset(in_path)
-    S_iter, S_true = updt_ds["S_iter"], sim_ds["S"]
+    Y_solve, S_iter, S_true, C_iter, C_true, h_iter, h_fit_iter = (
+        updt_ds["Y_solve"],
+        updt_ds["S_iter"],
+        sim_ds["S"],
+        updt_ds["C_iter"],
+        sim_ds["C"],
+        updt_ds["h_iter"],
+        updt_ds["h_fit_iter"],
+    )
+    h_gt = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, 60)[0]
     met_df = []
-    for i in np.array(S_iter.coords["iter"]):
-        met = compute_ROC(S_iter.sel(iter=i), S_true, metadata={"iter": i})
+    for i_iter in np.array(S_iter.coords["iter"]):
+        met = compute_ROC(S_iter.sel(iter=i_iter), S_true, metadata={"iter": i_iter})
         met_df.append(met)
     met_df = pd.concat(met_df, ignore_index=True)
     fig_f1 = px.line(met_df, x="iter", y="f1", color="unit_id")
     fig_f1.write_html(os.path.join(FIG_PATH, "f1-{}.html".format(up_type)))
-    iter_df["tau_d_diff"] = iter_df["tau_d"] - 6
-    iter_df["tau_r_diff"] = iter_df["tau_r"] - 1
+    iter_df["scale_true"] = iter_df["unit_id"].map(updt_ds["sig_lev"].to_series())
+    iter_df["tau_d_diff"] = (iter_df["tau_d"] - PARAM_TAU_D) / PARAM_TAU_D
+    iter_df["tau_r_diff"] = (iter_df["tau_r"] - PARAM_TAU_R) / PARAM_TAU_R
+    iter_df["scale_diff"] = (iter_df["scale"] - iter_df["scale_true"]) / iter_df[
+        "scale_true"
+    ]
     itdf = iter_df.melt(
         id_vars=["iter", "cell"],
         var_name="coef",
-        value_vars=["tau_d_diff", "tau_r_diff"],
+        value_vars=["tau_d_diff", "tau_r_diff", "scale_diff"],
         value_name="diff",
     )
-    fig_coef = px.line(itdf, x="iter", y="diff", color="cell", line_dash="coef")
+    fig_coef = px.line(
+        itdf, x="iter", y="diff", color="cell", line_dash="coef", markers=True
+    )
     fig_coef.write_html(os.path.join(FIG_PATH, "coef-{}.html".format(up_type)))
+    for i_iter in np.array(S_iter.coords["iter"]):
+        fig = make_subplots(
+            updt_ds.sizes["unit_id"],
+            2,
+            shared_xaxes=True,
+            shared_yaxes=True,
+            horizontal_spacing=1e-2,
+            column_width=[0.8, 0.2],
+        )
+        for iu, uid in enumerate(np.array(updt_ds.coords["unit_id"])):
+            irow = iu + 1
+            scl = iter_df.set_index(["iter", "unit_id"]).loc[i_iter, uid]["scale"]
+            scl_gt = iter_df.set_index(["iter", "unit_id"]).loc[i_iter, uid][
+                "scale_true"
+            ]
+            fig.add_trace(
+                go.Scatter(
+                    y=Y_solve.sel(unit_id=uid),
+                    mode="lines",
+                    name="y",
+                    legendgroup="y",
+                ),
+                row=irow,
+                col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    y=C_true.sel(unit_id=uid) * scl_gt,
+                    mode="lines",
+                    name="c_gt",
+                    legendgroup="c_gt",
+                ),
+                row=irow,
+                col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    y=S_true.sel(unit_id=uid),
+                    mode="lines",
+                    name="s_gt",
+                    legendgroup="s_gt",
+                ),
+                row=irow,
+                col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    y=S_iter.sel(unit_id=uid, iter=i_iter),
+                    mode="lines",
+                    name="s",
+                    legendgroup="s",
+                ),
+                row=irow,
+                col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    y=C_iter.sel(unit_id=uid, iter=i_iter) * scl,
+                    mode="lines",
+                    name="c",
+                    legendgroup="c",
+                ),
+                row=irow,
+                col=1,
+            )
+            if "unit_id" in h_iter.dims:
+                cur_h = h_iter.sel(unit_id=uid, iter=i_iter)[: len(h_gt)]
+                cur_h_fit = h_fit_iter.sel(unit_id=uid, iter=i_iter)[: len(h_gt)]
+            else:
+                cur_h = h_iter.sel(iter=i_iter)[: len(h_gt)]
+                cur_h_fit = h_fit_iter.sel(iter=i_iter)[: len(h_gt)]
+            fig.add_trace(
+                go.Scatter(
+                    y=h_gt * scl_gt, mode="lines", name="h_gt", legendgroup="h_gt"
+                ),
+                row=irow,
+                col=2,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    y=cur_h * scl, mode="lines", name="h_free", legendgroup="h_free"
+                ),
+                row=irow,
+                col=2,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    y=cur_h_fit * scl, mode="lines", name="h_fit", legendgroup="h_fit"
+                ),
+                row=irow,
+                col=2,
+            )
+        fig.write_html(os.path.join(FIG_PATH, "trs-iter{}.html".format(i_iter)))
+
 
 # %%
 import matplotlib.pyplot as plt
