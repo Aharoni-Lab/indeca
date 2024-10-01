@@ -93,9 +93,14 @@ def pipeline_bin(
             "scale": np.nan,
         }
     )
-    prob = prob_deconv(T, kn_len=ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm)
+    prob = prob_deconv(T, coef_len=ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm)
     prob_cons = prob_deconv(
-        T, kn_len=ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm, amp_constraint=True
+        T,
+        coef_len=ar_kn_len,
+        ar_mode=ar_mode,
+        R=R,
+        norm=deconv_norm,
+        amp_constraint=True,
     )
     for i_iter in trange(max_iters, desc="iteration"):
         # 2.1 deconvolution
@@ -108,11 +113,10 @@ def pipeline_bin(
         for icell, y in tqdm(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
-            cur_G, cur_kn = None, None
             if ar_mode:
                 cur_G = construct_G(g[icell], T * up_factor)
             else:
-                cur_kn = exp_pulse(
+                cur_coef = exp_pulse(
                     tau[icell, 0],
                     tau[icell, 1],
                     ar_kn_len,
@@ -123,8 +127,7 @@ def pipeline_bin(
                 y,
                 prob,
                 prob_cons,
-                G=cur_G,
-                kn=cur_kn,
+                coef=cur_coef,
                 R=R,
                 nthres=deconv_nthres,
                 tol=deconv_scal_tol,
@@ -261,22 +264,19 @@ def pipeline_cnmf(
         ps = np.tile([1, -1], (ncell, 1))
     C_cnmf, S_cnmf = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
     # 2 cnmf algorithm
-    prob = prob_deconv(T, kn_len=ar_kn_len, ar_mode=ar_mode, use_base=True, R=R)
+    prob = prob_deconv(T, coef_len=ar_kn_len, ar_mode=ar_mode, use_base=True, R=R)
     for icell, y in enumerate(Y):
-        cur_G, cur_kn = None, None
         if ar_mode:
             cur_G = construct_G(g[icell], T * up_factor)
         else:
-            cur_kn = exp_pulse(
+            cur_coef = exp_pulse(
                 tau[icell, 0],
                 tau[icell, 1],
                 ar_kn_len,
                 p_d=ps[icell, 0],
                 p_r=ps[icell, 1],
             )[0]
-        c, s, _ = solve_deconv(
-            y, prob, G=cur_G, kn=cur_kn, ar_mode=ar_mode, l1_penal=sps_penal * tn[icell]
-        )
+        c, s, _ = solve_deconv(y, prob, coef=cur_coef, l1_penal=sps_penal * tn[icell])
         C_cnmf[icell, :] = c.squeeze()
         S_cnmf[icell, :] = s.squeeze()
     return C_cnmf, S_cnmf

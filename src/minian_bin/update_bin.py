@@ -50,7 +50,7 @@ def estimate_coefs(
 
 def prob_deconv(
     y_len: int,
-    kn_len: int = 60,
+    coef_len: int = 60,
     ar_mode: bool = True,
     use_base: bool = False,
     R: np.ndarray = None,
@@ -58,7 +58,6 @@ def prob_deconv(
     amp_constraint: bool = False,
     mixin: bool = False,
 ):
-
     if R is None:
         T = y_len
         R = np.eye(T)
@@ -73,36 +72,33 @@ def prob_deconv(
     w_l0 = cp.Parameter(
         shape=T, value=np.ones(T), nonneg=True, name="w_l0"
     )  # product of l0_penal * w!
+    coef = cp.Parameter(shape=coef_len, name="coef")
     if use_base:
         b = cp.Variable(nonneg=True, name="b")
     else:
         b = cp.Constant(value=0, name="b")
     err_term = cp.norm(y - scale * R @ c - b, p={"l1": 1, "l2": 2}[norm])
-    obj = cp.Minimize(err_term + w_l0.T @ cp.abs(s) + l1_penal * cp.norm(s))
-    data_dict = {
+    obj = cp.Minimize(err_term + w_l0.T @ cp.abs(s) + l1_penal * cp.norm(s, 1))
+    if ar_mode:
+        cons = [s == G @ c]
+    else:
+        H = sum([cp.diag(cp.promote(coef[i], (T - i,)), i) for i in range(coef_len)]).T
+        cons = [c == H @ s, s[-1] == 0]
+    if amp_constraint:
+        cons.append(s <= 1)
+    prob = cp.Problem(obj, cons)
+    prob.data_dict = {
         "y": y,
         "c": c,
         "s": s,
         "b": b,
         "R": R,
+        "coef": coef,
         "scale": scale,
         "l1_penal": l1_penal,
         "w_l0": w_l0,
         "err_term": err_term,
     }
-    if ar_mode:
-        G = cp.Parameter(shape=(T, T), name="G")
-        data_dict["G"] = G
-        cons = [s == G @ c]
-    else:
-        # TODO: make this dpp compliant. ref: https://github.com/cvxpy/cvxpy/issues/2218
-        kn = cp.Parameter(shape=kn_len, name="kn", nonneg=True)
-        data_dict["kn"] = kn
-        cons = [c[:, 0] == cp.convolve(kn, s[:, 0])[:T], s[-1] == 0]
-    if amp_constraint:
-        cons.append(s <= 1)
-    prob = cp.Problem(obj, cons)
-    prob.data_dict = data_dict
     return prob
 
 
@@ -110,9 +106,7 @@ def prob_deconv(
 def solve_deconv(
     y: np.ndarray,
     prob: cp.Problem,
-    ar_mode: bool = True,
-    G: np.ndarray = None,
-    kn: np.ndarray = None,
+    coef: np.ndarray,
     l1_penal: float = 0,
     scale: float = 1,
     return_obj: bool = False,
@@ -122,12 +116,7 @@ def solve_deconv(
     prob.data_dict["y"].value = y.reshape((-1, 1))
     prob.data_dict["scale"].value = scale
     prob.data_dict["l1_penal"].value = l1_penal
-    if ar_mode:
-        assert G is not None, "deconv matrix `G` must be provided in ar mode"
-        prob.data_dict["G"].value = G
-    else:
-        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
-        prob.data_dict["kn"].value = kn
+    prob.data_dict["coef"].value = coef
     prob.solve(solver=solver)
     if return_obj:
         return c.value, s.value, b.value, prob.data_dict["err_term"].value
@@ -139,9 +128,7 @@ def solve_deconv(
 def solve_deconv_l0(
     y: np.ndarray,
     prob: cp.Problem,
-    ar_mode: bool = True,
-    G: np.ndarray = None,
-    kn: np.ndarray = None,
+    coef: np.ndarray,
     l0_penal: float = 0,
     scale: float = 1,
     return_obj: bool = False,
@@ -155,12 +142,7 @@ def solve_deconv_l0(
     prob.data_dict["y"].value = y.reshape((-1, 1))
     prob.data_dict["w_l0"].value = l0_penal * np.ones(T)
     prob.data_dict["scale"].value = scale
-    if ar_mode:
-        assert G is not None, "deconv matrix `G` must be provided in ar mode"
-        prob.data_dict["G"].value = G
-    else:
-        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
-        prob.data_dict["kn"].value = kn
+    prob.data_dict["coef"].value = coef
     i = 0
     metric_df = None
     s_last = None
@@ -170,7 +152,7 @@ def solve_deconv_l0(
         except TypeError:
             obj_best = np.inf
         try:
-            prob.solve(solver=cp.CLARABEL, warm_start=bool(i))
+            prob.solve(warm_start=bool(i))
         except cp.SolverError:
             prob.solve(
                 solver=cp.OSQP,
@@ -229,8 +211,7 @@ def solve_deconv_bin(
     y: np.ndarray,
     prob: cp.Problem,
     prob_cons: cp.Problem,
-    G: np.ndarray = None,
-    kn: np.ndarray = None,
+    coef: np.ndarray,
     ar_mode: bool = True,
     R: np.ndarray = None,
     nthres=1000,
@@ -241,13 +222,11 @@ def solve_deconv_bin(
 ):
     # parameters
     if ar_mode:
-        assert G is not None, "deconv matrix `G` must be provided in ar mode"
         K = sps.linalg.inv(G)
     else:
-        assert kn is not None, "convolution kernel `kn` must be provided in non-ar mode"
-        K = sps.csc_matrix(convolution_matrix(kn, R.shape[1])[: R.shape[1], :])
+        K = sps.csc_matrix(convolution_matrix(coef, R.shape[1])[: R.shape[1], :])
     RK = (R @ K).todense()
-    _, s_init, _ = solve_deconv(y, prob, G=G, kn=kn, ar_mode=ar_mode)
+    _, s_init, _ = solve_deconv(y, prob, coef=coef)
     scale = np.ptp(s_init)
     if use_l0:
         l0_penal = 1
@@ -259,18 +238,11 @@ def solve_deconv_bin(
     while niter < max_iters:
         if use_l0:
             _, s_bin, b_bin, lb, _ = solve_deconv_l0(
-                y,
-                prob_cons,
-                G=G,
-                kn=kn,
-                scale=scale,
-                return_obj=True,
-                ar_mode=ar_mode,
-                l0_penal=l0_penal,
+                y, prob_cons, coef=coef, scale=scale, return_obj=True, l0_penal=l0_penal
             )
         else:
             _, s_bin, b_bin, lb = solve_deconv(
-                y, prob_cons, G=G, kn=kn, scale=scale, return_obj=True, ar_mode=ar_mode
+                y, prob_cons, coef=coef, scale=scale, return_obj=True
             )
         th_svals = max_thres(np.abs(s_bin), nthres, th_min=0, th_max=1)
         th_cvals = [RK @ ss for ss in th_svals]
