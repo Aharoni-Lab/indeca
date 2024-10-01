@@ -80,9 +80,15 @@ def prob_deconv(
     err_term = cp.norm(y - scale * R @ c - b, p={"l1": 1, "l2": 2}[norm])
     obj = cp.Minimize(err_term + w_l0.T @ cp.abs(s) + l1_penal * cp.norm(s, 1))
     if ar_mode:
+        G = sum(
+            [
+                cp.diag(cp.promote(-coef[i], (T - i - 1,)), -i - 1)
+                for i in range(coef_len)
+            ]
+        ) + np.eye(T)
         cons = [s == G @ c]
     else:
-        H = sum([cp.diag(cp.promote(coef[i], (T - i,)), i) for i in range(coef_len)]).T
+        H = sum([cp.diag(cp.promote(coef[i], (T - i,)), -i) for i in range(coef_len)])
         cons = [c == H @ s, s[-1] == 0]
     if amp_constraint:
         cons.append(s <= 1)
@@ -222,6 +228,7 @@ def solve_deconv_bin(
 ):
     # parameters
     if ar_mode:
+        G = construct_G(coef, R.shape[1])
         K = sps.linalg.inv(G)
     else:
         K = sps.csc_matrix(convolution_matrix(coef, R.shape[1])[: R.shape[1], :])

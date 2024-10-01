@@ -93,10 +93,12 @@ def pipeline_bin(
             "scale": np.nan,
         }
     )
-    prob = prob_deconv(T, coef_len=ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm)
+    prob = prob_deconv(
+        T, coef_len=p if ar_mode else ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm
+    )
     prob_cons = prob_deconv(
         T,
-        coef_len=ar_kn_len,
+        coef_len=p if ar_mode else ar_kn_len,
         ar_mode=ar_mode,
         R=R,
         norm=deconv_norm,
@@ -114,7 +116,7 @@ def pipeline_bin(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
             if ar_mode:
-                cur_G = construct_G(g[icell], T * up_factor)
+                cur_coef = g[icell]
             else:
                 cur_coef = exp_pulse(
                     tau[icell, 0],
@@ -264,10 +266,12 @@ def pipeline_cnmf(
         ps = np.tile([1, -1], (ncell, 1))
     C_cnmf, S_cnmf = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
     # 2 cnmf algorithm
-    prob = prob_deconv(T, coef_len=ar_kn_len, ar_mode=ar_mode, use_base=True, R=R)
+    prob = prob_deconv(
+        T, coef_len=p if ar_mode else ar_kn_len, ar_mode=ar_mode, use_base=True, R=R
+    )
     for icell, y in enumerate(Y):
         if ar_mode:
-            cur_G = construct_G(g[icell], T * up_factor)
+            cur_coef = g[icell]
         else:
             cur_coef = exp_pulse(
                 tau[icell, 0],
