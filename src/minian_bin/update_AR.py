@@ -213,10 +213,8 @@ def solve_fit_h(
     s_len=60,
     norm="l1",
     tol=1e-3,
-    fit_method="numerical",
     max_iters: int = 30,
     verbose=False,
-    ar_mode: bool = True,
 ):
     metric_df = None
     h_df = None
@@ -224,14 +222,7 @@ def solve_fit_h(
     niter = 0
     while niter < max_iters:
         h = solve_h(y, s, scal, s_len, norm, smth_penal)
-        if fit_method == "solve":
-            lams, ps, h_fit = fit_sumexp(h, N)
-        elif fit_method == "numerical":
-            lams, ps, h_fit = fit_sumexp_gd(h, ar_mode=ar_mode)
-        else:
-            raise NotImplementedError(
-                "`fit_method` has to be one of ['solve', 'numerical']"
-            )
+        lams, ps, h_fit = fit_sumexp(h, N)
         met = {
             "iter": niter,
             "smth_penal": smth_penal,
@@ -271,6 +262,58 @@ def solve_fit_h(
         niter += 1
     else:
         warnings.warn("max smth iteration reached")
+    return lams, ps, h, h_fit, metric_df, h_df
+
+
+def solve_fit_h_num(
+    y,
+    s,
+    scal,
+    N=2,
+    s_len=60,
+    norm="l1",
+    tol=1e-3,
+    max_iters: int = 30,
+    ar_mode: bool = True,
+):
+    metric_df = None
+    h_df = None
+    i_iter = 0
+    while i_iter < max_iters:
+        h = solve_h(y, s, scal, s_len, norm)
+        lams, ps, h_fit = fit_sumexp_gd(h, ar_mode=ar_mode)
+        taus = -1 / lams
+        met = pd.DataFrame(
+            {
+                "iter": i_iter,
+                "tau_d": taus[0],
+                "tau_r": taus[1],
+                "p0": ps[0],
+                "p1": ps[1],
+                "scal": scal,
+            }
+        )
+        metric_df = pd.concat([metric_df, met], ignore_index=True)
+        h_df = pd.concat(
+            [
+                h_df,
+                pd.DataFrame(
+                    {
+                        "iter": i_iter,
+                        "h": h,
+                        "h_fit": h_fit,
+                        "frame": np.arange(len(h)),
+                    }
+                ),
+            ]
+        )
+        if np.abs(ps[0] - 1) < tol:
+            break
+        else:
+            scal = scal * ps[0]
+            i_iter += 1
+    else:
+        warnings.warn("max h fitting iteration reached")
     return lams, ps, h, h_fit, metric_df, h_df
 
 

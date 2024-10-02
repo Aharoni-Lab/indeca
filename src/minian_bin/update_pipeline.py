@@ -6,7 +6,7 @@ from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
 from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
-from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h
+from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h_num
 from .update_bin import (
     construct_R,
     estimate_coefs,
@@ -192,7 +192,7 @@ def pipeline_bin(
         else:
             S_ar = S_best
         if ar_use_all:
-            lams, ps, h, h_fit, _, _ = solve_fit_h(
+            lams, ps, h, h_fit, _, _ = solve_fit_h_num(
                 Y, S_ar, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
             )
             tau = np.tile(-1 / lams, (ncell, 1))
@@ -203,7 +203,7 @@ def pipeline_bin(
             tau = np.empty((ncell, p))
             ps = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
-                lams, cur_ps, _, _, _, _ = solve_fit_h(
+                lams, cur_ps, _, _, _, _ = solve_fit_h_num(
                     y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
                 )
                 tau[icell, :] = -1 / lams
