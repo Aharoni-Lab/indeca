@@ -77,6 +77,7 @@ def pipeline_bin(
     # 2. iteration loop
     C_ls = []
     S_ls = []
+    scal_ls = []
     h_ls = []
     h_fit_ls = []
     metric_df = pd.DataFrame(
@@ -143,13 +144,26 @@ def pipeline_bin(
             scale[icell] = scl
             err[icell] = np.linalg.norm(y - c_bin.squeeze())
         # 2.2 update AR
-        if up_factor > 1:
-            S_ar = np.stack([sum_downsample(s, up_factor) for s in S], axis=0)
+        best_idx = (
+            metric_df.set_index("iter").groupby("cell", sort=True)["err"].idxmin()
+        )
+        if len(best_idx.dropna()) == ncell:
+            S_best = np.stack(
+                [S_ls[best_i][uid, :] for uid, best_i in best_idx.items()], axis=0
+            )
+            scal_best = np.stack(
+                [scal_ls[best_i][uid] for uid, best_i in best_idx.items()], axis=0
+            )
         else:
-            S_ar = S
+            S_best = S
+            scal_best = scale
+        if up_factor > 1:
+            S_ar = np.stack([sum_downsample(s, up_factor) for s in S_best], axis=0)
+        else:
+            S_ar = S_best
         if ar_use_all:
             lams, ps, h, h_fit, _, _ = solve_fit_h(
-                Y, S_ar, scale, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
+                Y, S_ar, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
             )
             tau = np.tile(-1 / lams, (ncell, 1))
             g = np.tile(tau2AR(*(-1 / lams)), (ncell, 1))
@@ -160,7 +174,7 @@ def pipeline_bin(
             ps = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
                 lams, cur_ps, _, _, _, _ = solve_fit_h(
-                    y, s, scale, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
+                    y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
                 )
                 tau[icell, :] = -1 / lams
                 g[icell, :] = tau2AR(*(-1 / lams))
@@ -178,11 +192,13 @@ def pipeline_bin(
                 "p1": ps.T[1],
                 "err": err,
                 "scale": scale,
+                "best_idx": best_idx,
             }
         )
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
         C_ls.append(C)
         S_ls.append(S)
+        scal_ls.append(scale)
         h_ls.append(h)
         h_fit_ls.append(h_fit)
         # 2.4 check convergence
