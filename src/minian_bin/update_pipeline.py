@@ -171,9 +171,11 @@ def pipeline_bin(
             h_fit_ls.append(np.full(T, np.nan))
         # 2.3 update AR
         best_idx = (
-            metric_df.set_index("iter").groupby("cell", sort=True)["err"].idxmin()
+            metric_df[metric_df["iter"] > 0]
+            .set_index("iter")
+            .groupby("cell", sort=True)["err"]
+            .idxmin()
         )
-        metric_df.loc[metric_df["iter"] == i_iter, "best_idx"] = np.array(best_idx)
         if len(best_idx.dropna()) == ncell:
             S_best = np.stack(
                 [S_ls[best_i][uid, :] for uid, best_i in best_idx.items()], axis=0
@@ -181,6 +183,7 @@ def pipeline_bin(
             scal_best = np.stack(
                 [scal_ls[best_i][uid] for uid, best_i in best_idx.items()], axis=0
             )
+            metric_df.loc[metric_df["iter"] == i_iter, "best_idx"] = np.array(best_idx)
         else:
             S_best = S
             scal_best = scale
