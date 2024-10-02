@@ -167,8 +167,8 @@ def pipeline_bin(
             h_ls.append(h)
             h_fit_ls.append(h_fit)
         except UnboundLocalError:
-            h_ls.append(np.full(ar_kn_len, np.nan))
-            h_fit_ls.append(np.full(ar_kn_len, np.nan))
+            h_ls.append(np.full(T, np.nan))
+            h_fit_ls.append(np.full(T, np.nan))
         # 2.3 update AR
         best_idx = (
             metric_df.set_index("iter").groupby("cell", sort=True)["err"].idxmin()
