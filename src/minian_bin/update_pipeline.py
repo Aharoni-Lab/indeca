@@ -81,18 +81,19 @@ def pipeline_bin(
     h_ls = []
     h_fit_ls = []
     metric_df = pd.DataFrame(
-        {
-            "iter": -1,
-            "cell": np.arange(ncell),
-            "g0": g.T[0],
-            "g1": g.T[1],
-            "tau_d": tau.T[0],
-            "tau_r": tau.T[1],
-            "p0": ps.T[0],
-            "p1": ps.T[1],
-            "err": np.nan,
-            "scale": np.nan,
-        }
+        columns=[
+            "iter",
+            "cell",
+            "g0",
+            "g1",
+            "tau_d",
+            "tau_r",
+            "p0",
+            "p1",
+            "err",
+            "scale",
+            "best_idx",
+        ]
     )
     prob = prob_deconv(
         T, coef_len=p if ar_mode else ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm
@@ -143,10 +144,36 @@ def pipeline_bin(
             S[icell, :] = s_bin.squeeze()
             scale[icell] = scl
             err[icell] = np.linalg.norm(y - c_bin.squeeze())
-        # 2.2 update AR
+        # 2.2 save iteration results
+        cur_metric = pd.DataFrame(
+            {
+                "iter": i_iter,
+                "cell": np.arange(ncell),
+                "g0": g.T[0],
+                "g1": g.T[1],
+                "tau_d": tau.T[0],
+                "tau_r": tau.T[1],
+                "p0": ps.T[0],
+                "p1": ps.T[1],
+                "err": err,
+                "scale": scale,
+            }
+        )
+        metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
+        C_ls.append(C)
+        S_ls.append(S)
+        scal_ls.append(scale)
+        try:
+            h_ls.append(h)
+            h_fit_ls.append(h_fit)
+        except UnboundLocalError:
+            h_ls.append(np.full(ar_kn_len, np.nan))
+            h_fit_ls.append(np.full(ar_kn_len, np.nan))
+        # 2.3 update AR
         best_idx = (
             metric_df.set_index("iter").groupby("cell", sort=True)["err"].idxmin()
         )
+        metric_df.loc[metric_df["iter"] == i_iter, "best_idx"] = np.array(best_idx)
         if len(best_idx.dropna()) == ncell:
             S_best = np.stack(
                 [S_ls[best_i][uid, :] for uid, best_i in best_idx.items()], axis=0
@@ -179,28 +206,6 @@ def pipeline_bin(
                 tau[icell, :] = -1 / lams
                 g[icell, :] = tau2AR(*(-1 / lams))
                 ps[icell, :] = cur_ps
-        # 2.3 save iteration results
-        cur_metric = pd.DataFrame(
-            {
-                "iter": i_iter,
-                "cell": np.arange(ncell),
-                "g0": g.T[0],
-                "g1": g.T[1],
-                "tau_d": tau.T[0],
-                "tau_r": tau.T[1],
-                "p0": ps.T[0],
-                "p1": ps.T[1],
-                "err": err,
-                "scale": scale,
-                "best_idx": best_idx,
-            }
-        )
-        metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
-        C_ls.append(C)
-        S_ls.append(S)
-        scal_ls.append(scale)
-        h_ls.append(h)
-        h_fit_ls.append(h_fit)
         # 2.4 check convergence
         metric_last = metric_df[metric_df["iter"] < i_iter].dropna()
         if len(metric_last) > 0:
