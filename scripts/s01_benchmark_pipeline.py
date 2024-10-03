@@ -179,15 +179,17 @@ for up_type, in_path in IN_PATH.items():
     )
     fig_coef.write_html(os.path.join(FIG_PATH, "coef-{}.html".format(up_type)))
     for i_iter in np.array(S_iter.coords["iter"]):
+        uids = np.array(updt_ds.coords["unit_id"])
         fig = make_subplots(
             updt_ds.sizes["unit_id"],
             2,
             shared_xaxes=True,
             shared_yaxes=True,
+            row_titles=["unit_id: {}".format(u) for u in uids],
             horizontal_spacing=1e-2,
             column_width=[0.8, 0.2],
         )
-        for iu, uid in enumerate(np.array(updt_ds.coords["unit_id"])):
+        for iu, uid in enumerate(uids):
             irow = iu + 1
             scl = iter_df.set_index(["iter", "unit_id"]).loc[i_iter, uid]["scale"]
             scl_gt = iter_df.set_index(["iter", "unit_id"]).loc[i_iter, uid][
@@ -270,6 +272,7 @@ for up_type, in_path in IN_PATH.items():
                 row=irow,
                 col=2,
             )
+        fig.update_layout(height=200 * updt_ds.sizes["unit_id"])
         fig.write_html(os.path.join(FIG_PATH, "trs-iter{}.html".format(i_iter)))
 
 
