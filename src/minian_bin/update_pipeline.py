@@ -26,6 +26,7 @@ def pipeline_bin(
     tau_init=None,
     return_iter=False,
     max_iters=50,
+    n_best=3,
     err_tol=1e-3,
     est_noise_freq=0.4,
     est_use_smooth=True,
@@ -170,23 +171,24 @@ def pipeline_bin(
             h_ls.append(np.full(T, np.nan))
             h_fit_ls.append(np.full(T, np.nan))
         # 2.3 update AR
-        best_idx = (
-            metric_df[metric_df["iter"] > 0]
-            .set_index("iter")
-            .groupby("cell", sort=True)["err"]
-            .idxmin()
-        )
-        if len(best_idx.dropna()) == ncell:
-            S_best = np.stack(
-                [S_ls[best_i][uid, :] for uid, best_i in best_idx.items()], axis=0
-            )
-            scal_best = np.stack(
-                [scal_ls[best_i][uid] for uid, best_i in best_idx.items()], axis=0
-            )
-            metric_df.loc[metric_df["iter"] == i_iter, "best_idx"] = np.array(best_idx)
+        metric_df = metric_df.set_index(["iter", "cell"])
+        if n_best is not None and i_iter > n_best:
+            S_best = np.empty_like(S)
+            scal_best = np.empty_like(scale)
+            for icell, cell_met in metric_df.loc[1:, :].groupby("cell", sort=True):
+                cell_met = cell_met.reset_index().sort_values("err", ascending=True)
+                cur_idx = np.array(cell_met["iter"][:n_best])
+                metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
+                    cur_idx.astype(str)
+                )
+                S_best[icell, :] = np.sum(
+                    np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
+                ) > (n_best / 2)
+                scal_best[icell] = np.median([scal_ls[i][icell] for i in cur_idx])
         else:
             S_best = S
             scal_best = scale
+        metric_df = metric_df.reset_index()
         if up_factor > 1:
             S_ar = np.stack([sum_downsample(s, up_factor) for s in S_best], axis=0)
         else:
