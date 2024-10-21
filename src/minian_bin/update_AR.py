@@ -8,6 +8,7 @@ from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import curve_fit
 
 from .update_bin import construct_G
+from .utilities import scal_lstsq
 
 
 def convolve_g(s, g):
@@ -163,6 +164,40 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = Tr
     )
 
 
+def fit_sumexp_iter(y, max_iters=50, err_atol=1e-3, err_rtol=1e-3, **kwargs):
+    err_org = np.linalg.norm(y)
+    err_tol = max(err_atol, err_rtol * err_org)
+    err = err_org
+    p = y.max()
+    coef_df = []
+    for i_iter in range(max_iters):
+        lams, ps, y_fit = fit_sumexp_gd(y / p, fit_amp=False, **kwargs)
+        taus = -1 / lams
+        err_last = err
+        err = np.linalg.norm(y - y_fit * p)
+        coef_df.append(
+            pd.DataFrame(
+                [
+                    {
+                        "i_iter": i_iter,
+                        "p": p,
+                        "tau_d": taus[0],
+                        "tau_r": taus[1],
+                        "err": err,
+                    }
+                ]
+            )
+        )
+        if np.abs(err - err_last) < err_tol:
+            break
+        else:
+            p = scal_lstsq(y_fit, y)
+    else:
+        warnings.warn("max scale iteration reached for sumexp fitting")
+    coef_df = pd.concat(coef_df, ignore_index=True)
+    return lams, ps * p, y_fit, coef_df
+
+
 def lst_l1(A, b):
     x = cp.Variable(A.shape[1])
     obj = cp.Minimize(cp.norm(b - A @ x, 1))
@@ -281,7 +316,7 @@ def solve_fit_h_num(
     i_iter = 0
     while i_iter < max_iters:
         h = solve_h(y, s, scal, s_len, norm)
-        lams, ps, h_fit = fit_sumexp_gd(h, ar_mode=ar_mode)
+        lams, ps, h_fit, _ = fit_sumexp_iter(h, ar_mode=ar_mode)
         taus = -1 / lams
         met = pd.DataFrame(
             {
@@ -301,6 +336,7 @@ def solve_fit_h_num(
                     {
                         "iter": i_iter,
                         "h": h,
+                        "h_max": h.max(),
                         "h_fit": h_fit,
                         "frame": np.arange(len(h)),
                     }
