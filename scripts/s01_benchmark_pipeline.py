@@ -28,8 +28,8 @@ IN_PATH = {
     "org": "./intermediate/simulated/simulated-exp-samp.nc",
     "upsamp": "./intermediate/simulated/simulated-exp-upsamp.nc",
 }
-INT_PATH = "./intermediate/benchmark_pipeline_100cell_init"
-FIG_PATH = "./figs/benchmark_pipeline_100cell_init"
+INT_PATH = "./intermediate/benchmark_pipeline_100cell_est"
+FIG_PATH = "./figs/benchmark_pipeline_100cell_est"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
@@ -42,7 +42,7 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% 1. Generate or import dataset at normal FPS for calcium imaging
 sps_penal = 1
-max_iters = 50
+max_iters = 30
 # for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
 for up_type, up_factor in {"org": 1}.items():
     # get data
@@ -81,7 +81,7 @@ for up_type, up_factor in {"org": 1}.items():
         np.array(Y_solve),
         up_factor,
         max_iters=max_iters,
-        tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
+        # tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
         return_iter=True,
         ar_use_all=True,
         ar_mode=False,
