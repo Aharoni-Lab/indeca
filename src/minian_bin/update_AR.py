@@ -8,6 +8,7 @@ from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import curve_fit
 
 from .update_bin import construct_G
+from .utilities import scal_lstsq
 
 
 def convolve_g(s, g):
@@ -163,6 +164,40 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = Tr
     )
 
 
+def fit_sumexp_iter(y, max_iters=50, err_atol=1e-3, err_rtol=1e-3, **kwargs):
+    err_org = np.linalg.norm(y)
+    err_tol = max(err_atol, err_rtol * err_org)
+    err = err_org
+    p = y.max()
+    coef_df = []
+    for i_iter in range(max_iters):
+        lams, ps, y_fit = fit_sumexp_gd(y / p, fit_amp=False, **kwargs)
+        taus = -1 / lams
+        err_last = err
+        err = np.linalg.norm(y - y_fit * p)
+        coef_df.append(
+            pd.DataFrame(
+                [
+                    {
+                        "i_iter": i_iter,
+                        "p": p,
+                        "tau_d": taus[0],
+                        "tau_r": taus[1],
+                        "err": err,
+                    }
+                ]
+            )
+        )
+        if np.abs(err - err_last) < err_tol:
+            break
+        else:
+            p = scal_lstsq(y_fit, y)
+    else:
+        warnings.warn("max scale iteration reached for sumexp fitting")
+    coef_df = pd.concat(coef_df, ignore_index=True)
+    return lams, ps * p, y_fit, coef_df
+
+
 def lst_l1(A, b):
     x = cp.Variable(A.shape[1])
     obj = cp.Minimize(cp.norm(b - A @ x, 1))
@@ -172,7 +207,7 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
+def solve_h(y, s, scal, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
@@ -196,7 +231,7 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
         conv_term = cp.convolve(s, h)[:T]
     norm_ord = {"l1": 1, "l2": 2}[norm]
     obj = cp.Minimize(
-        cp.norm(y - conv_term - b, norm_ord)
+        cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, norm_ord)
         + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
     )
     cons = [b >= 0]
@@ -208,29 +243,21 @@ def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
 def solve_fit_h(
     y,
     s,
+    scal,
     N=2,
     s_len=60,
     norm="l1",
     tol=1e-3,
-    fit_method="numerical",
     max_iters: int = 30,
     verbose=False,
-    ar_mode: bool = True,
 ):
     metric_df = None
     h_df = None
     smth_penal = 0
     niter = 0
     while niter < max_iters:
-        h = solve_h(y, s, s_len, norm, smth_penal)
-        if fit_method == "solve":
-            lams, ps, h_fit = fit_sumexp(h, N)
-        elif fit_method == "numerical":
-            lams, ps, h_fit = fit_sumexp_gd(h, ar_mode=ar_mode)
-        else:
-            raise NotImplementedError(
-                "`fit_method` has to be one of ['solve', 'numerical']"
-            )
+        h = solve_h(y, s, scal, s_len, norm, smth_penal)
+        lams, ps, h_fit = fit_sumexp(h, N)
         met = {
             "iter": niter,
             "smth_penal": smth_penal,
@@ -270,6 +297,59 @@ def solve_fit_h(
         niter += 1
     else:
         warnings.warn("max smth iteration reached")
+    return lams, ps, h, h_fit, metric_df, h_df
+
+
+def solve_fit_h_num(
+    y,
+    s,
+    scal,
+    N=2,
+    s_len=60,
+    norm="l1",
+    tol=1e-3,
+    max_iters: int = 30,
+    ar_mode: bool = True,
+):
+    metric_df = None
+    h_df = None
+    i_iter = 0
+    while i_iter < max_iters:
+        h = solve_h(y, s, scal, s_len, norm)
+        lams, ps, h_fit, _ = fit_sumexp_iter(h, ar_mode=ar_mode)
+        taus = -1 / lams
+        met = pd.DataFrame(
+            {
+                "iter": i_iter,
+                "tau_d": taus[0],
+                "tau_r": taus[1],
+                "p0": ps[0],
+                "p1": ps[1],
+                "scal": scal,
+            }
+        )
+        metric_df = pd.concat([metric_df, met], ignore_index=True)
+        h_df = pd.concat(
+            [
+                h_df,
+                pd.DataFrame(
+                    {
+                        "iter": i_iter,
+                        "h": h,
+                        "h_max": h.max(),
+                        "h_fit": h_fit,
+                        "frame": np.arange(len(h)),
+                    }
+                ),
+            ]
+        )
+        if np.abs(ps[0] - 1) < tol:
+            break
+        else:
+            scal = scal * ps[0]
+            i_iter += 1
+    else:
+        warnings.warn("max h fitting iteration reached")
     return lams, ps, h, h_fit, metric_df, h_df
 
 

@@ -464,7 +464,7 @@ def ar_pulse(theta1, theta2, nsamp):
     return ar, t, pulse
 
 
-def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres=0):
+def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres: float = None):
     t = np.arange(nsamp).astype(float)
     pulse = np.zeros_like(t)
     pulse[0] = 1
@@ -479,7 +479,11 @@ def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres=0):
     else:
         raise ValueError("Invalid tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r))
     tr = np.convolve(kn, pulse, mode="full")[:nsamp]
-    tr = tr[: np.where(tr > trunc_thres)[0].max()]
+    if trunc_thres is not None:
+        trunc_idx = np.where(tr > trunc_thres)[0].max()
+        tr = tr[:trunc_idx]
+        t = t[:trunc_idx]
+        pulse = pulse[:trunc_idx]
     return tr, t, pulse
 
 
