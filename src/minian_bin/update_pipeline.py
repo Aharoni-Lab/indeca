@@ -13,6 +13,7 @@ from .update_bin import (
     prob_deconv,
     solve_deconv,
     solve_deconv_bin,
+    solve_deconv_bin_direct,
     sum_downsample,
 )
 
@@ -128,7 +129,7 @@ def pipeline_bin(
                     p_d=ps[icell, 0],
                     p_r=ps[icell, 1],
                 )[0]
-            c_bin, s_bin, _, scl, _, _ = solve_deconv_bin(
+            c_bin, s_bin, _, scl, _, _ = solve_deconv_bin_direct(
                 y,
                 prob,
                 prob_cons,

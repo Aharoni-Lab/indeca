@@ -7,6 +7,7 @@ import scipy.sparse as sps
 import xarray as xr
 from line_profiler import profile
 from scipy.linalg import convolution_matrix
+from scipy.optimize import direct
 
 from .cnmf import filt_fft, get_ar_coef, noise_fft
 from .simulation import tau2AR
@@ -315,6 +316,153 @@ def solve_deconv_bin(
                     l0_penal = l0_ub / 2
                 else:
                     l0_penal = (l0_ub + l0_lb) / 2
+            scale = scale_new
+            niter += 1
+    else:
+        metric_df["converged"] = False
+        warnings.warn("max scale iteration reached")
+    return K @ opt_s, opt_s, b_bin, opt_scal, s_bin, metric_df
+
+
+def solve_deconv_thres(
+    y,
+    prob,
+    RK,
+    coef,
+    scale,
+    use_l0,
+    l0_penal=0,
+    nthres=1000,
+    norm="l1",
+    return_err=True,
+):
+    if use_l0:
+        _, s_bin, b_bin, lb, _ = solve_deconv_l0(
+            y, prob, coef=coef, scale=scale, return_obj=True, l0_penal=l0_penal
+        )
+    else:
+        _, s_bin, b_bin, lb = solve_deconv(
+            y, prob, coef=coef, scale=scale, return_obj=True
+        )
+    th_svals = max_thres(np.abs(s_bin), nthres, th_min=0, th_max=1)
+    th_cvals = [RK @ ss for ss in th_svals]
+    th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
+    th_objs = [
+        np.linalg.norm(
+            y - scl * np.array(cc).squeeze() - b_bin, ord={"l1": 1, "l2": 2}[norm]
+        )
+        for scl, cc in zip(th_scals, th_cvals)
+    ]
+    opt_idx = np.argmin(th_objs)
+    opt_s = th_svals[opt_idx]
+    opt_obj = th_objs[opt_idx]
+    opt_scal = th_scals[opt_idx]
+    if return_err:
+        return opt_obj
+    else:
+        return opt_s, opt_scal, opt_obj, s_bin, b_bin
+
+
+def solve_deconv_bin_direct(
+    y: np.ndarray,
+    prob: cp.Problem,
+    prob_cons: cp.Problem,
+    coef: np.ndarray,
+    ar_mode: bool = True,
+    R: np.ndarray = None,
+    nthres=1000,
+    tol: float = 1e-6,
+    max_iters: int = 50,
+    use_l0=True,
+    norm="l1",
+):
+    # parameters
+    if ar_mode:
+        G = construct_G(coef, R.shape[1])
+        K = sps.linalg.inv(G)
+    else:
+        K = sps.csc_matrix(convolution_matrix(coef, R.shape[1])[: R.shape[1], :])
+    RK = (R @ K).todense()
+    _, s_init, _ = solve_deconv(y, prob, coef=coef)
+    scale = np.ptp(s_init)
+    # iterations
+    metric_df = None
+    niter = 0
+    while niter < max_iters:
+        ub = np.linalg.norm(y, ord={"l1": 1, "l2": 2}[norm])
+        for i in range(int(np.ceil(np.log2(ub)))):
+            _, s, _, _ = solve_deconv_l0(
+                np.array(y),
+                prob_cons,
+                coef=coef,
+                l0_penal=ub,
+                scale=scale,
+                return_obj=False,
+            )
+            if (s > 0).sum() > 0:
+                ub = ub * 2
+                break
+            else:
+                ub = ub / 2
+        else:
+            print("max ub iterations reached")
+        res = direct(
+            lambda x: solve_deconv_thres(
+                y, prob_cons, RK, coef, scale, l0_penal=x, use_l0=True
+            ),
+            bounds=[(0, ub)],
+            maxfun=30,
+        )
+        l0_opt = res.x.item()
+        opt_s, opt_scal, opt_obj, s_bin, b_bin = solve_deconv_thres(
+            y,
+            prob_cons,
+            RK,
+            coef,
+            scale,
+            use_l0=True,
+            l0_penal=l0_opt,
+            return_err=False,
+        )
+        try:
+            opt_obj_idx = metric_df["obj"].idxmin()
+            opt_obj_last = metric_df.loc[opt_obj_idx, "obj"].item()
+            opt_scal_last = metric_df.loc[opt_obj_idx, "scale"].item()
+            scale_dup = metric_df["scale"].duplicated().any()
+        except TypeError:
+            opt_obj_last = np.inf
+            opt_scal_last = opt_scal
+            scale_dup = False
+        if scale_dup:
+            scale_new = opt_scal_last
+        else:
+            scale_new = (opt_scal + opt_scal_last) / 2
+        nnz = (opt_s > 0).sum()
+        metric_df = pd.concat(
+            [
+                metric_df,
+                pd.DataFrame(
+                    [
+                        {
+                            "scale": scale,
+                            "obj": opt_obj,
+                            "ub": ub,
+                            "iter": niter,
+                            "nnz": nnz,
+                            "l0_penal": l0_opt,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        if np.abs(scale_new - scale) <= tol:
+            metric_df["converged"] = True
+            break
+        elif abs(opt_obj_last - opt_obj) <= tol:
+            metric_df["converged"] = True
+            break
+        else:
             scale = scale_new
             niter += 1
     else:
