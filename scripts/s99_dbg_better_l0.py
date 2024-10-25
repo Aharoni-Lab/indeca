@@ -15,7 +15,7 @@ from tqdm.auto import tqdm
 
 from minian_bin.benchmark_utils import compute_ROC
 from minian_bin.simulation import exp_pulse
-from minian_bin.update_bin import max_thres, prob_deconv, solve_deconv_l0
+from minian_bin.update_bin import max_thres, prob_deconv, solve_deconv, solve_deconv_l0
 from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 from minian_bin.utilities import scal_lstsq
 
@@ -52,6 +52,7 @@ sig_lev = xr.DataArray(
     coords={"unit_id": C_gt.coords["unit_id"]},
     name="sig_lev",
 )
+use_l0 = False
 noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset).transpose("unit_id", "frame")
 kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
@@ -65,15 +66,27 @@ metrics = []
 for uid in np.arange(5, 100, 5):
     y = Y_solve.sel(unit_id=uid)
     sig = sig_lev.sel(unit_id=uid)
-    for l0_penal in tqdm(np.linspace(0, 20, 50)):
-        c, s, b, err, met_df = solve_deconv_l0(
-            np.array(y),
-            prob,
-            kn,
-            l0_penal=l0_penal,
-            scale=np.array(sig),
-            return_obj=True,
-        )
+    for penal in tqdm(np.linspace(0, 20, 50)):
+        if use_l0:
+            c, s, b, err, met_df = solve_deconv_l0(
+                np.array(y),
+                prob,
+                kn,
+                l0_penal=penal,
+                scale=np.array(sig),
+                return_obj=True,
+            )
+        else:
+            c, s, b, err = solve_deconv(
+                np.array(y),
+                prob,
+                kn,
+                l1_penal=penal,
+                scale=np.array(sig),
+                return_obj=True,
+                warm_start=penal > 0,
+            )
+            met_df = pd.DataFrame([{"err": err}])
         th_svals = max_thres(np.abs(s), 1000, th_min=0, th_max=1)
         th_cvals = [RK @ ss for ss in th_svals]
         th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
@@ -85,7 +98,7 @@ for uid in np.arange(5, 100, 5):
         opt_s = th_svals[opt_idx]
         opt_obj = th_objs[opt_idx]
         opt_scal = th_scals[opt_idx]
-        met_df["l0_penal"] = l0_penal
+        met_df["penal"] = penal
         met_df["err"] = err
         met_df["err_opt"] = opt_obj
         met_df["scale"] = opt_scal
@@ -94,12 +107,12 @@ for uid in np.arange(5, 100, 5):
         S_ls.append(s)
         metrics.append(met_df)
 metrics = pd.concat(metrics, ignore_index=True)
-metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+# metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
 # %% plotting
-fig = px.line(metrics, x="l0_penal", y="err", color="unit_id")
+fig = px.line(metrics, x="penal", y="err", color="unit_id")
 fig.write_html(os.path.join(FIG_PATH, "err.html"))
-fig = px.line(metrics, x="l0_penal", y="err_opt", color="unit_id")
+fig = px.line(metrics, x="penal", y="err_opt", color="unit_id")
 fig.write_html(os.path.join(FIG_PATH, "err_opt.html"))
 
 

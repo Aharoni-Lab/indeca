@@ -118,13 +118,14 @@ def solve_deconv(
     scale: float = 1,
     return_obj: bool = False,
     solver=None,
+    warm_start=False,
 ):
     c, s, b = prob.data_dict["c"], prob.data_dict["s"], prob.data_dict["b"]
     prob.data_dict["y"].value = y.reshape((-1, 1))
     prob.data_dict["scale"].value = scale
     prob.data_dict["l1_penal"].value = l1_penal
     prob.data_dict["coef"].value = coef
-    prob.solve(solver=solver)
+    prob.solve(solver=solver, warm_start=warm_start)
     if return_obj:
         return c.value, s.value, b.value, prob.data_dict["err_term"].value
     else:
