@@ -419,9 +419,13 @@ def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post
     return Y.astype(np.uint8)
 
 
-def tau2AR(tau_d, tau_r):
+def tau2AR(tau_d, tau_r, p=1, return_scl=False):
     z1, z2 = np.exp(-1 / tau_d), np.exp(-1 / tau_r)
-    return np.real(z1 + z2), np.real(-z1 * z2)
+    if return_scl:
+        scl = p * (z1 - z2)
+        return np.real(z1 + z2), np.real(-z1 * z2), scl
+    else:
+        return np.real(z1 + z2), np.real(-z1 * z2)
 
 
 def AR2tau(theta1, theta2):

@@ -42,10 +42,9 @@ for tau_d, tau_r, p in zip(
     np.random.uniform(0.5, 2, 5),
 ):
     biexp, t, _ = exp_pulse(tau_d, tau_r, end, p_d=p, p_r=-p)
-    theta1, theta2 = tau2AR(tau_d, tau_r)
+    theta1, theta2, scl = tau2AR(tau_d, tau_r, p=p, return_scl=True)
     ar, t, _ = ar_pulse(theta1, theta2, end)
-    scl = 1 / biexp[1]
-    biexp_scl = (biexp * scl)[1:]
+    biexp_scl = (biexp / scl)[1:]
     assert np.isclose(biexp_scl, ar[:-1]).all()
     # plotting
     fig, ax = plt.subplots()
