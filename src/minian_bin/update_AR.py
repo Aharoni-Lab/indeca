@@ -120,7 +120,7 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = Tr
         np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
         + idx_max_interp
     ) / interp_factor
-    if fit_amp:
+    if fit_amp == True:
         if ar_mode:
             fit_func = lambda x, p, d, r: p * np.exp(-x / d) - (p - 1) * np.exp(-x / r)
             p0 = 2
@@ -140,7 +140,17 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = Tr
             p = np.array([p, 1 - p])
         else:
             p = np.array([p, -p])
-    else:
+    elif fit_amp == "norm":
+        res = curve_fit(
+            lambda x, d, r: 1 / (d - r) * (np.exp(-x / d) - np.exp(-x / r)),
+            x,
+            y,
+            p0=(tau_d_init, tau_r_init),
+            bounds=(0, np.inf),
+        )
+        tau_d, tau_r = res[0]
+        p = np.array([1, -1]) / (tau_d - tau_r)
+    elif fit_amp == False:
         res = curve_fit(
             lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
             x,
