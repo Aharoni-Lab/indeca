@@ -2,8 +2,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from routine.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm, tau2AR
-from routine.update_AR import fit_sumexp, fit_sumexp_split, solve_fit_h
+from minian_bin.simulation import (
+    AR2exp,
+    AR2tau,
+    ar_pulse,
+    eval_exp,
+    exp_pulse,
+    find_dhm,
+    tau2AR,
+)
+from minian_bin.update_AR import fit_sumexp, fit_sumexp_split, solve_fit_h
 
 # %% verify AR2tau
 end = 60
@@ -24,6 +32,26 @@ for theta1, theta2 in [(1.6, -0.62), (1.6, -0.7)]:
     ax.axvline(t_hat, lw=1.5, ls=":", color="grey")
     ax.axvline(t_r, lw=1.5, ls=":", color="red")
     ax.axvline(t_d, lw=1.5, ls=":", color="blue")
+    ax.legend()
+
+# %% validate biexp2AR
+end = 60
+for tau_d, tau_r, p in zip(
+    np.random.uniform(6, 10, 5),
+    np.random.uniform(1, 4, 5),
+    np.random.uniform(0.5, 2, 5),
+):
+    biexp, t, _ = exp_pulse(tau_d, tau_r, end, p_d=p, p_r=-p)
+    theta1, theta2 = tau2AR(tau_d, tau_r)
+    ar, t, _ = ar_pulse(theta1, theta2, end)
+    scl = 1 / biexp[1]
+    biexp_scl = (biexp * scl)[1:]
+    assert np.isclose(biexp_scl, ar[:-1]).all()
+    # plotting
+    fig, ax = plt.subplots()
+    ax.plot(t, biexp, label="exp", lw=2)
+    ax.plot(t[:-1], biexp_scl, label="exp_scal", lw=2)
+    ax.plot(t, ar, label="ar", lw=3, ls=":")
     ax.legend()
 
 # %% verify biexp fit
@@ -84,4 +112,3 @@ axs[2].plot(h_fit_biexp_num, label="biexp_kernel_fit", lw=3, ls=":")
 axs[2].plot(h_ar_num, label="ar_kernel", lw=1.5)
 axs[2].plot(h_fit_ar_num, label="ar_kernel_fit", lw=3, ls=":")
 axs[2].legend()
-
