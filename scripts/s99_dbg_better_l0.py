@@ -14,7 +14,7 @@ from scipy.optimize import direct
 from tqdm.auto import tqdm
 
 from minian_bin.benchmark_utils import compute_ROC
-from minian_bin.simulation import exp_pulse
+from minian_bin.simulation import exp_pulse, tau2AR
 from minian_bin.update_bin import max_thres, prob_deconv, solve_deconv, solve_deconv_l0
 from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 from minian_bin.utilities import scal_lstsq
@@ -52,15 +52,18 @@ sig_lev = xr.DataArray(
     coords={"unit_id": C_gt.coords["unit_id"]},
     name="sig_lev",
 )
-use_l0 = False
+use_l0 = True
 noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset).transpose("unit_id", "frame")
 kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
+ar_coef = np.array(tau2AR(PARAM_TAU_D, PARAM_TAU_R))
 K = sps.csc_matrix(
     convolution_matrix(kn, Y_solve.sizes["frame"])[: Y_solve.sizes["frame"], :]
 )
 RK = K.todense()
-prob = prob_deconv(Y_solve.sizes["frame"], ar_mode=False, amp_constraint=True)
+prob = prob_deconv(
+    Y_solve.sizes["frame"], coef_len=2, ar_mode=True, amp_constraint=True
+)
 C_ls, S_ls = [], []
 metrics = []
 for uid in np.arange(5, 100, 5):
@@ -71,7 +74,7 @@ for uid in np.arange(5, 100, 5):
             c, s, b, err, met_df = solve_deconv_l0(
                 np.array(y),
                 prob,
-                kn,
+                ar_coef,
                 l0_penal=penal,
                 scale=np.array(sig),
                 return_obj=True,
@@ -80,7 +83,7 @@ for uid in np.arange(5, 100, 5):
             c, s, b, err = solve_deconv(
                 np.array(y),
                 prob,
-                kn,
+                ar_coef,
                 l1_penal=penal,
                 scale=np.array(sig),
                 return_obj=True,
