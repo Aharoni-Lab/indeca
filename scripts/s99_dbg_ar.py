@@ -1,4 +1,6 @@
 # %% import and definition
+import os
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -6,6 +8,9 @@ import seaborn as sns
 
 from minian_bin.simulation import exp_pulse
 from minian_bin.update_AR import fit_sumexp_gd, fit_sumexp_iter
+
+FIG_PATH = "./figs/dbg_ar"
+os.makedirs(FIG_PATH, exist_ok=True)
 
 # %% test different fitting
 nsamp = 100
@@ -56,6 +61,8 @@ g = sns.FacetGrid(
     hue="variable",
     legend_out=True,
     sharey="row",
+    height=1.5,
     aspect=2,
 )
 g.map_dataframe(sns.lineplot, x="ns", y="value")
+g.figure.savefig(os.path.join(FIG_PATH, "ar_fit.svg"), bbox_inches="tight")
