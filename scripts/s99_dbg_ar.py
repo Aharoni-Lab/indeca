@@ -1,16 +1,22 @@
 # %% import and definition
+import itertools as itt
 import os
 
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import seaborn as sns
+import xarray as xr
+from tqdm.auto import tqdm
 
 from minian_bin.simulation import exp_pulse
 from minian_bin.update_AR import fit_sumexp_gd, fit_sumexp_iter
+from minian_bin.utilities import norm, scal_lstsq
 
 FIG_PATH = "./figs/dbg_ar"
+INT_PATH = "./intermediate/dbg_ar"
 os.makedirs(FIG_PATH, exist_ok=True)
+os.makedirs(INT_PATH, exist_ok=True)
 
 # %% test different fitting
 nsamp = 100
@@ -66,3 +72,60 @@ g = sns.FacetGrid(
 )
 g.map_dataframe(sns.lineplot, x="ns", y="value")
 g.figure.savefig(os.path.join(FIG_PATH, "ar_fit.svg"), bbox_inches="tight")
+
+# %% explore error space of different ar coefs
+coefs = [(6, 1), (10, 3), (15, 5)]
+err_spc = np.linspace(-4, 4, 201)
+ns_lv = np.linspace(0, 0.3, 31)
+nsamp = 100
+err_df = []
+for (tau_d, tau_r), dd, dr, ns in tqdm(
+    list(itt.product(coefs, err_spc, err_spc, ns_lv))
+):
+    t_d, t_r = tau_d + dd, tau_r + dr
+    if t_d > t_r and t_r > 0:
+        tr, t, _ = exp_pulse(tau_d, tau_r, nsamp)
+        y = tr + np.random.uniform(-ns, ns, nsamp)
+        tr_fit, t, _ = exp_pulse(t_d, t_r, nsamp)
+        scal = scal_lstsq(tr_fit, y)
+        err = np.linalg.norm(y - tr_fit)
+        err_scal = np.linalg.norm(y - tr_fit * scal)
+        edf = pd.DataFrame(
+            [
+                {
+                    "gt": "tau_d: {}, tau_r: {}".format(tau_d, tau_r),
+                    "ns": ns,
+                    "tau_d": t_d,
+                    "tau_r": t_r,
+                    "scal": scal,
+                    "err": err,
+                    "err_scal": err_scal,
+                }
+            ]
+        )
+        err_df.append(edf)
+err_df = pd.concat(err_df, ignore_index=True)
+err_df.to_feather(os.path.join(INT_PATH, "err_df.feat"))
+
+# %% plot errors
+err_df = pd.read_feather(os.path.join(INT_PATH, "err_df.feat"))
+for gt, edf in err_df.groupby("gt"):
+    for zvar in ["scal", "err", "err_scal"]:
+        earr = edf.set_index(["ns", "tau_d", "tau_r"])[zvar].to_xarray()
+        earr = xr.apply_ufunc(
+            norm,
+            earr,
+            input_core_dims=[["tau_d", "tau_r"]],
+            output_core_dims=[["tau_d", "tau_r"]],
+            vectorize=True,
+        )
+        fig = px.imshow(
+            earr,
+            facet_col="ns",
+            facet_col_wrap=8,
+            aspect="equal",
+            facet_col_spacing=5e-3,
+            facet_row_spacing=2e-2,
+        )
+        fig.update_layout(height=2000)
+        fig.write_html(os.path.join(FIG_PATH, "{}-{}.html".format(zvar, gt)))
