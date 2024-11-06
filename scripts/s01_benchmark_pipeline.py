@@ -84,7 +84,7 @@ for up_type, up_factor in {"org": 1}.items():
         # tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
         return_iter=True,
         ar_use_all=True,
-        ar_mode=False,
+        ar_mode=True,
         est_noise_freq=0.06,
         est_use_smooth=True,
         est_add_lag=50,

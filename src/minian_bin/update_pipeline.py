@@ -48,7 +48,6 @@ def pipeline_bin(
     if tau_init is not None:
         g = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
         tau = np.tile(tau_init, (ncell, 1))
-        ps = np.tile([1, -1], (ncell, 1))
     else:
         if up_factor > 1:
             raise NotImplementedError(
@@ -56,7 +55,6 @@ def pipeline_bin(
             )
         g = np.empty((ncell, p))
         tau = np.empty((ncell, p))
-        ps = np.empty((ncell, p))
         for icell, y in enumerate(Y):
             cur_g, _ = estimate_coefs(
                 y,
@@ -67,15 +65,14 @@ def pipeline_bin(
             )
             g[icell, :] = cur_g
             cur_tau = AR2tau(*cur_g)
-            if not ar_mode and (np.imag(cur_tau) != 0).any():
+            if (np.imag(cur_tau) != 0).any():
                 tr = ar_pulse(*cur_g, nsamp=ar_kn_len)[0]
                 tr[0] = 0
                 lams, cur_p, tr_fit = fit_sumexp_gd(tr, ar_mode=ar_mode)
                 tau[icell, :] = -1 / lams
-                ps[icell, :] = cur_p
             else:
                 tau[icell, :] = cur_tau
-                ps[icell, :] = np.array([1, -1])
+    scale = np.empty(ncell)
     # 2. iteration loop
     C_ls = []
     S_ls = []
@@ -90,50 +87,28 @@ def pipeline_bin(
             "g1",
             "tau_d",
             "tau_r",
-            "p0",
-            "p1",
             "err",
             "scale",
             "best_idx",
         ]
     )
-    prob = prob_deconv(
-        T, coef_len=p if ar_mode else ar_kn_len, ar_mode=ar_mode, R=R, norm=deconv_norm
-    )
-    prob_cons = prob_deconv(
-        T,
-        coef_len=p if ar_mode else ar_kn_len,
-        ar_mode=ar_mode,
-        R=R,
-        norm=deconv_norm,
-        amp_constraint=True,
-    )
+    prob = prob_deconv(T, coef_len=p, R=R, norm=deconv_norm)
+    prob_cons = prob_deconv(T, coef_len=p, R=R, norm=deconv_norm, amp_constraint=True)
     for i_iter in trange(max_iters, desc="iteration"):
         # 2.1 deconvolution
-        C, S, scale, err = (
+        C, S, err = (
             np.empty((ncell, T * up_factor)),
             np.empty((ncell, T * up_factor)),
-            np.empty(ncell),
             np.empty(ncell),
         )
         for icell, y in tqdm(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
-            if ar_mode:
-                cur_coef = g[icell]
-            else:
-                cur_coef = exp_pulse(
-                    tau[icell, 0],
-                    tau[icell, 1],
-                    ar_kn_len,
-                    p_d=ps[icell, 0],
-                    p_r=ps[icell, 1],
-                )[0]
             c_bin, s_bin, _, scl, _, _ = solve_deconv_bin_direct(
                 y,
                 prob,
                 prob_cons,
-                coef=cur_coef,
+                coef=g[icell],
                 R=R,
                 nthres=deconv_nthres,
                 tol=deconv_scal_tol,
@@ -155,8 +130,6 @@ def pipeline_bin(
                 "g1": g.T[1],
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
-                "p0": ps.T[0],
-                "p1": ps.T[1],
                 "err": err,
                 "scale": scale,
             }
@@ -198,22 +171,27 @@ def pipeline_bin(
             lams, ps, h, h_fit, _, _ = solve_fit_h_num(
                 Y, S_ar, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
             )
-            tau = np.tile(-1 / lams, (ncell, 1))
-            g = np.tile(tau2AR(*(-1 / lams)), (ncell, 1))
-            ps = np.tile(ps, (ncell, 1))
+            cur_tau = -1 / lams
+            tau = np.tile(cur_tau, (ncell, 1))
+            g0, g1, scl = tau2AR(cur_tau[0], cur_tau[1], ps[0], return_scl=True)
+            g = np.tile((g0, g1), (ncell, 1))
+            scale = scal_best / scl
         else:
             g = np.empty((ncell, p))
             tau = np.empty((ncell, p))
-            ps = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
                 lams, cur_ps, _, _, _, _ = solve_fit_h_num(
                     y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
                 )
-                tau[icell, :] = -1 / lams
-                g[icell, :] = tau2AR(*(-1 / lams))
-                ps[icell, :] = cur_ps
+                cur_tau = -1 / lams
+                tau[icell, :] = cur_tau
+                g0, g1, scl = tau2AR(cur_tau[0], cur_tau[1], cur_ps[0], return_scl=True)
+                g[icell, :] = (g0, g1)
+                scale[icell] = scal_best[icell] / scl
         # 2.4 check convergence
-        metric_last = metric_df[metric_df["iter"] < i_iter].dropna()
+        metric_last = metric_df[metric_df["iter"] < i_iter].dropna(
+            subset=["err", "scale"]
+        )
         if len(metric_last) > 0:
             err_cur = cur_metric.set_index("cell")["err"]
             err_best = metric_last.groupby("cell")["err"].min()

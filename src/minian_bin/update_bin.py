@@ -446,6 +446,7 @@ def solve_deconv_bin_direct(
                     [
                         {
                             "scale": scale,
+                            "scale_new": scale_new,
                             "obj": opt_obj,
                             "ub": ub,
                             "iter": niter,
