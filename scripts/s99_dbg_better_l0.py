@@ -170,20 +170,25 @@ K = sps.csc_matrix(
     convolution_matrix(kn, Y_solve.sizes["frame"])[: Y_solve.sizes["frame"], :]
 )
 RK = K.todense()
-prob = prob_deconv(Y_solve.sizes["frame"], ar_mode=False, amp_constraint=True)
+prob = prob_deconv(
+    Y_solve.sizes["frame"], ar_mode=True, coef_len=2, amp_constraint=True
+)
 C_ls, S_ls = [], []
 metrics = []
 for uid in tqdm(np.arange(5, 100, 20)):
     y = Y_solve.sel(unit_id=uid)
-    sig = sig_lev.sel(unit_id=uid)
+    sig = np.array(sig_lev.sel(unit_id=uid))
+    t_d, t_r, scal = tau2AR(PARAM_TAU_D, PARAM_TAU_R, return_scl=True)
+    coef = np.array([t_d, t_r])
+    scal = scal * sig
     ub = np.linalg.norm(y, 1)
     for i_iter in range(max_iters):
         c, s, b, err, met_df = solve_deconv_l0(
             np.array(y),
             prob,
-            kn,
+            coef,
             l0_penal=ub,
-            scale=np.array(sig),
+            scale=scal,
             return_obj=True,
         )
         if (s > 0).sum() > 0:
@@ -196,13 +201,13 @@ for uid in tqdm(np.arange(5, 100, 20)):
         print("max ub iterations reached")
     res = direct(
         solve_deconv_l0_err,
-        args=(y, prob, kn, np.array(sig), RK),
+        args=(y, prob, coef, scal, RK),
         bounds=[(0, ub)],
         maxfun=20,
     )
     l0_opt = res.x
     opt_s, opt_obj, opt_scal = solve_deconv_l0_err(
-        l0_opt, y, prob, kn, np.array(sig), RK, return_err_only=False
+        l0_opt, y, prob, coef, scal, RK, return_err_only=False
     )
     metrics.append(
         pd.DataFrame(
@@ -220,4 +225,4 @@ for uid in tqdm(np.arange(5, 100, 20)):
         )
     )
 metrics = pd.concat(metrics, ignore_index=True)
-# metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
