@@ -326,7 +326,9 @@ def solve_fit_h_num(
     i_iter = 0
     while i_iter < max_iters:
         h = solve_h(y, s, scal, s_len, norm)
-        lams, ps, h_fit, _ = fit_sumexp_iter(h, ar_mode=ar_mode)
+        if ar_mode:
+            h = np.concatenate([[0], h])[:-1]
+        lams, ps, h_fit, _ = fit_sumexp_iter(h)
         taus = -1 / lams
         met = pd.DataFrame(
             {
