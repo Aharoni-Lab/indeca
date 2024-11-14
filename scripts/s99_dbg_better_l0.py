@@ -1,4 +1,5 @@
 # %% 0. Handle imports and definitions
+import functools as fct
 import os
 
 import cvxpy as cp
@@ -110,7 +111,7 @@ for uid in np.arange(5, 100, 5):
         S_ls.append(s)
         metrics.append(met_df)
 metrics = pd.concat(metrics, ignore_index=True)
-# metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
 
 # %% plotting
 fig = px.line(metrics, x="penal", y="err", color="unit_id")
@@ -120,20 +121,17 @@ fig.write_html(os.path.join(FIG_PATH, "err_opt.html"))
 
 
 # %% try direct l0
-def solve_deconv_l0_err(x, y, prob, kn, scal, RK, return_err_only=True):
+def solve_deconv_l0_err(
+    x, y, prob, kn, scal, RK, return_err_only=True, backend="cvxpy"
+):
     c, s, b, err, met_df = solve_deconv_l0(
-        np.array(y),
-        prob,
-        kn,
-        l0_penal=x,
-        scale=scal,
-        return_obj=True,
+        np.array(y), prob, kn, l0_penal=x, scale=scal, return_obj=True, backend=backend
     )
     th_svals = max_thres(np.abs(s), 1000, th_min=0, th_max=1)
     th_cvals = [RK @ ss for ss in th_svals]
     th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
     th_objs = [
-        np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=1)
+        np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=2)
         for scl, cc in zip(th_scals, th_cvals)
     ]
     opt_idx = np.argmin(th_objs)
@@ -146,6 +144,7 @@ def solve_deconv_l0_err(x, y, prob, kn, scal, RK, return_err_only=True):
         return opt_s, opt_obj, opt_scal
 
 
+backend = "cuosqp"
 sim_ds = xr.open_dataset(IN_PATH["org"])
 C_gt = sim_ds["C"].dropna("frame", how="all")
 subset = C_gt.coords["unit_id"]
@@ -163,6 +162,7 @@ sig_lev = xr.DataArray(
     coords={"unit_id": C_gt.coords["unit_id"]},
     name="sig_lev",
 )
+np.random.seed(42)
 noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset).transpose("unit_id", "frame")
 kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
@@ -170,27 +170,56 @@ K = sps.csc_matrix(
     convolution_matrix(kn, Y_solve.sizes["frame"])[: Y_solve.sizes["frame"], :]
 )
 RK = K.todense()
+upsamp = 1
 prob = prob_deconv(
-    Y_solve.sizes["frame"], ar_mode=True, coef_len=2, amp_constraint=True
+    Y_solve.sizes["frame"] * upsamp,
+    ar_mode=False,
+    coef_len=60,
+    amp_constraint=True,
+    norm="l2",
 )
 C_ls, S_ls = [], []
 metrics = []
 for uid in tqdm(np.arange(5, 100, 20)):
-    y = Y_solve.sel(unit_id=uid)
+    y = np.tile(Y_solve.sel(unit_id=uid), upsamp)
     sig = np.array(sig_lev.sel(unit_id=uid))
-    t_d, t_r, scal = tau2AR(PARAM_TAU_D, PARAM_TAU_R, return_scl=True)
-    coef = np.array([t_d, t_r])
-    scal = scal * sig
+    # t_d, t_r, scal = tau2AR(PARAM_TAU_D, PARAM_TAU_R, return_scl=True)
+    # coef = np.array([t_d, t_r])
+    # scal = scal * sig
+    scal = sig
     ub = np.linalg.norm(y, 1)
     for i_iter in range(max_iters):
-        c, s, b, err, met_df = solve_deconv_l0(
+        c, s, b, err, met_df_osqp = solve_deconv_l0(
             np.array(y),
             prob,
-            coef,
+            kn,
             l0_penal=ub,
             scale=scal,
             return_obj=True,
+            backend=backend,
         )
+        # c, sA, b, err, met_df_A = solve_deconv_l0(
+        #     np.array(y),
+        #     prob,
+        #     kn,
+        #     l0_penal=ub,
+        #     scale=scal,
+        #     return_obj=True,
+        #     backend="cvxpy",
+        # )
+        # c, sB, b, err, met_df_B = solve_deconv_l0(
+        #     np.array(y),
+        #     prob,
+        #     kn,
+        #     l0_penal=ub,
+        #     scale=scal,
+        #     return_obj=True,
+        #     backend="osqp",
+        # )
+        # if (sA > 0).sum() != (sB > 0).sum():
+        #     raise ValueError
+        # else:
+        #     s = sA
         if (s > 0).sum() > 0:
             ub = ub * 2
             print("uid: {}, ub: {}".format(uid, ub))
@@ -200,14 +229,15 @@ for uid in tqdm(np.arange(5, 100, 20)):
     else:
         print("max ub iterations reached")
     res = direct(
-        solve_deconv_l0_err,
-        args=(y, prob, coef, scal, RK),
+        fct.partial(solve_deconv_l0_err, backend=backend),
+        args=(y, prob, kn, scal, RK),
         bounds=[(0, ub)],
-        maxfun=20,
+        maxfun=10,
+        vol_tol=1e-4,
     )
-    l0_opt = res.x
+    l0_opt = res.x[0]
     opt_s, opt_obj, opt_scal = solve_deconv_l0_err(
-        l0_opt, y, prob, coef, scal, RK, return_err_only=False
+        l0_opt, y, prob, kn, scal, RK, return_err_only=False, backend=backend
     )
     metrics.append(
         pd.DataFrame(
@@ -215,7 +245,7 @@ for uid in tqdm(np.arange(5, 100, 20)):
                 {
                     "unit_id": uid,
                     "ub": ub,
-                    "l0_opt": res.x,
+                    "l0_opt": l0_opt,
                     "success": res.success,
                     "nfev": res.nfev,
                     "err": opt_obj,
@@ -225,4 +255,61 @@ for uid in tqdm(np.arange(5, 100, 20)):
         )
     )
 metrics = pd.concat(metrics, ignore_index=True)
-metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+metrics.to_feather(os.path.join(INT_PATH, "metrics_{}.feat".format(backend)))
+
+# %% debugging individual iteration
+met_osqp = pd.read_feather(os.path.join(INT_PATH, "metrics_osqp.feat"))
+met_cvx = pd.read_feather(os.path.join(INT_PATH, "metrics_cvxpy.feat"))
+met_cuosqp = pd.read_feather(os.path.join(INT_PATH, "metrics_cuosqp.feat"))
+sim_ds = xr.open_dataset(IN_PATH["org"])
+C_gt = sim_ds["C"].dropna("frame", how="all")
+uid = 5
+np.random.seed(42)
+sig_lev = xr.DataArray(
+    np.sort(
+        np.random.uniform(
+            low=PARAM_SIG_LEV[0],
+            high=PARAM_SIG_LEV[1],
+            size=C_gt.sizes["unit_id"],
+        )
+    ),
+    dims=["unit_id"],
+    coords={"unit_id": C_gt.coords["unit_id"]},
+    name="sig_lev",
+)
+np.random.seed(42)
+noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
+Y_solve = (C_gt * sig_lev + noise).transpose("unit_id", "frame")
+kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
+K = sps.csc_matrix(
+    convolution_matrix(kn, Y_solve.sizes["frame"])[: Y_solve.sizes["frame"], :]
+)
+RK = K.todense()
+y = Y_solve.sel(unit_id=uid)
+scal = np.array(sig_lev.sel(unit_id=uid))
+l0_penal = np.array(met_osqp["l0_opt"])[0]
+prob = prob_deconv(
+    Y_solve.sizes["frame"],
+    ar_mode=False,
+    coef_len=60,
+    amp_constraint=True,
+    norm="l2",
+)
+c, s_osqp, b, err, met_df_osqp = solve_deconv_l0(
+    np.array(y),
+    prob,
+    kn,
+    l0_penal=l0_penal,
+    scale=scal,
+    return_obj=True,
+    backend="osqp",
+)
+c, s_cuosqp, b, err, met_df_cuosqp = solve_deconv_l0(
+    np.array(y),
+    prob,
+    kn,
+    l0_penal=l0_penal,
+    scale=scal,
+    return_obj=True,
+    backend="cuosqp",
+)

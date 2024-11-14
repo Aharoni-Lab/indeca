@@ -1,8 +1,11 @@
 import warnings
 
+import cuosqp
 import cvxpy as cp
 import numpy as np
+import osqp
 import pandas as pd
+import piqp
 import scipy.sparse as sps
 import xarray as xr
 from line_profiler import profile
@@ -61,7 +64,7 @@ def prob_deconv(
 ):
     if R is None:
         T = y_len
-        R = np.eye(T)
+        R = sps.eye(T)
     else:
         T = R.shape[1]
     y = cp.Parameter((y_len, 1), name="y")
@@ -78,7 +81,10 @@ def prob_deconv(
         b = cp.Variable(nonneg=True, name="b")
     else:
         b = cp.Constant(value=0, name="b")
-    err_term = cp.norm(y - scale * R @ c - b, p={"l1": 1, "l2": 2}[norm])
+    if norm == "l1":
+        err_term = cp.abs(y - scale * R @ c - b)
+    elif norm == "l2":
+        err_term = cp.sum_squares(y - scale * R @ c - b) - y.T @ y
     obj = cp.Minimize(err_term + w_l0.T @ cp.abs(s) + l1_penal * cp.norm(s, 1))
     if ar_mode:
         G = sum(
@@ -90,7 +96,7 @@ def prob_deconv(
         cons = [s == G @ c]
     else:
         H = sum([cp.diag(cp.promote(coef[i], (T - i,)), -i) for i in range(coef_len)])
-        cons = [c == H @ s, s[-1] == 0]
+        cons = [c == H @ s]
     if amp_constraint:
         cons.append(s <= 1)
     prob = cp.Problem(obj, cons)
@@ -141,9 +147,11 @@ def solve_deconv_l0(
     scale: float = 1,
     return_obj: bool = False,
     max_iters=50,
-    delta=1e-6,
-    rtol=1e-4,
+    delta=1e-4,
+    rtol=1e-3,
+    atol=1e-3,
     verbose=False,
+    backend="cvxpy",
 ):
     c, s, b = prob.data_dict["c"], prob.data_dict["s"], prob.data_dict["b"]
     T = c.shape[0]
@@ -151,25 +159,77 @@ def solve_deconv_l0(
     prob.data_dict["w_l0"].value = l0_penal * np.ones(T)
     prob.data_dict["scale"].value = scale
     prob.data_dict["coef"].value = coef
+    K = sps.csc_matrix(convolution_matrix(coef, len(y))[: len(y), :])
+    P = 2 * scale**2 * K.T @ K
+    A = sps.eye(T, format="csc")
+    l = np.zeros(T)
+    u = np.ones(T)
+    q0 = -2 * scale * (K.T @ y)
     i = 0
     metric_df = None
     s_last = None
+    eps_rel = 1e-8
+    eps_abs = atol * 1e-4
     while i < max_iters:
         try:
             obj_best = metric_df["obj"][1:].min()
         except TypeError:
             obj_best = np.inf
-        try:
-            prob.solve(warm_start=bool(i))
-        except cp.SolverError:
-            prob.solve(
-                solver=cp.OSQP,
-                max_iter=int(1e6),
-                eps_abs=1e-4,
-                eps_rel=1e-4,
+        if backend == "cvxpy":
+            try:
+                prob.solve(
+                    solver=cp.CLARABEL,
+                    warm_start=False,  # avoid numerical issue
+                    verbose=False,
+                )
+            except:
+                prob.solve(
+                    solver=cp.OSQP,
+                    warm_start=False,  # avoid numerical issue
+                    check_termination=25,
+                    verbose=False,
+                    eps_abs=eps_abs,
+                    eps_rel=eps_rel,
+                )
+            cur_obj = prob.value
+        elif backend == "osqp":
+            q = q0 + prob.data_dict["w_l0"].value
+            m = osqp.OSQP()
+            m.setup(
+                P=P,
+                q=q,
+                A=A,
+                l=l,
+                u=u,
                 verbose=False,
-                warm_start=bool(i),
+                check_termination=25,
+                eps_abs=eps_abs,
+                eps_rel=eps_rel,
             )
+            res = m.solve()
+            cur_obj = res.info.obj_val
+            s.value = res.x.reshape((-1, 1)).clip(0, None)
+        elif backend == "cuosqp":
+            q = q0 + prob.data_dict["w_l0"].value
+            m = cuosqp.OSQP()
+            m.setup(
+                P=P,
+                q=q,
+                A=A,
+                l=l,
+                u=u,
+                verbose=False,
+                check_termination=5,
+                eps_abs=eps_abs,
+                eps_rel=eps_rel,
+            )
+            res = m.solve()
+            cur_obj = res.info.obj_val
+            s.value = res.x.reshape((-1, 1)).clip(0, None)
+        elif backend == "piqp":
+            pass
+        else:
+            raise ValueError("backend {} not understood".format(backend))
         s_new = np.where(s.value > delta, s.value, 0)
         if verbose:
             print(
@@ -177,14 +237,18 @@ def solve_deconv_l0(
                     l0_penal, i, (s_new > 0).sum()
                 )
             )
-        obj_gap = prob.value - obj_best
+        obj_gap = cur_obj - obj_best
+        if metric_df is not None:
+            obj_ch = np.abs(cur_obj - np.array(metric_df["obj"])[-1])
+        else:
+            obj_ch = np.inf
         metric_df = pd.concat(
             [
                 metric_df,
                 pd.DataFrame(
                     [
                         {
-                            "obj": prob.value,
+                            "obj": cur_obj,
                             "iter": i,
                             "nnz": (s_new > 0).sum(),
                             "obj_gap": obj_gap,
@@ -196,12 +260,14 @@ def solve_deconv_l0(
         )
         if np.abs(obj_gap) < rtol * obj_best:
             break
-        elif s_last is not None and ((s_new > 0) == (s_last > 0)).all():
+        elif obj_ch < atol:
             break
+        # elif s_last is not None and ((s_new > 0) == (s_last > 0)).all():
+        #     break
         else:
-            prob.data_dict["w_l0"].value = (
-                l0_penal * np.ones(T) / (delta * np.ones(T) + s_new.squeeze())
-            )
+            prob.data_dict["w_l0"].value = np.clip(
+                l0_penal * np.ones(T) / (delta * np.ones(T) + s_new.squeeze()), 0, 1e5
+            )  # clip to avoid numerical inconsistencies with osqp
             s_last = s_new
             i += 1
     else:
