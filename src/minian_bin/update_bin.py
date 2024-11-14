@@ -115,6 +115,46 @@ def prob_deconv(
     return prob
 
 
+def prob_deconv_osqp(
+    y: np.array,
+    coef: np.array,
+    scale: float = 1,
+    l0_penal: float = 0,
+    amp_constraint: bool = True,
+    atol=1e-3,
+):
+    T = y.shape[0]
+    K = sps.csc_matrix(convolution_matrix(coef, len(y))[: len(y), :])
+    P = 2 * scale**2 * K.T @ K
+    A = sps.eye(T, format="csc")
+    l = np.zeros(T)
+    if amp_constraint:
+        u = np.ones(T)
+    else:
+        u = np.inf
+    q0 = -2 * scale * (K.T @ y)
+    q = q0 * (1 + l0_penal)
+    eps_rel = 1e-8
+    eps_abs = atol * 1e-4
+    m = osqp.OSQP()
+    m.setup(
+        P=P,
+        q=q,
+        A=A,
+        l=l,
+        u=u,
+        check_termination=25,
+        eps_abs=eps_abs,
+        eps_rel=eps_rel,
+    )
+    m.codegen(
+        "code", parameters="vectors", python_ext_name="emosqp", force_rewrite=True
+    )
+    import emosqp as prob
+
+    return prob
+
+
 @profile
 def solve_deconv(
     y: np.ndarray,
@@ -142,6 +182,7 @@ def solve_deconv(
 def solve_deconv_l0(
     y: np.ndarray,
     prob: cp.Problem,
+    prob_osqp,
     coef: np.ndarray,
     l0_penal: float = 0,
     scale: float = 1,
@@ -209,6 +250,12 @@ def solve_deconv_l0(
             res = m.solve()
             cur_obj = res.info.obj_val
             s.value = res.x.reshape((-1, 1)).clip(0, None)
+        elif backend == "emosqp":
+            q = q0 + prob.data_dict["w_l0"].value
+            prob_osqp.update_lin_cost(q)
+            x, lam, status_val, niter, run_time = prob_osqp.solve()
+            cur_obj = ((y - K @ x) ** 2).sum()
+            s.value = x.reshape((-1, 1)).clip(0, None)
         elif backend == "cuosqp":
             q = q0 + prob.data_dict["w_l0"].value
             m = cuosqp.OSQP()

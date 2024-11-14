@@ -16,7 +16,13 @@ from tqdm.auto import tqdm
 
 from minian_bin.benchmark_utils import compute_ROC
 from minian_bin.simulation import exp_pulse, tau2AR
-from minian_bin.update_bin import max_thres, prob_deconv, solve_deconv, solve_deconv_l0
+from minian_bin.update_bin import (
+    max_thres,
+    prob_deconv,
+    prob_deconv_osqp,
+    solve_deconv,
+    solve_deconv_l0,
+)
 from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 from minian_bin.utilities import scal_lstsq
 
@@ -122,10 +128,17 @@ fig.write_html(os.path.join(FIG_PATH, "err_opt.html"))
 
 # %% try direct l0
 def solve_deconv_l0_err(
-    x, y, prob, kn, scal, RK, return_err_only=True, backend="cvxpy"
+    x, y, prob, prob_osqp, kn, scal, RK, return_err_only=True, backend="cvxpy"
 ):
     c, s, b, err, met_df = solve_deconv_l0(
-        np.array(y), prob, kn, l0_penal=x, scale=scal, return_obj=True, backend=backend
+        np.array(y),
+        prob,
+        prob_osqp,
+        kn,
+        l0_penal=x,
+        scale=scal,
+        return_obj=True,
+        backend=backend,
     )
     th_svals = max_thres(np.abs(s), 1000, th_min=0, th_max=1)
     th_cvals = [RK @ ss for ss in th_svals]
@@ -144,7 +157,7 @@ def solve_deconv_l0_err(
         return opt_s, opt_obj, opt_scal
 
 
-backend = "cuosqp"
+backend = "emosqp"
 sim_ds = xr.open_dataset(IN_PATH["org"])
 C_gt = sim_ds["C"].dropna("frame", how="all")
 subset = C_gt.coords["unit_id"]
@@ -187,11 +200,13 @@ for uid in tqdm(np.arange(5, 100, 20)):
     # coef = np.array([t_d, t_r])
     # scal = scal * sig
     scal = sig
+    prob_osqp = prob_deconv_osqp(y, kn, scal)
     ub = np.linalg.norm(y, 1)
     for i_iter in range(max_iters):
         c, s, b, err, met_df_osqp = solve_deconv_l0(
             np.array(y),
             prob,
+            prob_osqp,
             kn,
             l0_penal=ub,
             scale=scal,
@@ -230,14 +245,14 @@ for uid in tqdm(np.arange(5, 100, 20)):
         print("max ub iterations reached")
     res = direct(
         fct.partial(solve_deconv_l0_err, backend=backend),
-        args=(y, prob, kn, scal, RK),
+        args=(y, prob, prob_osqp, kn, scal, RK),
         bounds=[(0, ub)],
-        maxfun=10,
+        maxfun=1000,
         vol_tol=1e-4,
     )
     l0_opt = res.x[0]
     opt_s, opt_obj, opt_scal = solve_deconv_l0_err(
-        l0_opt, y, prob, kn, scal, RK, return_err_only=False, backend=backend
+        l0_opt, y, prob, prob_osqp, kn, scal, RK, return_err_only=False, backend=backend
     )
     metrics.append(
         pd.DataFrame(
@@ -261,6 +276,7 @@ metrics.to_feather(os.path.join(INT_PATH, "metrics_{}.feat".format(backend)))
 met_osqp = pd.read_feather(os.path.join(INT_PATH, "metrics_osqp.feat"))
 met_cvx = pd.read_feather(os.path.join(INT_PATH, "metrics_cvxpy.feat"))
 met_cuosqp = pd.read_feather(os.path.join(INT_PATH, "metrics_cuosqp.feat"))
+met_emosqp = pd.read_feather(os.path.join(INT_PATH, "metrics_emosqp.feat"))
 sim_ds = xr.open_dataset(IN_PATH["org"])
 C_gt = sim_ds["C"].dropna("frame", how="all")
 uid = 5
