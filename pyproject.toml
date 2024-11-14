@@ -31,6 +31,8 @@ dependencies = [
     "netcdf4",
     "pyarrow",
     "dtaidistance>=2.3.12",
+    "piqp>=0.4.2",
+    "osqp>=0.6.7.post3",
 ]
 requires-python = ">=3.11,<3.13"
 readme = "README.md"

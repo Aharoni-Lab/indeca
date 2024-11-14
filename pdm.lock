@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["cross_platform"]
 lock_version = "4.5.0"
-content_hash = "sha256:719e811f14d136c5d9340e015a9b74c3376654626594f73cf3554d9ce85330c4"
+content_hash = "sha256:fe07e6d43cc76b7bde95706514e6c91413788bd6b5d609dc594c3646ef7c52f5"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -1202,7 +1202,7 @@ files = [
 
 [[package]]
 name = "osqp"
-version = "0.6.7.post1"
+version = "0.6.7.post3"
 summary = "OSQP: The Operator Splitting QP Solver"
 dependencies = [
     "numpy>=1.7",
@@ -1210,17 +1210,17 @@ dependencies = [
     "scipy>=0.13.2",
 ]
 files = [
-    {file = "osqp-0.6.7.post1-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:d01d6b03628b851107671d7c785df147acea6865f090290a04e38ed250d8b829"},
-    {file = "osqp-0.6.7.post1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:7082c852edc9afc63ba7b073bb2e559093b4df4eb24efff7b2f898241a83071c"},
-    {file = "osqp-0.6.7.post1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f9f104c9710d8e51cded15ac9b2b9bc77bc265e70c891c671c1935e4b85b0810"},
-    {file = "osqp-0.6.7.post1-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:44ae75ed6a5c6aba415b8d11963cec2b9ac4d7f1897067e9e095b60e81136022"},
-    {file = "osqp-0.6.7.post1-cp311-cp311-win_amd64.whl", hash = "sha256:117c30affdab60f5872d758c5ad82f5deb029b4fa84fea54bd04b8e7d884c5f6"},
-    {file = "osqp-0.6.7.post1-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:ed3c98cb31296368a72145875ceab3fb3e3497fdb820a185bf6b9ee39a3d5762"},
-    {file = "osqp-0.6.7.post1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:98fdee4065b9f65c37f63532ba8e11e7efddce3eb9a8b62961bf1a9b62105e0a"},
-    {file = "osqp-0.6.7.post1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:20bf96fbf7d51abb95ab75e20508e37b1217cb467fc9cc9f73a584fbf1d5fc88"},
-    {file = "osqp-0.6.7.post1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a5a41a9765be0ef1817ebfdcff10018f792e5452a5af3f2864ea44d7cb22e663"},
-    {file = "osqp-0.6.7.post1-cp312-cp312-win_amd64.whl", hash = "sha256:fd56c7e82a6af11d96a549bb07d224359bcd148d4aae9180b8944d20eecd461b"},
-    {file = "osqp-0.6.7.post1.tar.gz", hash = "sha256:554aa10dca8481978b4d334e28201f24ed18f294c5a84350ce2022a8b78f4d72"},
+    {file = "osqp-0.6.7.post3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:b1a1dcd869fd6ac501e06262c21483a3691b6281e4f3f65af6951330958b89ca"},
+    {file = "osqp-0.6.7.post3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:46b93d1110dc0ad311f6691c4df9ee41cbbde5ffc0d8c8d520d4555bf5d8765b"},
+    {file = "osqp-0.6.7.post3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5209104d6fe3ace4fdbf9ace08caa2cba9de1e7ccd5f56279a346c235917138b"},
+    {file = "osqp-0.6.7.post3-cp311-cp311-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fdfefa07740e9fb1c574cdc836e5afe2600b73c0c12089955d4ae6587c55f0eb"},
+    {file = "osqp-0.6.7.post3-cp311-cp311-win_amd64.whl", hash = "sha256:c48c91dfba02ce11e8b8f5d401ec5b67a316782bfdf4f53ca753e49907f7387f"},
+    {file = "osqp-0.6.7.post3-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:023af06764f7aba9c64536ecb7204019906bb7e78237f335f82b404f16623eef"},
+    {file = "osqp-0.6.7.post3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:4cec7cb5bf1615c4129277275dc08e20a037372a874cff35eb891b4b35a463de"},
+    {file = "osqp-0.6.7.post3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:eb882ab24b97b14843b7c71d2474fb8b415bafc8dd60aa94870c2ef338c20bfb"},
+    {file = "osqp-0.6.7.post3-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:502fde0ae710cef1e6418fb8d26efef9597d1dcba877489a1c2eb9c3eb2ff2e9"},
+    {file = "osqp-0.6.7.post3-cp312-cp312-win_amd64.whl", hash = "sha256:468588cfb690becba4d1f460c2a53e75530584e3efcf2caed59f5219032e6888"},
+    {file = "osqp-0.6.7.post3.tar.gz", hash = "sha256:b0c5e0a721f21c9724097a4fd50108304d296468d124e16f34ac67046f7020e1"},
 ]
 
 [[package]]
@@ -1342,6 +1342,35 @@ files = [
     {file = "pillow-10.4.0-cp312-cp312-win_amd64.whl", hash = "sha256:1d846aea995ad352d4bdcc847535bd56e0fd88d36829d2c90be880ef1ee4668a"},
     {file = "pillow-10.4.0-cp312-cp312-win_arm64.whl", hash = "sha256:e553cad5179a66ba15bb18b353a19020e73a7921296a7979c4a2b7f6a5cd57f9"},
     {file = "pillow-10.4.0.tar.gz", hash = "sha256:166c1cd4d24309b30d61f79f4a9114b7b2313d7450912277855ff5dfd7cd4a06"},
+]
+
+[[package]]
+name = "piqp"
+version = "0.4.2"
+requires_python = ">=3.7"
+summary = "A Proximal Interior Point Quadratic Programming solver"
+files = [
+    {file = "piqp-0.4.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:c27cd4c2acb3ff02f6266e5b7b8c3e50c7814824b15c675bccec36823e0931f3"},
+    {file = "piqp-0.4.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:e447a497aa9d20fc3be9651078df66a6b9db9e879f7f1e9780cb99569e703a42"},
+    {file = "piqp-0.4.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6fd2699bc4f13fa302472c8cebebca881bf13c2b4b72d984371d52bd26bb29a5"},
+    {file = "piqp-0.4.2-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:8b8beffbf9234137fce19f6a33fa7162fe69d3b1a9f8b10a5969f913ed766f14"},
+    {file = "piqp-0.4.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1f9ac54845457b80e1c7a2365db29a27bf8e35e1f9fad6bfa45f4448a25f3445"},
+    {file = "piqp-0.4.2-cp311-cp311-musllinux_1_1_aarch64.whl", hash = "sha256:e834504f40214c0cd4acc3ca871f3a978ded99cec758d75f15cff11b4398d7c6"},
+    {file = "piqp-0.4.2-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:554c587b943ddb5aeadced05bb9a62fc339cac262fb1f832d2777e72491fa5ad"},
+    {file = "piqp-0.4.2-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:4cbe16f96d68e9381d3f12cae8106f0a6fecbe53408eac4f09cc7b56c701003b"},
+    {file = "piqp-0.4.2-cp311-cp311-win32.whl", hash = "sha256:9a0bf59cfd59647d2cf991f8ef94f47f2b9568635687906f84b1d7bab4830e90"},
+    {file = "piqp-0.4.2-cp311-cp311-win_amd64.whl", hash = "sha256:db4423bb09323dd37010f120b47ce5714ad792e49ba916d04ac2911c7b5ff4da"},
+    {file = "piqp-0.4.2-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:6ea4cf0f4357f2464c441bfe7a094116ea1df63b0d5b5fa3d4a6aaf78d91d655"},
+    {file = "piqp-0.4.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:72dbae9f8a49def4ab8f46f2aeacc15ac9b2d946fc4985df97ee64a4b0d84794"},
+    {file = "piqp-0.4.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:cadae429ca316cf30b50b09b8570cceba09f87785058621f5834b87baa77c594"},
+    {file = "piqp-0.4.2-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:418cb9ca0de2cbbede1151d01cbecfd62ef7f7545b1ae97376a7e03771b277dc"},
+    {file = "piqp-0.4.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0a41309aed46764c79058ecd4639edf1ec2eb8bd38f1041045912f709f3cd707"},
+    {file = "piqp-0.4.2-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:6d19052e940d64cdbc6604584c18840fc8d1bdcb1201ff4a8cbca538ca014aee"},
+    {file = "piqp-0.4.2-cp312-cp312-musllinux_1_1_i686.whl", hash = "sha256:7942d46e6654a5056f403b97c1c7f161d12843661c0acf74a65130fa7821d8fe"},
+    {file = "piqp-0.4.2-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:efcbf38ed26b750298ea4dd10535ac54baf0437ad208769ceabf544e82ed5266"},
+    {file = "piqp-0.4.2-cp312-cp312-win32.whl", hash = "sha256:91bb9dbfd8a6154dcb7df1b5bbd723e6a695d1cb8f666d75b511bdb3be34e3d9"},
+    {file = "piqp-0.4.2-cp312-cp312-win_amd64.whl", hash = "sha256:46860db2ebed9819d11ff01775d9045701ad01cdac7dcc5232378321721eeaef"},
+    {file = "piqp-0.4.2.tar.gz", hash = "sha256:7531b79026373141638f1270ef6ea61546d0c72de6a2caa948ce5a455a61e8be"},
 ]
 
 [[package]]
