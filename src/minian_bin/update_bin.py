@@ -82,9 +82,11 @@ def prob_deconv(
     else:
         b = cp.Constant(value=0, name="b")
     if norm == "l1":
-        err_term = cp.abs(y - scale * R @ c - b)
+        err_term = cp.sum(cp.abs(y - scale * R @ c - b))
     elif norm == "l2":
-        err_term = cp.sum_squares(y - scale * R @ c - b) - y.T @ y
+        err_term = cp.sum_squares(y - scale * R @ c - b)
+    elif norm == "huber":
+        err_term = cp.sum(cp.huber(y - scale * R @ c - b))
     obj = cp.Minimize(err_term + w_l0.T @ cp.abs(s) + l1_penal * cp.norm(s, 1))
     if ar_mode:
         G = sum(

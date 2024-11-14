@@ -12,6 +12,7 @@ import xarray as xr
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 from scipy.optimize import direct
+from scipy.special import huber
 from tqdm.auto import tqdm
 
 from minian_bin.benchmark_utils import compute_ROC
@@ -59,7 +60,8 @@ sig_lev = xr.DataArray(
     coords={"unit_id": C_gt.coords["unit_id"]},
     name="sig_lev",
 )
-use_l0 = True
+use_l0 = False
+penal_max = {"l1": 50, "l2": 250, "huber": 100}
 noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset).transpose("unit_id", "frame")
 kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
@@ -68,62 +70,83 @@ K = sps.csc_matrix(
     convolution_matrix(kn, Y_solve.sizes["frame"])[: Y_solve.sizes["frame"], :]
 )
 RK = K.todense()
-prob = prob_deconv(
-    Y_solve.sizes["frame"], coef_len=2, ar_mode=True, amp_constraint=True
-)
-C_ls, S_ls = [], []
-metrics = []
-for uid in np.arange(5, 100, 5):
-    y = Y_solve.sel(unit_id=uid)
-    sig = sig_lev.sel(unit_id=uid)
-    for penal in tqdm(np.linspace(0, 20, 50)):
-        if use_l0:
-            c, s, b, err, met_df = solve_deconv_l0(
-                np.array(y),
-                prob,
-                ar_coef,
-                l0_penal=penal,
-                scale=np.array(sig),
-                return_obj=True,
-            )
-        else:
-            c, s, b, err = solve_deconv(
-                np.array(y),
-                prob,
-                ar_coef,
-                l1_penal=penal,
-                scale=np.array(sig),
-                return_obj=True,
-                warm_start=penal > 0,
-            )
-            met_df = pd.DataFrame([{"err": err}])
-        th_svals = max_thres(np.abs(s), 1000, th_min=0, th_max=1)
-        th_cvals = [RK @ ss for ss in th_svals]
-        th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
-        th_objs = [
-            np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=1)
-            for scl, cc in zip(th_scals, th_cvals)
-        ]
-        opt_idx = np.argmin(th_objs)
-        opt_s = th_svals[opt_idx]
-        opt_obj = th_objs[opt_idx]
-        opt_scal = th_scals[opt_idx]
-        met_df["penal"] = penal
-        met_df["err"] = err
-        met_df["err_opt"] = opt_obj
-        met_df["scale"] = opt_scal
-        met_df["unit_id"] = uid
-        C_ls.append(c)
-        S_ls.append(s)
-        metrics.append(met_df)
-metrics = pd.concat(metrics, ignore_index=True)
-metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
-
-# %% plotting
-fig = px.line(metrics, x="penal", y="err", color="unit_id")
-fig.write_html(os.path.join(FIG_PATH, "err.html"))
-fig = px.line(metrics, x="penal", y="err_opt", color="unit_id")
-fig.write_html(os.path.join(FIG_PATH, "err_opt.html"))
+for nm in ["huber", "l1", "l2"]:
+    prob = prob_deconv(
+        Y_solve.sizes["frame"],
+        coef_len=2,
+        ar_mode=True,
+        amp_constraint=True,
+        norm=nm,
+    )
+    C_ls, S_ls = [], []
+    metrics = []
+    for uid in np.arange(5, 100, 15):
+        y = np.array(Y_solve.sel(unit_id=uid))
+        sig = sig_lev.sel(unit_id=uid)
+        for penal in tqdm(np.linspace(0, penal_max[nm], 50)):
+            if use_l0:
+                c, s, b, err, met_df = solve_deconv_l0(
+                    y,
+                    prob,
+                    ar_coef,
+                    l0_penal=penal,
+                    scale=np.array(sig),
+                    return_obj=True,
+                )
+            else:
+                c, s, b, err = solve_deconv(
+                    y,
+                    prob,
+                    ar_coef,
+                    l1_penal=penal,
+                    scale=np.array(sig),
+                    return_obj=True,
+                    warm_start=penal > 0,
+                    solver=cp.CLARABEL,
+                )
+                met_df = pd.DataFrame([{"err": err}])
+            th_svals = max_thres(np.abs(s), 1000, th_min=0, th_max=1)
+            th_cvals = [RK @ ss for ss in th_svals]
+            th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
+            if nm == "l1":
+                th_objs = [
+                    np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=1)
+                    for scl, cc in zip(th_scals, th_cvals)
+                ]
+            elif nm == "l2":
+                th_objs = [
+                    np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=2)
+                    for scl, cc in zip(th_scals, th_cvals)
+                ]
+            elif nm == "huber":
+                th_objs = [
+                    np.sum(huber(1, y - scl * np.array(cc).squeeze() - b))
+                    for scl, cc in zip(th_scals, th_cvals)
+                ]
+            opt_idx = np.argmin(th_objs)
+            opt_s = th_svals[opt_idx]
+            opt_obj = th_objs[opt_idx]
+            opt_scal = th_scals[opt_idx]
+            met_df["penal"] = penal
+            met_df["err"] = err
+            met_df["err_opt"] = opt_obj
+            met_df["scale"] = opt_scal
+            met_df["unit_id"] = uid
+            C_ls.append(c)
+            S_ls.append(s)
+            metrics.append(met_df)
+    metrics = pd.concat(metrics, ignore_index=True)
+    metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
+    fig = px.line(metrics, x="penal", y="err", color="unit_id", template="plotly_dark")
+    fig.write_html(os.path.join(FIG_PATH, "{}-err.html".format(nm)))
+    fig = px.line(
+        metrics, x="penal", y="err_opt", color="unit_id", template="plotly_dark"
+    )
+    fig.write_html(os.path.join(FIG_PATH, "{}-err_opt.html".format(nm)))
+    fig = px.line(
+        metrics, x="penal", y="scale", color="unit_id", template="plotly_dark"
+    )
+    fig.write_html(os.path.join(FIG_PATH, "{}-scale.html".format(nm)))
 
 
 # %% try direct l0
