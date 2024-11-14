@@ -19,3 +19,34 @@ repository of extended binary algorithms for minian
    ```
    Otherwise skip to next step
 1. `pdm install`
+
+### setup cuosqp
+
+1. Install cuda-toolkit 11.8 into the environment:
+   ```bash
+   mamba env create -n minian-bin-dev -f environment/generic.yml
+   conda activate minian-bin-dev
+   ```
+1. Obtain cuosqp source code:
+   ```bash
+   cd ..
+   git clone https://github.com/osqp/cuosqp.git
+   ```
+1. Find the computing capability of your GPU and modify [line 120-125 of `osqp_sources/CMakeLists.txt`](https://github.com/osqp/osqp/blob/837c7a32baea1cc023566d2c82ab6dbb5f049af8/CMakeLists.txt#L120-L125) under the cuosqp repo accordingly:
+   ```make
+   set(CMAKE_CUDA_ARCHITECTURES 89) # modify the compute capability 89 to match your GPU
+   # if (DFLOAT)
+   #     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --gpu-architecture=compute_89 --gpu-code=sm_89")
+   # else()
+   #     # To use doubles we need compute capability 6.0 for atomic operations
+   #     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --gpu-architecture=compute_89 --gpu-code=sm_89")
+   # endif()
+   ```
+1. Obtain a copy of cuda examples 11.8 from [here](https://github.com/NVIDIA/cuda-samples/releases)
+1. Add the extracted cuda examples folder to the include directories:
+   - add the directory after [line 5 of `osqp_sources/lin_sys/cuda/cuda_pcg/CMakeLists.txt`](https://github.com/osqp/osqp/blob/837c7a32baea1cc023566d2c82ab6dbb5f049af8/lin_sys/cuda/cuda_pcg/CMakeLists.txt#L5)
+   - modify the directory to point to the cuda examples folder at [line 27 of `osqp_sources/algebra/cuda/CMakeLists.txt`](https://github.com/osqp/osqp/blob/837c7a32baea1cc023566d2c82ab6dbb5f049af8/algebra/cuda/CMakeLists.txt#L27): `set(helper_cuda_header_dir /path/to/cuda-samples-11.8/Common)`
+1. Run `CUDA_PATH=whatever python setup.py install`.
+   If you followed the steps correctly, `CUDA_PATH` shouldn't matter (but it has to be set).
+1. Verify that `cuosqp` is installed under your environment.
+   
