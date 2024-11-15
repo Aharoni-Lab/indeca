@@ -61,7 +61,7 @@ sig_lev = xr.DataArray(
     name="sig_lev",
 )
 use_l0 = False
-penal_max = {"l1": 50, "l2": 250, "huber": 100}
+penal_max = {"l1": 0.02, "l2": 0.11, "huber": 0.08}
 noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).sel(unit_id=subset).transpose("unit_id", "frame")
 kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
@@ -83,13 +83,19 @@ for nm in ["huber", "l1", "l2"]:
     for uid in np.arange(5, 100, 15):
         y = np.array(Y_solve.sel(unit_id=uid))
         sig = sig_lev.sel(unit_id=uid)
+        if nm == "l1":
+            pmax = np.sum(np.abs(y))
+        elif nm == "l2":
+            pmax = np.sum(y**2)
+        elif nm == "huber":
+            pmax = np.sum(huber(1, y))
         for penal in tqdm(np.linspace(0, penal_max[nm], 50)):
             if use_l0:
                 c, s, b, err, met_df = solve_deconv_l0(
                     y,
                     prob,
                     ar_coef,
-                    l0_penal=penal,
+                    l0_penal=penal * pmax,
                     scale=np.array(sig),
                     return_obj=True,
                 )
@@ -98,7 +104,7 @@ for nm in ["huber", "l1", "l2"]:
                     y,
                     prob,
                     ar_coef,
-                    l1_penal=penal,
+                    l1_penal=penal * pmax,
                     scale=np.array(sig),
                     return_obj=True,
                     warm_start=penal > 0,
