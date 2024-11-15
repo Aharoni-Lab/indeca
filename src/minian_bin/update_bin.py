@@ -596,13 +596,14 @@ def max_thres(
     ds=None,
     return_thres=False,
     th_amplitude=False,
+    delta=1e-8,
 ):
     amax = a.max()
     thres = np.linspace(th_min, th_max, nthres)
     if th_amplitude:
-        S_ls = [np.floor_divide(a, amax * th) for th in thres]
+        S_ls = [np.floor_divide(a, (amax * th).clip(delta, None)) for th in thres]
     else:
-        S_ls = [(a > amax * th) for th in thres]
+        S_ls = [(a > (amax * th).clip(delta, None)) for th in thres]
     if ds is not None:
         S_ls = [sum_downsample(s, ds) for s in S_ls]
     if return_thres:

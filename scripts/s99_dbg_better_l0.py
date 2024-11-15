@@ -88,8 +88,8 @@ for nm in ["huber", "l1", "l2"]:
         elif nm == "l2":
             pmax = np.sum(y**2)
         elif nm == "huber":
-            pmax = np.sum(huber(1, y))
-        for penal in tqdm(np.linspace(0, penal_max[nm], 50)):
+            pmax = np.sum(huber(1, y)) * 2
+        for penal in tqdm(np.linspace(0, penal_max[nm], 100)):
             if use_l0:
                 c, s, b, err, met_df = solve_deconv_l0(
                     y,
@@ -116,17 +116,17 @@ for nm in ["huber", "l1", "l2"]:
             th_scals = [scal_lstsq(cc, y) for cc in th_cvals]
             if nm == "l1":
                 th_objs = [
-                    np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=1)
+                    np.abs(y - scl * np.array(cc).squeeze() - b).sum()
                     for scl, cc in zip(th_scals, th_cvals)
                 ]
             elif nm == "l2":
                 th_objs = [
-                    np.linalg.norm(y - scl * np.array(cc).squeeze() - b, ord=2)
+                    np.sum((y - scl * np.array(cc).squeeze() - b) ** 2)
                     for scl, cc in zip(th_scals, th_cvals)
                 ]
             elif nm == "huber":
                 th_objs = [
-                    np.sum(huber(1, y - scl * np.array(cc).squeeze() - b))
+                    np.sum(huber(1, y - scl * np.array(cc).squeeze() - b)) * 2
                     for scl, cc in zip(th_scals, th_cvals)
                 ]
             opt_idx = np.argmin(th_objs)
@@ -135,18 +135,22 @@ for nm in ["huber", "l1", "l2"]:
             opt_scal = th_scals[opt_idx]
             met_df["penal"] = penal
             met_df["err"] = err
+            met_df["rel_err"] = err / pmax
             met_df["err_opt"] = opt_obj
+            met_df["rel_err_opt"] = opt_obj / pmax
             met_df["scale"] = opt_scal
             met_df["unit_id"] = uid
             C_ls.append(c)
             S_ls.append(s)
             metrics.append(met_df)
     metrics = pd.concat(metrics, ignore_index=True)
-    metrics.to_feather(os.path.join(INT_PATH, "metrics.feat"))
-    fig = px.line(metrics, x="penal", y="err", color="unit_id", template="plotly_dark")
+    metrics.to_feather(os.path.join(INT_PATH, "metrics-{}.feat".format(nm)))
+    fig = px.line(
+        metrics, x="penal", y="rel_err", color="unit_id", template="plotly_dark"
+    )
     fig.write_html(os.path.join(FIG_PATH, "{}-err.html".format(nm)))
     fig = px.line(
-        metrics, x="penal", y="err_opt", color="unit_id", template="plotly_dark"
+        metrics, x="penal", y="rel_err_opt", color="unit_id", template="plotly_dark"
     )
     fig.write_html(os.path.join(FIG_PATH, "{}-err_opt.html".format(nm)))
     fig = px.line(
