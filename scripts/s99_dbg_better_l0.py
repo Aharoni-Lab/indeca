@@ -16,6 +16,7 @@ from scipy.special import huber
 from tqdm.auto import tqdm
 
 from minian_bin.benchmark_utils import compute_ROC
+from minian_bin.deconv import DeconvBin
 from minian_bin.simulation import exp_pulse, tau2AR
 from minian_bin.update_bin import (
     max_thres,
@@ -362,3 +363,44 @@ c, s_cuosqp, b, err, met_df_cuosqp = solve_deconv_l0(
     return_obj=True,
     backend="cuosqp",
 )
+
+# %% try new deconv pipeline
+sim_ds = xr.open_dataset(IN_PATH["org"])
+C_gt = sim_ds["C"].dropna("frame", how="all")
+max_iters = 100
+np.random.seed(42)
+sig_lev = xr.DataArray(
+    np.sort(
+        np.random.uniform(
+            low=PARAM_SIG_LEV[0],
+            high=PARAM_SIG_LEV[1],
+            size=C_gt.sizes["unit_id"],
+        )
+    ),
+    dims=["unit_id"],
+    coords={"unit_id": C_gt.coords["unit_id"]},
+    name="sig_lev",
+)
+np.random.seed(42)
+noise = np.random.normal(loc=0, scale=5e-1, size=C_gt.shape)
+Y_solve = (C_gt * sig_lev + noise).transpose("unit_id", "frame")
+kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
+metrics = []
+for uid in tqdm(np.arange(5, 100, 20)):
+    y = np.array(Y_solve.sel(unit_id=uid))
+    dcv = DeconvBin(y=y, coef=kn, norm="huber")
+    cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale(reset_scale=True)
+    cur_met = pd.DataFrame(
+        [
+            {
+                "uid": uid,
+                "nnz": (cur_s > 0).sum(),
+                "scale": cur_scal,
+                "scale_true": sig_lev.sel(unit_id=uid).item(),
+                "obj": cur_obj,
+                "penal": cur_penal,
+            }
+        ]
+    )
+    metrics.append(cur_met)
+metrics = pd.concat(metrics, ignore_index=True)
