@@ -174,14 +174,8 @@ class DeconvBin:
                 ) + sps.eye(self.T)
                 dcv_cons = [self.s == self.G @ self.c]
             else:
-                # self.H = sum(
-                #     [
-                #         cp.diag(cp.promote(self.coef[i], (self.T - i,)), -i)
-                #         for i in range(self.coef_len)
-                #     ]
-                # )
                 if self.coef.value is not None:
-                    self._update_H()
+                    self._update_H()  # only used for thresholds calculation (not opt prob)
                 dcv_cons = [
                     self.c[:, 0] == cp.convolve(self.coef, self.s[:, 0])[: self.T]
                 ]
