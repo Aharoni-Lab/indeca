@@ -224,20 +224,20 @@ class DeconvBin:
                     q=self.q,
                     A=self.A,
                     l=np.zeros(self.T),
-                    u=np.inf,
+                    u=np.full(self.T, np.inf),
                     check_termination=25,
                     eps_abs=self.atol * 1e-4,
                     eps_rel=1e-8,
                 )
                 m.codegen(
-                    "osqp-codegen",
+                    "osqp-codegen-prob_free",
                     parameters="matrices",
                     python_ext_name="emosqp_free",
                     force_rewrite=True,
                 )
                 m.update(u=np.ones(self.T))
                 m.codegen(
-                    "osqp-codegen",
+                    "osqp-codegen-prob",
                     parameters="matrices",
                     python_ext_name="emosqp",
                     force_rewrite=True,
@@ -251,24 +251,28 @@ class DeconvBin:
                 self.prob_free = cuosqp.OSQP()
                 self.prob = cuosqp.OSQP()
                 self.prob_free.setup(
-                    P=self.P,
-                    q=self.q,
-                    A=self.A,
+                    P=self.P.copy(),
+                    q=self.q.copy(),
+                    A=self.A.copy(),
                     l=np.zeros(self.T),
-                    u=np.inf,
+                    u=np.full(self.T, np.inf),
                     check_termination=25,
                     eps_abs=self.atol * 1e-4,
                     eps_rel=1e-8,
+                    verbose=False,
+                    warm_start=False,
                 )
                 self.prob.setup(
-                    P=self.P,
-                    q=self.q,
-                    A=self.A,
+                    P=self.P.copy(),
+                    q=self.q.copy(),
+                    A=self.A.copy(),
                     l=np.zeros(self.T),
                     u=np.ones(self.T),
                     check_termination=25,
                     eps_abs=self.atol * 1e-4,
                     eps_rel=1e-8,
+                    verbose=False,
+                    warm_start=False,
                 )
 
     def update(
@@ -329,17 +333,17 @@ class DeconvBin:
             # update prob
             if self.backend == "osqp":
                 if updt_P:
-                    self.prob_free.update_P(self.P)
-                    self.prob.update_P(self.P)
+                    self.prob_free.update_P(self.P.data, None, 0)
+                    self.prob.update_P(self.P.data, None, 0)
                 if updt_q:
                     self.prob_free.update_lin_cost(self.q)
                     self.prob.update_lin_cost(self.q)
             elif self.backend == "cuosqp":
                 self.prob_free.update(
-                    P=self.P if updt_P else None, q=self.q if updt_q else None
+                    Px=self.P.data if updt_P else None, q=self.q if updt_q else None
                 )
                 self.prob.update(
-                    P=self.P if updt_P else None, q=self.q if updt_q else None
+                    Px=self.P.data if updt_P else None, q=self.q if updt_q else None
                 )
 
     def solve(self, amp_constraint: bool = True) -> np.ndarray:
@@ -447,7 +451,7 @@ class DeconvBin:
             self.update(**{pn: opt_penal})
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
             if opt_scl == 0:
-                print("wrong")
+                raise ValueError("could not find non-zero solution")
         return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(self, reset_scale: bool = True) -> Tuple[np.ndarray]:
@@ -562,7 +566,9 @@ class DeconvBin:
                 "l1 norm not yet supported with backend {}".format(self.backend)
             )
         elif self.norm == "l2":
-            self.P = self.scale**2 * self.H.T @ self.H
+            P = self.scale**2 * self.H.T @ self.H
+            assert np.isclose(P.todense(), P.T.todense()).all()
+            self.P = sps.triu(P).tocsc()
         elif self.norm == "huber":
             # TODO: add support
             raise NotImplementedError(

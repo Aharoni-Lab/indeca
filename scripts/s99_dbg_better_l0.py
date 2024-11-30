@@ -388,7 +388,7 @@ kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
 metrics = []
 for uid in tqdm(np.arange(5, 100, 20)):
     y = np.array(Y_solve.sel(unit_id=uid))
-    dcv = DeconvBin(y=y, coef=kn, norm="huber")
+    dcv = DeconvBin(y=y, coef=kn, norm="l2", backend="osqp")
     cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale(reset_scale=True)
     cur_met = pd.DataFrame(
         [
