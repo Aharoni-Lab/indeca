@@ -188,7 +188,7 @@ class DeconvBin:
             amp_cons = [self.s <= 1]
             self.prob_free = cp.Problem(obj, dcv_cons)
             self.prob = cp.Problem(obj, dcv_cons + amp_cons)
-        elif self.backend in ["osqp", "cuosqp"]:
+        elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             # book-keeping
             if y is None:
                 self.y = np.ones(self.y_len)
@@ -217,7 +217,7 @@ class DeconvBin:
             self._update_q0()
             self._update_q()
             self.A = sps.eye(self.T, format="csc")
-            if backend == "osqp":
+            if backend == "emosqp":
                 m = osqp.OSQP()
                 m.setup(
                     P=self.P,
@@ -247,9 +247,13 @@ class DeconvBin:
 
                 self.prob_free = emosqp_free
                 self.prob = emosqp
-            elif backend == "cuosqp":
-                self.prob_free = cuosqp.OSQP()
-                self.prob = cuosqp.OSQP()
+            elif backend in ["osqp", "cuosqp"]:
+                if backend == "osqp":
+                    self.prob_free = osqp.OSQP()
+                    self.prob = osqp.OSQP()
+                elif backend == "cuosqp":
+                    self.prob_free = cuosqp.OSQP()
+                    self.prob = cuosqp.OSQP()
                 self.prob_free.setup(
                     P=self.P.copy(),
                     q=self.q.copy(),
@@ -300,7 +304,7 @@ class DeconvBin:
                 self.w = w
             if l0_penal is not None or w is not None:
                 self.l0_w.value = self.l0_penal * self.w
-        elif self.backend in ["osqp", "cuosqp"]:
+        elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             # update input params
             if y is not None:
                 self.y = y
@@ -331,19 +335,21 @@ class DeconvBin:
                 self._update_q()
                 updt_q = True
             # update prob
-            if self.backend == "osqp":
+            if self.backend == "emosqp":
                 if updt_P:
                     self.prob_free.update_P(self.P.data, None, 0)
                     self.prob.update_P(self.P.data, None, 0)
                 if updt_q:
                     self.prob_free.update_lin_cost(self.q)
                     self.prob.update_lin_cost(self.q)
-            elif self.backend == "cuosqp":
+            elif self.backend in ["osqp", "cuosqp"]:
                 self.prob_free.update(
-                    Px=self.P.data if updt_P else None, q=self.q if updt_q else None
+                    Px=self.P.copy().data if updt_P else None,
+                    q=self.q.copy() if updt_q else None,
                 )
                 self.prob.update(
-                    Px=self.P.data if updt_P else None, q=self.q if updt_q else None
+                    Px=self.P.copy().data if updt_P else None,
+                    q=self.q.copy() if updt_q else None,
                 )
 
     def solve(self, amp_constraint: bool = True) -> np.ndarray:
@@ -395,7 +401,7 @@ class DeconvBin:
     def solve_thres(self) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
-        elif self.backend in ["osqp", "cuosqp"]:
+        elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
         opt_s = self.solve()
         svals = max_thres(
@@ -514,13 +520,13 @@ class DeconvBin:
         res = prob.solve()
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
-        elif self.backend in ["osqp", "cuosqp"]:
-            opt_s = res[0] if self.backend == "osqp" else res.x
+        elif self.backend in ["osqp", "emosqp", "cuosqp"]:
+            opt_s = res[0] if self.backend == "emosqp" else res.x
             self.s = opt_s
         if return_obj:
             if self.backend == "cvxpy":
                 opt_obj = res
-            elif self.backend in ["osqp", "cuosqp"]:
+            elif self.backend in ["osqp", "emosqp", "cuosqp"]:
                 opt_obj = self._compute_err()
             return opt_s, opt_obj
         else:
@@ -532,13 +538,13 @@ class DeconvBin:
         else:
             if self.backend == "cvxpy":
                 return self.c.value.squeeze()
-            elif self.backend in ["osqp", "cuosqp"]:
+            elif self.backend in ["osqp", "emosqp", "cuosqp"]:
                 return self.H @ self.s
 
     def _compute_err(self, c: np.ndarray = None, s: np.ndarray = None) -> float:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
-        elif self.backend in ["osqp", "cuosqp"]:
+        elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
         if c is None:
             c = self._compute_c(s)
