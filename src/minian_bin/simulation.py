@@ -49,12 +49,51 @@ def gauss_cell(
 
 
 @nb.jit(nopython=True, nogil=True, cache=True)
-def apply_arcoef(s: np.ndarray, g: np.ndarray):
-    c = np.zeros_like(s)
-    g_r = g[::-1].copy()
-    for idx in range(len(g), len(s)):
-        c[idx] = s[idx] + c[idx - len(g) : idx] @ g_r
+def apply_arcoef(s: np.ndarray, g: np.ndarray, shifted: bool = False):
+    c = np.zeros(len(s), dtype=float)
+    for i in range(len(s)):
+        if shifted:
+            sidx = i - 1
+        else:
+            sidx = i
+        if i > 1:
+            c[i] = s[sidx] + g[0] * c[i - 1] + g[1] * c[i - 2]
+        elif i > 0:
+            c[i] = s[sidx] + g[0] * c[i - 1]
+        else:
+            if sidx >= 0:
+                c[i] = s[sidx]
+            else:
+                c[i] = 0
     return c
+
+
+def apply_exp(
+    s: np.ndarray,
+    tau_d: float,
+    tau_r: float,
+    p_d: float = 1,
+    p_r: float = -1,
+    kn_len: int = None,
+    trunc_thres: float = None,
+):
+    if kn_len is None:
+        kn_len = len(s)
+    t = np.arange(kn_len).astype(float)
+    if tau_d > tau_r and tau_r > 0:
+        kn = p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r)
+    elif tau_d > 0:
+        kn = p_d * np.exp(-t / tau_d)
+        kn[0] = 0
+        warnings.warn(
+            "Ignoring rise time, tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r)
+        )
+    else:
+        raise ValueError("Invalid tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r))
+    if trunc_thres is not None:
+        trunc_idx = np.where(kn > trunc_thres)[0].max()
+        kn = kn[:trunc_idx]
+    return np.convolve(kn, s, mode="full")[: len(s)]
 
 
 def ar_trace(
@@ -428,14 +467,19 @@ def tau2AR(tau_d, tau_r, p=1, return_scl=False):
         return np.real(z1 + z2), np.real(-z1 * z2)
 
 
-def AR2tau(theta1, theta2):
+def AR2tau(theta1, theta2, solve_amp: bool = False):
     rts = np.roots([1, -theta1, -theta2])
     z1, z2 = rts
     if np.imag(z1) == 0 and np.isclose(z1, 0) and z1 < 0:
         z1 = np.abs(z1)
     if np.imag(z2) == 0 and np.isclose(z2, 0) and z2 < 0:
         z2 = np.abs(z2)
-    return np.nan_to_num([-1 / np.log(z1), -1 / np.log(z2)])
+    tau_d, tau_r = np.nan_to_num([-1 / np.log(z1), -1 / np.log(z2)])
+    if solve_amp:
+        p = 1 / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+        return tau_d, tau_r, p
+    else:
+        return tau_d, tau_r
 
 
 def AR2exp(theta1, theta2):
@@ -453,42 +497,25 @@ def AR2exp(theta1, theta2):
         return False, np.array([a, b]), coef
 
 
-def ar_pulse(theta1, theta2, nsamp):
+def generate_pulse(nsamp):
     t = np.arange(nsamp).astype(float)
     pulse = np.zeros_like(t)
     pulse[0] = 1
-    ar = np.zeros_like(t)
-    for i in range(len(t)):
-        if i > 1:
-            ar[i] = pulse[i] + theta1 * ar[i - 1] + theta2 * ar[i - 2]
-        elif i > 0:
-            ar[i] = pulse[i] + theta1 * ar[i - 1]
-        else:
-            ar[i] = pulse[i]
+    return pulse, t
+
+
+def ar_pulse(theta1, theta2, nsamp, shifted=False):
+    pulse, t = generate_pulse(nsamp)
+    ar = apply_arcoef(pulse, np.array([theta1, theta2]), shifted=shifted)
     return ar, t, pulse
 
 
-def exp_pulse(tau_d, tau_r, nsamp, p_d=1, p_r=-1, trunc_thres: float = None):
-    t = np.arange(nsamp).astype(float)
-    pulse = np.zeros_like(t)
-    pulse[0] = 1
-    if tau_d > tau_r and tau_r > 0:
-        kn = p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r)
-    elif tau_d > 0:
-        kn = p_d * np.exp(-t / tau_d)
-        kn[0] = 0
-        warnings.warn(
-            "Ignoring rise time, tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r)
-        )
-    else:
-        raise ValueError("Invalid tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r))
-    tr = np.convolve(kn, pulse, mode="full")[:nsamp]
-    if trunc_thres is not None:
-        trunc_idx = np.where(tr > trunc_thres)[0].max()
-        tr = tr[:trunc_idx]
-        t = t[:trunc_idx]
-        pulse = pulse[:trunc_idx]
-    return tr, t, pulse
+def exp_pulse(
+    tau_d, tau_r, nsamp, p_d=1, p_r=-1, kn_len: int = None, trunc_thres: float = None
+):
+    pulse, t = generate_pulse(nsamp)
+    exp = apply_exp(pulse, tau_d, tau_r, p_d, p_r, kn_len, trunc_thres)
+    return exp, t, pulse
 
 
 def eval_exp(t, is_biexp, tconst, coefs):

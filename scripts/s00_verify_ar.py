@@ -5,13 +5,16 @@ import numpy as np
 from minian_bin.simulation import (
     AR2exp,
     AR2tau,
+    apply_arcoef,
+    apply_exp,
     ar_pulse,
     eval_exp,
     exp_pulse,
     find_dhm,
+    markov_fire,
     tau2AR,
 )
-from minian_bin.update_AR import fit_sumexp, fit_sumexp_split, solve_fit_h
+from minian_bin.update_AR import construct_G, fit_sumexp, fit_sumexp_split, solve_fit_h
 
 # %% verify AR2tau
 end = 60
@@ -111,3 +114,28 @@ axs[2].plot(h_fit_biexp_num, label="biexp_kernel_fit", lw=3, ls=":")
 axs[2].plot(h_ar_num, label="ar_kernel", lw=1.5)
 axs[2].plot(h_fit_ar_num, label="ar_kernel_fit", lw=3, ls=":")
 axs[2].legend()
+
+# %% verify equivalence of shifted AR(2) and constrained biexp
+s = markov_fire(1000, np.array([[0.98, 0.02], [0.75, 0.25]]))
+for tau_d_org, tau_r_org in [(6, 1), (10, 3)]:
+    # ar coefficients
+    theta1, theta2 = tau2AR(tau_d_org, tau_r_org)
+    tau_d, tau_r, p = AR2tau(theta1, theta2, solve_amp=True)
+    assert np.isclose(tau_d, tau_d_org)
+    assert np.isclose(tau_r, tau_r_org)
+    # pulse
+    ar, t, pulse = ar_pulse(theta1, theta2, nsamp=100, shifted=True)
+    exp, t, pulse = exp_pulse(tau_d, tau_r, nsamp=100, p_d=p, p_r=-p)
+    assert np.isclose(ar, exp).all()
+    fig, ax = plt.subplots()
+    ax.plot(exp, label="exp", lw=2)
+    ax.plot(ar, label="ar", lw=3, ls=":")
+    ax.legend()
+    # trace
+    ar = apply_arcoef(s, (theta1, theta2), shifted=True)
+    exp = apply_exp(s, tau_d, tau_r, p, -p)
+    assert np.isclose(ar, exp).all()
+    fig, ax = plt.subplots()
+    ax.plot(exp, label="exp", lw=2)
+    ax.plot(ar, label="ar", lw=3, ls=":")
+    ax.legend()
