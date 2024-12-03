@@ -240,7 +240,6 @@ def simulate_data(
     zero_thres=1e-8,
     chk_size=1000,
     upsample: int = 1,
-    useAR: bool = False,
 ):
     ff, hh, ww = (
         dims["frame"],
@@ -279,21 +278,15 @@ def simulate_data(
     A = darr.from_array(
         sparse.COO.from_numpy(np.where(A > zero_thres, A, 0)), chunks=-1
     )
-    if useAR:
-        traces = [
-            ar_trace(
-                ff * upsample,
-                tmp_P,
-                tau_d=tmp_tau_d * upsample,
-                tau_r=tmp_tau_r * upsample,
-            )
-            for _ in range(len(cent))
-        ]
-    else:
-        traces = [
-            exp_trace(ff * upsample, tmp_P, tmp_tau_d * upsample, tmp_tau_r * upsample)
-            for _ in range(len(cent))
-        ]
+    traces = [
+        ar_trace(
+            ff * upsample,
+            tmp_P,
+            tau_d=tmp_tau_d * upsample,
+            tau_r=tmp_tau_r * upsample,
+        )
+        for _ in range(len(cent))
+    ]
     if upsample > 1:
         C_true = darr.from_array(
             np.stack([t[0] for t in traces]).T, chunks=(chk_size, -1)

@@ -29,8 +29,8 @@ from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 from minian_bin.utilities import scal_lstsq
 
 IN_PATH = {
-    "org": "./intermediate/simulated/simulated-exp-samp.nc",
-    "upsamp": "./intermediate/simulated/simulated-exp-upsamp.nc",
+    "org": "./intermediate/simulated/simulated-samp.nc",
+    "upsamp": "./intermediate/simulated/simulated-upsamp.nc",
 }
 INT_PATH = "./intermediate/better_l0"
 FIG_PATH = "./figs/better_l0"

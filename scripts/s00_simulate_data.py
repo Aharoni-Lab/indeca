@@ -18,18 +18,12 @@ PARAM_TMP_P = {
 os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
 
 # %% generate data
-for (upsamp_lab, upsamp), (useAR_lab, useAR) in itt.product(
-    {"samp": 1, "upsamp": PARAM_UPSAMP}.items(),
-    {"exp": False, "ar": True}.items(),
-):
+for upsamp_lab, upsamp in {"samp": 1, "upsamp": PARAM_UPSAMP}.items():
     np.random.seed(42)
     ds = generate_data(
-        dpath=os.path.join(
-            OUT_PATH, "simulated-{}-{}.nc".format(useAR_lab, upsamp_lab)
-        ),
+        dpath=os.path.join(OUT_PATH, "simulated-{}.nc".format(upsamp_lab)),
         ncell=100,
         upsample=upsamp,
-        useAR=useAR,
         dims={"height": 256, "width": 256, "frame": 2000},
         sig_scale=1,
         sz_mean=3,
