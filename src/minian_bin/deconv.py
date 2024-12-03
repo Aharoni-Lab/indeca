@@ -15,7 +15,7 @@ from scipy.optimize import direct
 from scipy.special import huber
 
 from minian_bin.cnmf import filt_fft, get_ar_coef, noise_fft
-from minian_bin.simulation import tau2AR
+from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.utilities import scal_lstsq
 
 
@@ -64,11 +64,11 @@ class DeconvBin:
         self,
         y: np.array = None,
         y_len: int = None,
+        tau: np.array = None,
         coef: np.array = None,
         coef_len: int = 60,
         scale: float = 1,
         penal: str = "l1",
-        ar_mode: bool = False,
         use_base: bool = False,
         upsamp: int = 1,
         norm: str = "l1",
@@ -91,11 +91,20 @@ class DeconvBin:
         else:
             assert y_len is not None
             self.y_len = y_len
-        if coef is not None:
-            self.coef_len = len(coef)
+        if tau is not None:
+            self.free_kernel = False
+            self.theta = np.array(tau2AR(tau[0], tau[1]))
+            self.tau = np.array(tau)
+            _, _, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
+            coef, _, _ = exp_pulse(
+                tau[0], tau[1], p_d=p, p_r=-p, nsamp=coef_len, kn_len=coef_len
+            )
         else:
-            assert coef_len is not None
-            self.coef_len = coef_len
+            self.free_kernel = True
+            if coef is None:
+                assert coef_len is not None
+                coef = np.ones(coef_len)
+        self.coef_len = len(coef)
         if upsamp > 1:
             R = construct_R(self.y_len, upsamp)
             self.T = self.y_len * upsamp
@@ -115,7 +124,6 @@ class DeconvBin:
         self.l0_penal = l0_penal
         self.w = np.ones(self.T)
         self.upsamp = upsamp
-        self.ar_mode = ar_mode
         self.norm = norm
         self.backend = backend
         self.nthres = nthres
@@ -134,7 +142,7 @@ class DeconvBin:
             self.c = cp.Variable((self.T, 1), nonneg=True, name="c")
             self.s = cp.Variable((self.T, 1), nonneg=True, name="s", boolean=mixin)
             self.y = cp.Parameter(shape=(self.y_len, 1), name="y")
-            self.coef = cp.Parameter(shape=self.coef_len, name="coef")
+            self.coef = cp.Parameter(value=coef, shape=self.coef_len, name="coef")
             self.scale = cp.Parameter(value=scale, name="scale", nonneg=True)
             self.l1_penal = cp.Parameter(value=l1_penal, name="l1_penal", nonneg=True)
             self.l0_w = cp.Parameter(
@@ -165,20 +173,28 @@ class DeconvBin:
                 + self.l0_w.T @ cp.abs(self.s)
                 + self.l1_penal * cp.sum(cp.abs(self.s))
             )
-            if ar_mode:
-                self.G = sum(
-                    [
-                        cp.diag(cp.promote(-self.coef[i], (self.T - i - 1,)), -i - 1)
-                        for i in range(self.coef_len)
-                    ]
-                ) + sps.eye(self.T)
-                dcv_cons = [self.s == self.G @ self.c]
-            else:
-                if self.coef.value is not None:
-                    self._update_H()  # only used for thresholds calculation (not opt prob)
+            self._update_H()
+            if self.free_kernel:
                 dcv_cons = [
                     self.c[:, 0] == cp.convolve(self.coef, self.s[:, 0])[: self.T]
                 ]
+            else:
+                self.theta = cp.Parameter(
+                    value=self.theta, shape=self.theta.shape, name="theta"
+                )
+                G_diag = sps.eye(self.T - 1) + sum(
+                    [
+                        cp.diag(cp.promote(-self.theta[i], (self.T - i - 2,)), -i - 1)
+                        for i in range(self.theta.shape[0])
+                    ]
+                )  # diag part of unshifted G
+                self.G = cp.bmat(
+                    [
+                        [np.zeros((self.T - 1, 1)), G_diag],
+                        [np.zeros((1, 1)), np.zeros((1, self.T - 1))],
+                    ]
+                )
+                dcv_cons = [self.s == self.G @ self.c]
             amp_cons = [self.s <= 1]
             self.prob_free = cp.Problem(obj, dcv_cons)
             self.prob = cp.Problem(obj, dcv_cons + amp_cons)
@@ -550,14 +566,8 @@ class DeconvBin:
             return np.sum(huber(1, y - c)) * 2
 
     def _update_H(self) -> None:
-        if self.ar_mode:
-            # TODO: add support
-            raise NotImplementedError(
-                "AR mode not yet supported with backend {}".format(self.backend)
-            )
-        else:
-            coef = self.coef.value if self.backend == "cvxpy" else self.coef
-            self.H = sps.csc_matrix(convolution_matrix(coef, self.T)[: self.T, :])
+        coef = self.coef.value if self.backend == "cvxpy" else self.coef
+        self.H = sps.csc_matrix(convolution_matrix(coef, self.T)[: self.T, :])
 
     def _update_P(self) -> None:
         if self.norm == "l1":

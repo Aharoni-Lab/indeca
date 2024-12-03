@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 
 from minian_bin.benchmark_utils import compute_ROC
 from minian_bin.deconv import DeconvBin
-from minian_bin.simulation import exp_pulse, tau2AR
+from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.update_bin import (
     max_thres,
     prob_deconv,
@@ -384,11 +384,23 @@ sig_lev = xr.DataArray(
 np.random.seed(42)
 noise = np.random.normal(loc=0, scale=5e-1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).transpose("unit_id", "frame")
-kn, _, _ = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, nsamp=60)
+theta = tau2AR(PARAM_TAU_D, PARAM_TAU_R)
+# _, _, p = AR2tau(theta[0], theta[1], solve_amp=True)
+# kn, _, _ = exp_pulse(
+#     PARAM_TAU_D,
+#     PARAM_TAU_R,
+#     p_d=p,
+#     p_r=-p,
+#     nsamp=Y_solve.sizes["frame"],
+#     trunc_thres=1e-6,
+# )
+# trunc_idx = np.where(kn > 0)[0].max()
+# kn = kn[:trunc_idx]
 metrics = []
 for uid in tqdm(np.arange(5, 100, 20)):
     y = np.array(Y_solve.sel(unit_id=uid))
-    dcv = DeconvBin(y=y, coef=kn, norm="l2", backend="osqp")
+    dcv = DeconvBin(y=y, tau=(PARAM_TAU_D, PARAM_TAU_R), norm="l2", backend="cvxpy")
+    # dcv = DeconvBin(y=y, coef=kn, norm="l2
     cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale(reset_scale=True)
     cur_met = pd.DataFrame(
         [
