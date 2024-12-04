@@ -227,15 +227,16 @@ class DeconvBin:
             self._update_P()
             self._update_q0()
             self._update_q()
-            self.A = sps.eye(self.T, format="csc")
+            self._update_A()
+            self._update_bounds()
             if backend == "emosqp":
                 m = osqp.OSQP()
                 m.setup(
                     P=self.P,
                     q=self.q,
                     A=self.A,
-                    l=np.zeros(self.T),
-                    u=np.full(self.T, np.inf),
+                    l=self.lb,
+                    u=self.ub_inf,
                     check_termination=25,
                     eps_abs=self.atol * 1e-4,
                     eps_rel=1e-8,
@@ -246,7 +247,7 @@ class DeconvBin:
                     python_ext_name="emosqp_free",
                     force_rewrite=True,
                 )
-                m.update(u=np.ones(self.T))
+                m.update(u=self.ub)
                 m.codegen(
                     "osqp-codegen-prob",
                     parameters="matrices",
@@ -269,8 +270,8 @@ class DeconvBin:
                     P=self.P.copy(),
                     q=self.q.copy(),
                     A=self.A.copy(),
-                    l=np.zeros(self.T),
-                    u=np.full(self.T, np.inf),
+                    l=self.lb.copy(),
+                    u=self.ub_inf.copy(),
                     check_termination=25,
                     eps_abs=self.atol * 1e-4,
                     eps_rel=1e-8,
@@ -281,8 +282,8 @@ class DeconvBin:
                     P=self.P.copy(),
                     q=self.q.copy(),
                     A=self.A.copy(),
-                    l=np.zeros(self.T),
-                    u=np.ones(self.T),
+                    l=self.lb.copy(),
+                    u=self.ub.copy(),
                     check_termination=25,
                     eps_abs=self.atol * 1e-4,
                     eps_rel=1e-8,
@@ -532,7 +533,11 @@ class DeconvBin:
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-            opt_s = res[0] if self.backend == "emosqp" else res.x
+            x = res[0] if self.backend == "emosqp" else res.x
+            if self.free_kernel:
+                opt_s = x
+            else:
+                opt_s = self.G @ x
             self.s = opt_s
         if return_obj:
             if self.backend == "cvxpy":
@@ -589,7 +594,10 @@ class DeconvBin:
                 "l1 norm not yet supported with backend {}".format(self.backend)
             )
         elif self.norm == "l2":
-            P = self.scale**2 * self.H.T @ self.H
+            if self.free_kernel:
+                P = self.scale**2 * self.H.T @ self.H
+            else:
+                P = self.scale**2 * sps.eye(self.T)
             assert np.isclose(P.todense(), P.T.todense()).all()
             self.P = sps.triu(P).tocsc()
         elif self.norm == "huber":
@@ -605,7 +613,10 @@ class DeconvBin:
                 "l1 norm not yet supported with backend {}".format(self.backend)
             )
         elif self.norm == "l2":
-            self.q0 = -self.scale * self.H.T @ self.y
+            if self.free_kernel:
+                self.q0 = -self.scale * self.H.T @ self.y
+            else:
+                self.q0 = -self.scale * self.y
         elif self.norm == "huber":
             # TODO: add support
             raise NotImplementedError(
@@ -619,11 +630,36 @@ class DeconvBin:
                 "l1 norm not yet supported with backend {}".format(self.backend)
             )
         elif self.norm == "l2":
-            self.q = (
-                self.q0 + self.l0_penal * self.w + self.l1_penal * np.ones_like(self.q0)
-            )
+            if self.free_kernel:
+                self.q = (
+                    self.q0
+                    + self.l0_penal * self.w
+                    + self.l1_penal * np.ones_like(self.q0)
+                )
+            else:
+                self.q = (
+                    self.q0
+                    + self.l0_penal * self.w @ self.G
+                    + self.l1_penal * np.ones_like(self.q0) @ self.G
+                )
         elif self.norm == "huber":
             # TODO: add support
             raise NotImplementedError(
                 "huber norm not yet supported with backend {}".format(self.backend)
             )
+
+    def _update_A(self) -> None:
+        if self.free_kernel:
+            self.A = sps.eye(self.T, format="csc")
+        else:
+            self.A = sps.bmat([[sps.eye(self.T)], [self.G]], format="csc")
+
+    def _update_bounds(self) -> None:
+        if self.free_kernel:
+            self.lb = np.zeros(self.T)
+            self.ub = np.ones(self.T)
+            self.ub_inf = np.full(self.T, np.inf)
+        else:
+            self.lb = np.zeros(self.T * 2)
+            self.ub = np.concatenate([np.full(self.T, np.inf), np.ones(self.T)])
+            self.ub_inf = np.full(self.T * 2, np.inf)
