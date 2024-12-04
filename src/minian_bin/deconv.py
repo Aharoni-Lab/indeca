@@ -173,7 +173,6 @@ class DeconvBin:
                 + self.l0_w.T @ cp.abs(self.s)
                 + self.l1_penal * cp.sum(cp.abs(self.s))
             )
-            self._update_H()
             if self.free_kernel:
                 dcv_cons = [
                     self.c[:, 0] == cp.convolve(self.coef, self.s[:, 0])[: self.T]
@@ -188,16 +187,18 @@ class DeconvBin:
                         for i in range(self.theta.shape[0])
                     ]
                 )  # diag part of unshifted G
-                self.G = cp.bmat(
+                G = cp.bmat(
                     [
                         [np.zeros((self.T - 1, 1)), G_diag],
                         [np.zeros((1, 1)), np.zeros((1, self.T - 1))],
                     ]
                 )
-                dcv_cons = [self.s == self.G @ self.c]
+                dcv_cons = [self.s == G @ self.c]
             amp_cons = [self.s <= 1]
             self.prob_free = cp.Problem(obj, dcv_cons)
             self.prob = cp.Problem(obj, dcv_cons + amp_cons)
+            # self.H and self.G not used for cvxpy problems
+            self._update_HG()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             # book-keeping
             if y is None:
@@ -222,7 +223,7 @@ class DeconvBin:
                 raise NotImplementedError(
                     "Baseline term not yet supported with backend {}".format(backend)
                 )
-            self._update_H()
+            self._update_HG()
             self._update_P()
             self._update_q0()
             self._update_q()
@@ -303,7 +304,7 @@ class DeconvBin:
                 self.y.value = y
             if coef is not None:
                 self.coef.value = coef
-                self._update_H()
+                self._update_HG()
             if scale is not None:
                 self.scale.value = scale
             if l1_penal is not None:
@@ -331,7 +332,7 @@ class DeconvBin:
             # update internal variables
             updt_H, updt_P, updt_q0, updt_q = [False] * 4
             if coef is not None:
-                self._update_H()
+                self._update_HG()
                 updt_H = True
             if any((scale is not None, updt_H)):
                 self._update_P()
@@ -565,9 +566,21 @@ class DeconvBin:
         elif self.norm == "huber":
             return np.sum(huber(1, y - c)) * 2
 
-    def _update_H(self) -> None:
+    def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
         self.H = sps.csc_matrix(convolution_matrix(coef, self.T)[: self.T, :])
+        if not self.free_kernel:
+            theta = self.theta.value if self.backend == "cvxpy" else self.theta
+            G_diag = sps.diags(
+                [np.ones(self.T - 1)]
+                + [np.repeat(-theta[i], self.T - 2 - i) for i in range(theta.shape[0])],
+                offsets=np.arange(0, -theta.shape[0] - 1, -1),
+                format="csc",
+            )
+            self.G = sps.bmat([[None, G_diag], [np.zeros((1, 1)), None]], format="csc")
+            assert np.isclose(
+                np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
+            ).all()
 
     def _update_P(self) -> None:
         if self.norm == "l1":
