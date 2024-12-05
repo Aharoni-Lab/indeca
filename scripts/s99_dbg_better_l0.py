@@ -392,7 +392,7 @@ theta = tau2AR(PARAM_TAU_D, PARAM_TAU_R)
 #     p_d=p,
 #     p_r=-p,
 #     nsamp=Y_solve.sizes["frame"],
-#     trunc_thres=1e-6,
+#     trunc_thres=1e-10,
 # )
 # trunc_idx = np.where(kn > 0)[0].max()
 # kn = kn[:trunc_idx]
@@ -400,7 +400,7 @@ metrics = []
 for uid in tqdm(np.arange(5, 100, 20)):
     y = np.array(Y_solve.sel(unit_id=uid))
     dcv = DeconvBin(y=y, tau=(PARAM_TAU_D, PARAM_TAU_R), norm="l2", backend="cvxpy")
-    # dcv = DeconvBin(y=y, coef=kn, norm="l2
+    # dcv = DeconvBin(y=y, coef=kn, norm="l2", backend="cvxpy")
     cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale(reset_scale=True)
     cur_met = pd.DataFrame(
         [
@@ -416,3 +416,14 @@ for uid in tqdm(np.arange(5, 100, 20)):
     )
     metrics.append(cur_met)
 metrics = pd.concat(metrics, ignore_index=True)
+
+# %%
+metrics.to_feather("./met_free_cvxpy.feat")
+print("free kernel, cvxpy:")
+print(pd.read_feather("./met_free_cvxpy.feat"))
+print("free kernel, osqp:")
+print(pd.read_feather("./met_free_osqp.feat"))
+print("ar mode, cvxpy:")
+print(pd.read_feather("./met_ar_cvxpy.feat"))
+print("ar mode, osqp:")
+print(pd.read_feather("./met_ar_osqp.feat"))
