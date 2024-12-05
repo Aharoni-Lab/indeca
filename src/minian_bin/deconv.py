@@ -194,9 +194,10 @@ class DeconvBin:
                     ]
                 )
                 dcv_cons = [self.s == G @ self.c]
+            edge_cons = [self.c[0, 0] == 0, self.s[-1, 0] == 0]
             amp_cons = [self.s <= 1]
-            self.prob_free = cp.Problem(obj, dcv_cons)
-            self.prob = cp.Problem(obj, dcv_cons + amp_cons)
+            self.prob_free = cp.Problem(obj, dcv_cons + edge_cons)
+            self.prob = cp.Problem(obj, dcv_cons + edge_cons + amp_cons)
             # self.H and self.G not used for cvxpy problems
             self._update_HG()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
