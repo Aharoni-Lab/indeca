@@ -27,11 +27,11 @@ for ns in np.linspace(0, 0.3, 100):
     np.random.seed(18)
     y = tr + np.random.uniform(-ns, ns, nsamp)
     y_norm = y / y.sum()
-    for fit_amp in [True, False, "norm"]:
+    for fit_amp in [True, False]:
         if fit_amp == False:
-            lams, ps, h_fit, _ = fit_sumexp_iter(y_norm, ar_mode=False)
+            lams, ps, h_fit, _ = fit_sumexp_iter(y_norm)
         else:
-            lams, ps, h_fit = fit_sumexp_gd(y_norm, ar_mode=False, fit_amp=fit_amp)
+            lams, ps, h_fit = fit_sumexp_gd(y_norm, fit_amp=True)
         taus = -1 / lams
         metrics.append(
             pd.DataFrame(
@@ -84,12 +84,19 @@ for (tau_d, tau_r), dd, dr, ns in tqdm(
 ):
     t_d, t_r = tau_d + dd, tau_r + dr
     if t_d > t_r and t_r > 0:
-        tr, t, _ = exp_pulse(tau_d, tau_r, nsamp)
+        p_true = 1 / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+        p_denom = np.exp(-1 / t_d) - np.exp(-1 / t_r)
+        if p_denom > 0:
+            p = 1 / p_denom
+        else:
+            continue
+        tr, t, _ = exp_pulse(tau_d, tau_r, nsamp, p_d=p_true, p_r=-p_true)
         y = tr + np.random.uniform(-ns, ns, nsamp)
-        tr_fit, t, _ = exp_pulse(t_d, t_r, nsamp)
+        y_var = np.linalg.norm(y)
+        tr_fit, t, _ = exp_pulse(t_d, t_r, nsamp, p_d=p, p_r=-p)
         scal = scal_lstsq(tr_fit, y)
-        err = np.linalg.norm(y - tr_fit)
-        err_scal = np.linalg.norm(y - tr_fit * scal)
+        err = np.linalg.norm(y - tr_fit).clip(0, y_var)
+        err_scal = np.linalg.norm(y - tr_fit * scal).clip(0, y_var)
         edf = pd.DataFrame(
             [
                 {
@@ -97,7 +104,7 @@ for (tau_d, tau_r), dd, dr, ns in tqdm(
                     "ns": ns,
                     "tau_d": t_d,
                     "tau_r": t_r,
-                    "scal": scal,
+                    "scal": p,
                     "err": err,
                     "err_scal": err_scal,
                 }
@@ -107,13 +114,18 @@ for (tau_d, tau_r), dd, dr, ns in tqdm(
 err_df = pd.concat(err_df, ignore_index=True)
 err_df.to_feather(os.path.join(INT_PATH, "err_df.feat"))
 
+
 # %% plot errors
+def norm_err(err):
+    return norm(np.log(err + 1e-10))
+
+
 err_df = pd.read_feather(os.path.join(INT_PATH, "err_df.feat"))
 for gt, edf in err_df.groupby("gt"):
     for zvar in ["scal", "err", "err_scal"]:
         earr = edf.set_index(["ns", "tau_d", "tau_r"])[zvar].to_xarray()
         earr = xr.apply_ufunc(
-            norm,
+            norm_err,
             earr,
             input_core_dims=[["tau_d", "tau_r"]],
             output_core_dims=[["tau_d", "tau_r"]],

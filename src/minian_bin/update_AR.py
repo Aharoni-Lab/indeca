@@ -97,7 +97,7 @@ def fit_sumexp_split(y):
     )
 
 
-def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = True):
+def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
     T = len(y)
     if x is None:
         x = np.arange(T)
@@ -120,37 +120,18 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100, ar_mode: bool = Tr
         np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
         + idx_max_interp
     ) / interp_factor
-    if fit_amp == True:
-        if ar_mode:
-            fit_func = lambda x, p, d, r: p * np.exp(-x / d) - (p - 1) * np.exp(-x / r)
-            p0 = 2
-        else:
-            fit_func = lambda x, p, d, r: p * np.exp(-x / d) - p * np.exp(-x / r)
-            p0 = 1
+    if fit_amp:
         res = curve_fit(
-            fit_func,
-            x,
-            y,
-            p0=(p0, tau_d_init, tau_r_init),
-            bounds=(0, np.inf),
-            max_nfev=1e6,
-        )
-        p, tau_d, tau_r = res[0]
-        if ar_mode:
-            p = np.array([p, 1 - p])
-        else:
-            p = np.array([p, -p])
-    elif fit_amp == "norm":
-        res = curve_fit(
-            lambda x, d, r: 1 / (d - r) * (np.exp(-x / d) - np.exp(-x / r)),
+            lambda x, d, r: (np.exp(-x / d) - np.exp(-x / r))
+            / (np.exp(-1 / d) - np.exp(-1 / r)),
             x,
             y,
             p0=(tau_d_init, tau_r_init),
             bounds=(0, np.inf),
         )
         tau_d, tau_r = res[0]
-        p = np.array([1, -1]) / (tau_d - tau_r)
-    elif fit_amp == False:
+        p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+    else:
         res = curve_fit(
             lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
             x,
