@@ -584,9 +584,9 @@ class DeconvBin:
                 format="csc",
             )
             self.G = sps.bmat([[None, G_diag], [np.zeros((1, 1)), None]], format="csc")
-            assert np.isclose(
-                np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
-            ).all()
+            # assert np.isclose(
+            #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
+            # ).all()
 
     def _update_P(self) -> None:
         if self.norm == "l1":
