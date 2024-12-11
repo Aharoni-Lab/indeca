@@ -67,7 +67,7 @@ class DeconvBin:
         theta: np.array = None,
         tau: np.array = None,
         coef: np.array = None,
-        coef_len: int = 60,
+        coef_len: int = 100,
         scale: float = 1,
         penal: str = "l1",
         use_base: bool = False,
@@ -485,7 +485,7 @@ class DeconvBin:
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
                 eps=self.atol,
-                vol_tol=self.atol,
+                vol_tol=1e-2,
             )
             if not res.success:
                 warnings.warn(
