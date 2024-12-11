@@ -5,6 +5,7 @@ import pandas as pd
 from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
+from .deconv import DeconvBin
 from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
 from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h_num
 from .update_bin import (
@@ -23,7 +24,6 @@ def pipeline_bin(
     Y,
     up_factor=1,
     p=2,
-    ar_mode=True,
     tau_init=None,
     return_iter=False,
     max_iters=50,
@@ -34,11 +34,10 @@ def pipeline_bin(
     est_add_lag=20,
     deconv_nthres=1000,
     deconv_norm="l1",
-    deconv_scal_tol=1e-5,
-    deconv_max_iters=50,
-    deconv_use_l0=True,
+    deconv_atol=1e-3,
+    deconv_penal="l1",
     ar_use_all=True,
-    ar_kn_len=60,
+    ar_kn_len=100,
     ar_norm="l1",
 ):
     # 0. housekeeping
@@ -46,29 +45,29 @@ def pipeline_bin(
     R = construct_R(T, up_factor)
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
-        g = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
+        theta = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
         tau = np.tile(tau_init, (ncell, 1))
     else:
         if up_factor > 1:
             raise NotImplementedError(
                 "Estimation of AR coefficient with upsampling is not implemented"
             )
-        g = np.empty((ncell, p))
+        theta = np.empty((ncell, p))
         tau = np.empty((ncell, p))
         for icell, y in enumerate(Y):
-            cur_g, _ = estimate_coefs(
+            cur_theta, _ = estimate_coefs(
                 y,
                 p=p,
                 noise_freq=est_noise_freq,
                 use_smooth=est_use_smooth,
                 add_lag=est_add_lag,
             )
-            g[icell, :] = cur_g
-            cur_tau = AR2tau(*cur_g)
+            theta[icell, :] = cur_theta
+            cur_tau = AR2tau(*cur_theta)
+            # fit and convert tau to real value
             if (np.imag(cur_tau) != 0).any():
-                tr = ar_pulse(*cur_g, nsamp=ar_kn_len)[0]
-                tr[0] = 0
-                lams, cur_p, tr_fit = fit_sumexp_gd(tr, ar_mode=ar_mode)
+                tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
+                lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
                 tau[icell, :] = -1 / lams
             else:
                 tau[icell, :] = cur_tau
@@ -92,46 +91,47 @@ def pipeline_bin(
             "best_idx",
         ]
     )
-    prob = prob_deconv(T, coef_len=p, R=R, norm=deconv_norm)
-    prob_cons = prob_deconv(T, coef_len=p, R=R, norm=deconv_norm, amp_constraint=True)
+    dcv = [
+        DeconvBin(
+            y=y,
+            theta=theta[i],
+            upsamp=up_factor,
+            nthres=deconv_nthres,
+            norm=deconv_norm,
+            penal=deconv_penal,
+            atol=deconv_atol,
+        )
+        for i, y in enumerate(Y)
+    ]
     for i_iter in trange(max_iters, desc="iteration"):
         # 2.1 deconvolution
-        C, S, err = (
+        C, S, err, penal = (
             np.empty((ncell, T * up_factor)),
             np.empty((ncell, T * up_factor)),
+            np.empty(ncell),
             np.empty(ncell),
         )
         for icell, y in tqdm(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
-            c_bin, s_bin, _, scl, _, _ = solve_deconv_bin_direct(
-                y,
-                prob,
-                prob_cons,
-                coef=g[icell],
-                R=R,
-                nthres=deconv_nthres,
-                tol=deconv_scal_tol,
-                max_iters=deconv_max_iters,
-                ar_mode=ar_mode,
-                use_l0=deconv_use_l0,
-                norm=deconv_norm,
-            )
+            s_bin, c_bin, scl, obj, pn = dcv[icell].solve_scale(reset_scale=i_iter == 0)
             C[icell, :] = c_bin.squeeze()
             S[icell, :] = s_bin.squeeze()
             scale[icell] = scl
-            err[icell] = np.linalg.norm(y - c_bin.squeeze())
+            err[icell] = obj
+            penal[icell] = pn
         # 2.2 save iteration results
         cur_metric = pd.DataFrame(
             {
                 "iter": i_iter,
                 "cell": np.arange(ncell),
-                "g0": g.T[0],
-                "g1": g.T[1],
+                "g0": theta.T[0],
+                "g1": theta.T[1],
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
                 "err": err,
                 "scale": scale,
+                "penal": penal,
             }
         )
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
@@ -168,26 +168,23 @@ def pipeline_bin(
         else:
             S_ar = S_best
         if ar_use_all:
-            lams, ps, h, h_fit, _, _ = solve_fit_h_num(
-                Y, S_ar, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
+            lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+                Y, S_ar, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
             )
             cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))
-            g0, g1, scl = tau2AR(cur_tau[0], cur_tau[1], ps[0], return_scl=True)
-            g = np.tile((g0, g1), (ncell, 1))
-            scale = scal_best / scl
+            for d in dcv:
+                d.update(tau=cur_tau, scale_mul=ar_scal)
         else:
-            g = np.empty((ncell, p))
+            theta = np.empty((ncell, p))
             tau = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
-                lams, cur_ps, _, _, _, _ = solve_fit_h_num(
-                    y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm, ar_mode=ar_mode
+                lams, _, _ = solve_fit_h_num(
+                    y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
                 )
                 cur_tau = -1 / lams
                 tau[icell, :] = cur_tau
-                g0, g1, scl = tau2AR(cur_tau[0], cur_tau[1], cur_ps[0], return_scl=True)
-                g[icell, :] = (g0, g1)
-                scale[icell] = scal_best[icell] / scl
+                dcv[icell].update(tau=cur_tau)
         # 2.4 check convergence
         metric_last = metric_df[metric_df["iter"] < i_iter].dropna(
             subset=["err", "scale"]
