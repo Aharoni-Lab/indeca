@@ -48,7 +48,7 @@ def gauss_cell(
     return A
 
 
-@nb.jit(nopython=True, nogil=True, cache=True)
+# @nb.jit(nopython=True, nogil=True, cache=True)
 def apply_arcoef(s: np.ndarray, g: np.ndarray, shifted: bool = False):
     c = np.zeros(len(s), dtype=float)
     for i in range(len(s)):
