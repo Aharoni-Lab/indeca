@@ -64,6 +64,7 @@ class DeconvBin:
         self,
         y: np.array = None,
         y_len: int = None,
+        theta: np.array = None,
         tau: np.array = None,
         coef: np.array = None,
         coef_len: int = 60,
@@ -91,7 +92,15 @@ class DeconvBin:
         else:
             assert y_len is not None
             self.y_len = y_len
-        if tau is not None:
+        if theta is not None:
+            self.free_kernel = False
+            self.theta = np.array(theta)
+            tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
+            self.tau = np.array([tau_d, tau_r])
+            coef, _, _ = exp_pulse(
+                tau_d, tau_r, p_d=p, p_r=-p, nsamp=coef_len, kn_len=coef_len
+            )
+        elif tau is not None:
             self.free_kernel = False
             self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
