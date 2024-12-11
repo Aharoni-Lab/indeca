@@ -25,11 +25,11 @@ from minian_bin.simulation import exp_pulse
 from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
 
 IN_PATH = {
-    "org": "./intermediate/simulated/simulated-exp-samp.nc",
-    "upsamp": "./intermediate/simulated/simulated-exp-upsamp.nc",
+    "org": "./intermediate/simulated/simulated-samp.nc",
+    "upsamp": "./intermediate/simulated/simulated-upsamp.nc",
 }
-INT_PATH = "./intermediate/benchmark_pipeline_5best_est"
-FIG_PATH = "./figs/benchmark_pipeline_5best_est"
+INT_PATH = "./intermediate/benchmark_pipeline_100cell_est"
+FIG_PATH = "./figs/benchmark_pipeline_100cell_est"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
@@ -49,7 +49,7 @@ for up_type, up_factor in {"org": 1}.items():
     sim_ds = xr.open_dataset(IN_PATH[up_type])
     C_gt = sim_ds["C"].dropna("frame", how="all")
     # C_gt = norm_per_cell(C_gt)
-    subset = C_gt.coords["unit_id"][-5:]
+    subset = C_gt.coords["unit_id"]
     np.random.seed(42)
     sig_lev = xr.DataArray(
         np.sort(
@@ -84,7 +84,6 @@ for up_type, up_factor in {"org": 1}.items():
         # tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
         return_iter=True,
         ar_use_all=True,
-        ar_mode=True,
         est_noise_freq=0.06,
         est_use_smooth=True,
         est_add_lag=50,
