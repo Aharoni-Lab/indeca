@@ -175,7 +175,13 @@ for up_type, in_path in IN_PATH.items():
         value_name="diff",
     )
     fig_coef = px.line(
-        itdf, x="iter", y="diff", color="cell", line_dash="coef", markers=True
+        itdf,
+        x="iter",
+        y="diff",
+        color="coef",
+        line_dash="coef",
+        line_group="cell",
+        markers=True,
     )
     fig_coef.write_html(os.path.join(FIG_PATH, "coef-{}.html".format(up_type)))
     for i_iter in np.array(S_iter.coords["iter"]):
