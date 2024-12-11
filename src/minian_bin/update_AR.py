@@ -120,7 +120,19 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
         np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
         + idx_max_interp
     ) / interp_factor
-    if fit_amp:
+    if fit_amp == "scale":
+        res = curve_fit(
+            lambda x, d, r, scal: scal
+            * (np.exp(-x / d) - np.exp(-x / r))
+            / (np.exp(-1 / d) - np.exp(-1 / r)),
+            x,
+            y,
+            p0=(tau_d_init, tau_r_init, 1),
+            bounds=(0, np.inf),
+        )
+        tau_d, tau_r, scal = res[0]
+        p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+    elif fit_amp == True:
         res = curve_fit(
             lambda x, d, r: (np.exp(-x / d) - np.exp(-x / r))
             / (np.exp(-1 / d) - np.exp(-1 / r)),
@@ -131,6 +143,7 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
         )
         tau_d, tau_r = res[0]
         p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+        scal = 1
     else:
         res = curve_fit(
             lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
@@ -141,6 +154,7 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
         )
         tau_d, tau_r = res[0]
         p = np.array([1, -1])
+        scal = 1
     if tau_d <= tau_r:
         warnings.warn(
             "decaying time smaller than rising time: tau_d: {}, tau_r: {}\nreversing coefficients".format(
@@ -151,21 +165,20 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
     return (
         -1 / np.array([tau_d, tau_r]),
         p,
+        scal,
         p[0] * np.exp(-x / tau_d) + p[1] * np.exp(-x / tau_r),
     )
 
 
-def fit_sumexp_iter(y, max_iters=50, err_atol=1e-3, err_rtol=1e-3, **kwargs):
-    err_org = np.linalg.norm(y)
-    err_tol = max(err_atol, err_rtol * err_org)
-    err = err_org
-    p = y.max()
+def fit_sumexp_iter(y, max_iters=50, atol=1e-3, **kwargs):
+    _, _, scal, y_fit = fit_sumexp_gd(y, fit_amp="scale")
+    y_norm = y / scal
+    p = 1
     coef_df = []
     for i_iter in range(max_iters):
-        lams, ps, y_fit = fit_sumexp_gd(y / p, fit_amp=False, **kwargs)
+        lams, _, _, y_fit = fit_sumexp_gd(y_norm / p, fit_amp=False, **kwargs)
         taus = -1 / lams
-        err_last = err
-        err = np.linalg.norm(y - y_fit * p)
+        p_new = 1 / (np.exp(lams[0]) - np.exp(lams[1]))
         coef_df.append(
             pd.DataFrame(
                 [
@@ -174,19 +187,18 @@ def fit_sumexp_iter(y, max_iters=50, err_atol=1e-3, err_rtol=1e-3, **kwargs):
                         "p": p,
                         "tau_d": taus[0],
                         "tau_r": taus[1],
-                        "err": err,
                     }
                 ]
             )
         )
-        if np.abs(err - err_last) < err_tol:
+        if np.abs(p_new - p) < atol:
             break
         else:
-            p = scal_lstsq(y_fit, y)
+            p = p_new
     else:
         warnings.warn("max scale iteration reached for sumexp fitting")
     coef_df = pd.concat(coef_df, ignore_index=True)
-    return lams, ps * p, y_fit, coef_df
+    return lams, p, scal, y_fit, coef_df
 
 
 def lst_l1(A, b):
