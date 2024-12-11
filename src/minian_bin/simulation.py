@@ -81,9 +81,9 @@ def apply_exp(
         kn_len = len(s)
     t = np.arange(kn_len).astype(float)
     if tau_d > tau_r and tau_r > 0:
-        kn = p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r)
+        kn = np.abs(p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r))
     elif tau_d > 0:
-        kn = p_d * np.exp(-t / tau_d)
+        kn = np.abs(p_d * np.exp(-t / tau_d))
         kn[0] = 0
         warnings.warn(
             "Ignoring rise time, tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r)
