@@ -310,52 +310,13 @@ def solve_fit_h_num(
     N=2,
     s_len=60,
     norm="l1",
-    tol=1e-3,
-    max_iters: int = 30,
-    ar_mode: bool = True,
 ):
-    metric_df = None
-    h_df = None
-    i_iter = 0
-    while i_iter < max_iters:
-        h = solve_h(y, s, scal, s_len, norm)
-        if ar_mode:
-            h = np.concatenate([[0], h])[:-1]
-        lams, ps, h_fit, _ = fit_sumexp_iter(h)
-        taus = -1 / lams
-        met = pd.DataFrame(
-            {
-                "iter": i_iter,
-                "tau_d": taus[0],
-                "tau_r": taus[1],
-                "p0": ps[0],
-                "p1": ps[1],
-                "scal": scal,
-            }
-        )
-        metric_df = pd.concat([metric_df, met], ignore_index=True)
-        h_df = pd.concat(
-            [
-                h_df,
-                pd.DataFrame(
-                    {
-                        "iter": i_iter,
-                        "h": h,
-                        "h_max": h.max(),
-                        "h_fit": h_fit,
-                        "frame": np.arange(len(h)),
-                    }
-                ),
-            ]
-        )
-        if np.abs(ps[0] - 1) < tol:
-            break
-        else:
-            scal = scal * ps[0]
-            i_iter += 1
-    else:
-        warnings.warn("max h fitting iteration reached")
-    return lams, ps, h, h_fit, metric_df, h_df
+    h = solve_h(y, s, scal, s_len, norm)
+    pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
+    lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
+    h_fit_pad = np.zeros_like(h)
+    h_fit_pad[: len(h_fit)] = h_fit
+    return lams, p, scal, h, h_fit_pad
 
 
 def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
