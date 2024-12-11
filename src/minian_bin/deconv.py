@@ -307,6 +307,7 @@ class DeconvBin:
         tau: np.ndarray = None,
         coef: np.ndarray = None,
         scale: float = None,
+        scale_mul: float = None,
         l0_penal: float = None,
         l1_penal: float = None,
         w: np.ndarray = None,
@@ -333,6 +334,8 @@ class DeconvBin:
                 self._update_HG()
             if scale is not None:
                 self.scale.value = scale
+            if scale_mul is not None:
+                self.scale.value = scale_mul * self.scale.value
             if l1_penal is not None:
                 self.l1_penal.value = l1_penal
             if l0_penal is not None:
