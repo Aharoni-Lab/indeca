@@ -304,6 +304,7 @@ class DeconvBin:
     def update(
         self,
         y: np.ndarray = None,
+        tau: np.ndarray = None,
         coef: np.ndarray = None,
         scale: float = None,
         l0_penal: float = None,
@@ -313,6 +314,20 @@ class DeconvBin:
         if self.backend == "cvxpy":
             if y is not None:
                 self.y.value = y
+            if tau is not None:
+                theta_new = np.array(tau2AR(tau[0], tau[1]))
+                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                coef, _, _ = exp_pulse(
+                    tau[0],
+                    tau[1],
+                    p_d=p,
+                    p_r=-p,
+                    nsamp=self.coef_len,
+                    kn_len=self.coef_len,
+                )
+                self.coef.value = coef
+                self.theta.value = theta_new
+                self._update_HG()
             if coef is not None:
                 self.coef.value = coef
                 self._update_HG()
