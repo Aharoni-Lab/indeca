@@ -352,10 +352,24 @@ class DeconvBin:
             # update input params
             if y is not None:
                 self.y = y
+            if tau is not None:
+                theta_new = np.array(tau2AR(tau[0], tau[1]))
+                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                coef, _, _ = exp_pulse(
+                    tau[0],
+                    tau[1],
+                    p_d=p,
+                    p_r=-p,
+                    nsamp=self.coef_len,
+                    kn_len=self.coef_len,
+                )
+                self.theta = theta_new
             if coef is not None:
                 self.coef = coef
             if scale is not None:
                 self.scale = scale
+            if scale_mul is not None:
+                self.scale = scale_mul * self.scale
             if l1_penal is not None:
                 self.l1_penal = l1_penal
             if l0_penal is not None:
@@ -363,14 +377,17 @@ class DeconvBin:
             if w is not None:
                 self.w = w
             # update internal variables
-            updt_H, updt_P, updt_q0, updt_q = [False] * 4
+            updt_HG, updt_P, updt_A, updt_q0, updt_q = [False] * 5
             if coef is not None:
                 self._update_HG()
-                updt_H = True
-            if any((scale is not None, updt_H)):
+                updt_HG = True
+            if updt_HG:
+                self._update_A()
+                updt_A = True
+            if any((scale is not None, scale_mul is not None, updt_HG)):
                 self._update_P()
                 updt_P = True
-            if any((scale is not None, y is not None, updt_H)):
+            if any((scale is not None, scale_mul is not None, y is not None, updt_HG)):
                 self._update_q0()
                 updt_q0 = True
             if any(
@@ -390,10 +407,12 @@ class DeconvBin:
                 self.prob_free.update(
                     Px=self.P.copy().data if updt_P else None,
                     q=self.q.copy() if updt_q else None,
+                    Ax=self.A.copy().data if updt_A else None,
                 )
                 self.prob.update(
                     Px=self.P.copy().data if updt_P else None,
                     q=self.q.copy() if updt_q else None,
+                    Ax=self.A.copy().data if updt_A else None,
                 )
 
     def solve(self, amp_constraint: bool = True) -> np.ndarray:
