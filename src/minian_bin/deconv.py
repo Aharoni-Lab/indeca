@@ -283,10 +283,12 @@ class DeconvBin:
                     l=self.lb.copy(),
                     u=self.ub_inf.copy(),
                     check_termination=25,
-                    eps_abs=self.atol * 1e-4,
-                    eps_rel=1e-8,
+                    eps_abs=1e-5 if backend == "osqp" else self.atol * 1e-4,
+                    eps_rel=1e-5 if backend == "osqp" else 1e-8,
                     verbose=False,
-                    warm_start=False,
+                    polish=True,
+                    warm_start=True if backend == "osqp" else False,
+                    max_iter=int(1e4) if backend == "osqp" else None,
                 )
                 self.prob.setup(
                     P=self.P.copy(),
@@ -295,10 +297,12 @@ class DeconvBin:
                     l=self.lb.copy(),
                     u=self.ub.copy(),
                     check_termination=25,
-                    eps_abs=self.atol * 1e-4,
-                    eps_rel=1e-8,
+                    eps_abs=1e-5 if backend == "osqp" else self.atol * 1e-4,
+                    eps_rel=1e-5 if backend == "osqp" else 1e-8,
                     verbose=False,
-                    warm_start=False,
+                    polish=True,
+                    warm_start=True if backend == "osqp" else False,
+                    max_iter=int(1e4) if backend == "osqp" else None,
                 )
 
     def update(
