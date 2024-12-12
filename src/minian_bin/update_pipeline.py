@@ -36,6 +36,7 @@ def pipeline_bin(
     deconv_norm="l1",
     deconv_atol=1e-3,
     deconv_penal="l1",
+    deconv_backend="cvxpy",
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l1",
@@ -100,6 +101,7 @@ def pipeline_bin(
             norm=deconv_norm,
             penal=deconv_penal,
             atol=deconv_atol,
+            backend=deconv_backend,
         )
         for i, y in enumerate(Y)
     ]
