@@ -28,8 +28,8 @@ IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",
     "upsamp": "./intermediate/simulated/simulated-upsamp.nc",
 }
-INT_PATH = "./intermediate/benchmark_pipeline_100cell_est"
-FIG_PATH = "./figs/benchmark_pipeline_100cell_est"
+INT_PATH = "./intermediate/benchmark_pipeline_5best_est"
+FIG_PATH = "./figs/benchmark_pipeline_5best_est"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
 PARAM_UPSAMP = 10
@@ -49,7 +49,7 @@ for up_type, up_factor in {"org": 1}.items():
     sim_ds = xr.open_dataset(IN_PATH[up_type])
     C_gt = sim_ds["C"].dropna("frame", how="all")
     # C_gt = norm_per_cell(C_gt)
-    subset = C_gt.coords["unit_id"]
+    subset = C_gt.coords["unit_id"][-5:]
     np.random.seed(42)
     sig_lev = xr.DataArray(
         np.sort(
@@ -87,7 +87,8 @@ for up_type, up_factor in {"org": 1}.items():
         est_noise_freq=0.06,
         est_use_smooth=True,
         est_add_lag=50,
-        deconv_use_l0=True,
+        deconv_norm="l2",
+        deconv_backend="osqp",
     )
     res = {
         "C": C_bin,
