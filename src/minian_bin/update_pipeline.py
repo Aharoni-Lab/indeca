@@ -28,7 +28,8 @@ def pipeline_bin(
     return_iter=False,
     max_iters=50,
     n_best=3,
-    err_tol=1e-3,
+    err_atol=1e-1,
+    err_rtol=5e-2,
     est_noise_freq=0.4,
     est_use_smooth=True,
     est_add_lag=20,
@@ -221,26 +222,33 @@ def pipeline_bin(
                 else:
                     dcv[icell].update(tau=cur_tau, scale_mul=ar_scal)
         # 2.4 check convergence
-        metric_last = metric_df[metric_df["iter"] < i_iter].dropna(
+        metric_prev = metric_df[metric_df["iter"] < i_iter].dropna(
             subset=["err", "scale"]
         )
-        if len(metric_last) > 0:
+        metric_last = metric_df[metric_df["iter"] == i_iter - 1].dropna(
+            subset=["err", "scale"]
+        )
+        if len(metric_prev) > 0:
             err_cur = cur_metric.set_index("cell")["err"]
-            err_best = metric_last.groupby("cell")["err"].min()
+            err_last = metric_last.set_index("cell")["err"]
+            err_best = metric_prev.groupby("cell")["err"].min()
             # converged by err
-            if (np.abs(err_cur - err_best) < err_tol).all():
+            if (np.abs(err_cur - err_last) < err_atol).all():
+                break
+            # converged by relative err
+            if (np.abs(err_cur - err_last) < err_rtol * err_best).all():
                 break
             # converged by s
             S_best = np.empty((ncell, T * up_factor))
-            for uid, udf in metric_last.groupby("cell"):
+            for uid, udf in metric_prev.groupby("cell"):
                 best_iter = udf.set_index("iter")["err"].idxmin()
                 S_best[uid, :] = S_ls[best_iter][uid, :]
             if np.abs(S - S_best).sum() < 1:
                 break
             # trapped
-            err_all = metric_last.pivot(columns="iter", index="cell", values="err")
+            err_all = metric_prev.pivot(columns="iter", index="cell", values="err")
             diff_all = np.abs(err_cur.values.reshape((-1, 1)) - err_all.values)
-            if (diff_all.min(axis=1) < err_tol).all():
+            if (diff_all.min(axis=1) < err_atol).all():
                 warnings.warn("Solution trapped in local optimal err")
                 break
             # trapped by s
