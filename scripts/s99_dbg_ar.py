@@ -100,7 +100,7 @@ for (tau_d, tau_r), dd, dr, ns in tqdm(
         edf = pd.DataFrame(
             [
                 {
-                    "gt": "tau_d: {}, tau_r: {}".format(tau_d, tau_r),
+                    "gt": "tau_d={}, tau_r={}".format(tau_d, tau_r),
                     "ns": ns,
                     "tau_d": t_d,
                     "tau_r": t_r,
