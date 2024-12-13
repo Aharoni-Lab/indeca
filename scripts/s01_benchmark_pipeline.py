@@ -18,6 +18,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import xarray as xr
+from dask.distributed import Client, LocalCluster
 from plotly.subplots import make_subplots
 
 from minian_bin.benchmark_utils import compute_ROC
@@ -41,6 +42,13 @@ os.makedirs(FIG_PATH, exist_ok=True)
 
 
 # %% 1. Generate or import dataset at normal FPS for calcium imaging
+cluster = LocalCluster(
+    n_workers=30,
+    threads_per_worker=1,
+    processes=False,
+    dashboard_address="0.0.0.0:12345",
+)
+client = Client(cluster)
 sps_penal = 1
 max_iters = 30
 # for up_type, up_factor in {"org": 1, "upsamp": PARAM_UPSAMP}.items():
@@ -89,6 +97,7 @@ for up_type, up_factor in {"org": 1}.items():
         est_add_lag=50,
         deconv_norm="l2",
         deconv_backend="osqp",
+        da_client=client,
     )
     res = {
         "C": C_bin,

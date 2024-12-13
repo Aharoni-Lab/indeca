@@ -40,6 +40,7 @@ def pipeline_bin(
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l1",
+    da_client=None,
 ):
     # 0. housekeeping
     ncell, T = Y.shape
@@ -92,36 +93,58 @@ def pipeline_bin(
             "best_idx",
         ]
     )
-    dcv = [
-        DeconvBin(
-            y=y,
-            theta=theta[i],
-            upsamp=up_factor,
-            nthres=deconv_nthres,
-            norm=deconv_norm,
-            penal=deconv_penal,
-            atol=deconv_atol,
-            backend=deconv_backend,
-        )
-        for i, y in enumerate(Y)
-    ]
+    if da_client is not None:
+        dcv = [
+            da_client.submit(
+                lambda yy, tt: DeconvBin(
+                    y=yy,
+                    theta=tt,
+                    upsamp=up_factor,
+                    nthres=deconv_nthres,
+                    norm=deconv_norm,
+                    penal=deconv_penal,
+                    atol=deconv_atol,
+                    backend=deconv_backend,
+                ),
+                y,
+                theta[i],
+            )
+            for i, y in enumerate(Y)
+        ]
+    else:
+        dcv = [
+            DeconvBin(
+                y=y,
+                theta=theta[i],
+                upsamp=up_factor,
+                nthres=deconv_nthres,
+                norm=deconv_norm,
+                penal=deconv_penal,
+                atol=deconv_atol,
+                backend=deconv_backend,
+            )
+            for i, y in enumerate(Y)
+        ]
     for i_iter in trange(max_iters, desc="iteration"):
         # 2.1 deconvolution
-        C, S, err, penal = (
-            np.empty((ncell, T * up_factor)),
-            np.empty((ncell, T * up_factor)),
-            np.empty(ncell),
-            np.empty(ncell),
-        )
+        res = []
         for icell, y in tqdm(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
-            s_bin, c_bin, scl, obj, pn = dcv[icell].solve_scale(reset_scale=i_iter == 0)
-            C[icell, :] = c_bin.squeeze()
-            S[icell, :] = s_bin.squeeze()
-            scale[icell] = scl
-            err[icell] = obj
-            penal[icell] = pn
+            if da_client is not None:
+                r = da_client.submit(
+                    lambda d: d.solve_scale(reset_scale=i_iter == 0), dcv[icell]
+                )
+            else:
+                r = dcv[icell].solve_scale(reset_scale=i_iter == 0)
+            res.append(r)
+        if da_client is not None:
+            res = da_client.gather(res)
+        S = np.stack([r[0].squeeze() for r in res], axis=0, dtype=float)
+        C = np.stack([r[1].squeeze() for r in res], axis=0)
+        scale = np.array([r[2] for r in res])
+        err = np.array([r[3] for r in res])
+        penal = np.array([r[4] for r in res])
         # 2.2 save iteration results
         cur_metric = pd.DataFrame(
             {
@@ -176,17 +199,27 @@ def pipeline_bin(
             cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))
             for d in dcv:
-                d.update(tau=cur_tau, scale_mul=ar_scal)
+                if da_client is not None:
+                    da_client.submit(
+                        lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal), d
+                    )
+                else:
+                    d.update(tau=cur_tau, scale_mul=ar_scal)
         else:
             theta = np.empty((ncell, p))
             tau = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
-                lams, _, _ = solve_fit_h_num(
+                lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
                     y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
                 )
                 cur_tau = -1 / lams
                 tau[icell, :] = cur_tau
-                dcv[icell].update(tau=cur_tau)
+                if da_client is not None:
+                    da_client.submit(
+                        lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal), dcv[icell]
+                    )
+                else:
+                    dcv[icell].update(tau=cur_tau, scale_mul=ar_scal)
         # 2.4 check convergence
         metric_last = metric_df[metric_df["iter"] < i_iter].dropna(
             subset=["err", "scale"]
