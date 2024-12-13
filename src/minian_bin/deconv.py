@@ -703,14 +703,9 @@ class DeconvBin:
         if self.free_kernel:
             self.A = sps.eye(self.T, format="csc")
         else:
-            self.A = sps.bmat([[sps.eye(self.T)], [self.G]], format="csc")
+            self.A = sps.csc_matrix(self.G)
 
     def _update_bounds(self) -> None:
-        if self.free_kernel:
-            self.lb = np.zeros(self.T)
-            self.ub = np.ones(self.T)
-            self.ub_inf = np.full(self.T, np.inf)
-        else:
-            self.lb = np.zeros(self.T * 2)
-            self.ub = np.concatenate([np.full(self.T, np.inf), np.ones(self.T)])
-            self.ub_inf = np.full(self.T * 2, np.inf)
+        self.lb = np.zeros(self.T)
+        self.ub = np.ones(self.T)
+        self.ub_inf = np.full(self.T, np.inf)
