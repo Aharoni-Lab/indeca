@@ -98,7 +98,7 @@ def fit_sumexp_split(y):
     )
 
 
-def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
+def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
     T = len(y)
     if x is None:
         x = np.arange(T)
@@ -130,6 +130,11 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
             y,
             p0=(tau_d_init, tau_r_init, 1),
             bounds=(0, np.inf),
+            sigma=y_weight,
+            absolute_sigma=True,
+            # loss="huber",
+            # f_scale=1e-2,
+            # tr_solver="exact",
         )
         tau_d, tau_r, scal = res[0]
         p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
