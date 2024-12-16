@@ -45,16 +45,11 @@ def pipeline_bin(
 ):
     # 0. housekeeping
     ncell, T = Y.shape
-    R = construct_R(T, up_factor)
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         theta = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
         tau = np.tile(tau_init, (ncell, 1))
     else:
-        if up_factor > 1:
-            raise NotImplementedError(
-                "Estimation of AR coefficient with upsampling is not implemented"
-            )
         theta = np.empty((ncell, p))
         tau = np.empty((ncell, p))
         for icell, y in enumerate(Y):
@@ -65,15 +60,16 @@ def pipeline_bin(
                 use_smooth=est_use_smooth,
                 add_lag=est_add_lag,
             )
-            theta[icell, :] = cur_theta
-            cur_tau = AR2tau(*cur_theta)
-            # fit and convert tau to real value
+            tau_d, tau_r, cur_p = AR2tau(*cur_theta, solve_amp=True)
+            cur_tau = np.array([tau_d, tau_r])
             if (np.imag(cur_tau) != 0).any():
+                # fit and convert tau to real value
                 tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
-                lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
-                tau[icell, :] = -1 / lams
-            else:
-                tau[icell, :] = cur_tau
+                lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp="scale")
+                cur_tau = (-1 / lams) * up_factor
+            cur_theta = tau2AR(cur_tau[0], cur_tau[1], cur_p)
+            tau[icell, :] = cur_tau
+            theta[icell, :] = cur_theta
     scale = np.empty(ncell)
     # 2. iteration loop
     C_ls = []
@@ -168,8 +164,8 @@ def pipeline_bin(
             h_ls.append(h)
             h_fit_ls.append(h_fit)
         except UnboundLocalError:
-            h_ls.append(np.full(T, np.nan))
-            h_fit_ls.append(np.full(T, np.nan))
+            h_ls.append(np.full(T * up_factor, np.nan))
+            h_fit_ls.append(np.full(T * up_factor, np.nan))
         # 2.3 update AR
         metric_df = metric_df.set_index(["iter", "cell"])
         if n_best is not None and i_iter > n_best:
@@ -189,13 +185,16 @@ def pipeline_bin(
             S_best = S
             scal_best = scale
         metric_df = metric_df.reset_index()
-        if up_factor > 1:
-            S_ar = np.stack([sum_downsample(s, up_factor) for s in S_best], axis=0)
-        else:
-            S_ar = S_best
+        S_ar = S_best
         if ar_use_all:
             lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-                Y, S_ar, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
+                Y,
+                S_ar,
+                scal_best,
+                N=p,
+                s_len=ar_kn_len * up_factor,
+                norm=ar_norm,
+                up_factor=up_factor,
             )
             cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))

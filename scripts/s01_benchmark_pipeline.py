@@ -153,17 +153,18 @@ for up_type, in_path in IN_PATH.items():
         )
     except FileNotFoundError:
         continue
+    up_fac = PARAM_UPSAMP if up_type == "upsamp" else 1
     sim_ds = xr.open_dataset(in_path)
     Y_solve, S_iter, S_true, C_iter, C_true, h_iter, h_fit_iter = (
         updt_ds["Y_solve"],
         updt_ds["S_iter"],
-        sim_ds["S"],
+        sim_ds["S_true"] if up_type == "upsamp" else sim_ds["S"],
         updt_ds["C_iter"],
-        sim_ds["C"],
+        sim_ds["C_true"] if up_type == "upsamp" else sim_ds["C"],
         updt_ds["h_iter"],
         updt_ds["h_fit_iter"],
     )
-    h_gt = exp_pulse(PARAM_TAU_D, PARAM_TAU_R, 60)[0]
+    h_gt = exp_pulse(PARAM_TAU_D * up_fac, PARAM_TAU_R * up_fac, 60 * up_fac)[0]
     met_df = []
     for i_iter in np.array(S_iter.coords["iter"]):
         met = compute_ROC(S_iter.sel(iter=i_iter), S_true, metadata={"iter": i_iter})
@@ -172,8 +173,12 @@ for up_type, in_path in IN_PATH.items():
     fig_f1 = px.line(met_df, x="iter", y="f1", color="unit_id")
     fig_f1.write_html(os.path.join(FIG_PATH, "f1-{}.html".format(up_type)))
     iter_df["scale_true"] = iter_df["unit_id"].map(updt_ds["sig_lev"].to_series())
-    iter_df["tau_d_diff"] = (iter_df["tau_d"] - PARAM_TAU_D) / PARAM_TAU_D
-    iter_df["tau_r_diff"] = (iter_df["tau_r"] - PARAM_TAU_R) / PARAM_TAU_R
+    iter_df["tau_d_diff"] = (iter_df["tau_d"] - PARAM_TAU_D * up_fac) / (
+        PARAM_TAU_D * up_fac
+    )
+    iter_df["tau_r_diff"] = (iter_df["tau_r"] - PARAM_TAU_R * up_fac) / (
+        PARAM_TAU_R * up_fac
+    )
     iter_df["scale_diff"] = (iter_df["scale"] - iter_df["scale_true"]) / iter_df[
         "scale_true"
     ]
@@ -232,7 +237,7 @@ for up_type, in_path in IN_PATH.items():
             )
             fig.add_trace(
                 go.Scatter(
-                    y=S_true.sel(unit_id=uid),
+                    y=S_true.sel(unit_id=uid) * up_fac,
                     mode="lines",
                     name="s_gt",
                     legendgroup="s_gt",
@@ -242,7 +247,7 @@ for up_type, in_path in IN_PATH.items():
             )
             fig.add_trace(
                 go.Scatter(
-                    y=S_iter.sel(unit_id=uid, iter=i_iter),
+                    y=S_iter.sel(unit_id=uid, iter=i_iter) * up_fac,
                     mode="lines",
                     name="s",
                     legendgroup="s",

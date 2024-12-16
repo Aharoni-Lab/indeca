@@ -7,6 +7,7 @@ import scipy.sparse as sps
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import curve_fit
 
+from .deconv import construct_R
 from .update_bin import construct_G
 from .utilities import scal_lstsq
 
@@ -210,28 +211,31 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, scal, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
+def solve_h(y, s, scal, h_len=60, norm="l1", smth_penalty=0, ignore_len=0, up_factor=1):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
     if multi_unit:
         ncell, T = s.shape
+        y_len = y.shape[1]
     else:
         T = len(s)
-    if s_len is None:
-        s_len = T
+        y_len = len(y)
+    R = construct_R(y_len, up_factor)
+    if h_len is None:
+        h_len = T
     else:
-        s_len = min(s_len, T)
+        h_len = min(h_len, T)
     if multi_unit:
         b = cp.Variable((ncell, 1))
     else:
         b = cp.Variable()
-    h = cp.Variable(s_len)
+    h = cp.Variable(h_len)
     h = cp.hstack([h, 0])
     if multi_unit:
-        conv_term = cp.vstack([cp.convolve(ss, h)[:T] for ss in s])
+        conv_term = cp.vstack([R @ cp.convolve(ss, h)[:T] for ss in s])
     else:
-        conv_term = cp.convolve(s, h)[:T]
+        conv_term = R @ cp.convolve(s, h)[:T]
     norm_ord = {"l1": 1, "l2": 2}[norm]
     obj = cp.Minimize(
         cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, norm_ord)
@@ -240,7 +244,7 @@ def solve_h(y, s, scal, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
     prob.solve()
-    return np.concatenate([h.value, np.zeros(T - s_len - 1)])
+    return np.concatenate([h.value, np.zeros(T - h_len - 1)])
 
 
 def solve_fit_h(
@@ -303,15 +307,8 @@ def solve_fit_h(
     return lams, ps, h, h_fit, metric_df, h_df
 
 
-def solve_fit_h_num(
-    y,
-    s,
-    scal,
-    N=2,
-    s_len=60,
-    norm="l1",
-):
-    h = solve_h(y, s, scal, s_len, norm)
+def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l1", up_factor=1):
+    h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
     pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
     lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
     h_fit_pad = np.zeros_like(h)

@@ -101,7 +101,13 @@ class DeconvBin:
             tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
             self.tau = np.array([tau_d, tau_r])
             coef, _, _ = exp_pulse(
-                tau_d, tau_r, p_d=p, p_r=-p, nsamp=coef_len, kn_len=coef_len
+                tau_d,
+                tau_r,
+                p_d=p,
+                p_r=-p,
+                nsamp=coef_len * upsamp,
+                kn_len=coef_len * upsamp,
+                trunc_thres=atol,
             )
         elif tau is not None:
             self.free_kernel = False
@@ -109,20 +115,22 @@ class DeconvBin:
             self.tau = np.array(tau)
             _, _, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
             coef, _, _ = exp_pulse(
-                tau[0], tau[1], p_d=p, p_r=-p, nsamp=coef_len, kn_len=coef_len
+                tau[0],
+                tau[1],
+                p_d=p,
+                p_r=-p,
+                nsamp=coef_len * upsamp,
+                kn_len=coef_len * upsamp,
+                trunc_thres=atol,
             )
         else:
             self.free_kernel = True
             if coef is None:
                 assert coef_len is not None
-                coef = np.ones(coef_len)
+                coef = np.ones(coef_len * upsamp)
         self.coef_len = len(coef)
-        if upsamp > 1:
-            R = construct_R(self.y_len, upsamp)
-            self.T = self.y_len * upsamp
-        else:
-            R = sps.eye(self.y_len)
-            self.T = self.y_len
+        self.T = self.y_len * upsamp
+        R = construct_R(self.y_len, upsamp)
         if penal is None:
             l0_penal = 0
             l1_penal = 0
@@ -210,8 +218,7 @@ class DeconvBin:
             amp_cons = [self.s <= 1]
             self.prob_free = cp.Problem(obj, dcv_cons + edge_cons)
             self.prob = cp.Problem(obj, dcv_cons + edge_cons + amp_cons)
-            # self.H and self.G not used for cvxpy problems
-            self._update_HG()
+            self._update_HG()  # self.H and self.G not used for cvxpy problems
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             # book-keeping
             if y is None:
@@ -222,15 +229,11 @@ class DeconvBin:
                 self.coef = np.ones(self.coef_len)
             else:
                 self.coef = coef
-            self.c = np.zeros(self.T)
-            self.s = np.zeros(self.T)
+            self.c = np.zeros(self.T * upsamp)
+            self.s = np.zeros(self.T * upsamp)
+            self.R = R
             self.l1_penal = l1_penal
             self.scale = scale
-            if upsamp > 1:
-                # TODO: add support
-                raise NotImplementedError(
-                    "Upsampling not yet supported with backend {}".format(backend)
-                )
             if use_base:
                 # TODO: add support
                 raise NotImplementedError(
@@ -478,8 +481,10 @@ class DeconvBin:
             reverse_thres=True,
         )
         cvals = [self._compute_c(s) for s in svals]
-        scals = [scal_lstsq(c, y) for c in cvals]
-        objs = [self._compute_err(c=scl * c) for scl, c in zip(scals, cvals)]
+        R = self.R.value if self.backend == "cvxpy" else self.R
+        Rcvals = [R @ c for c in cvals]
+        scals = [scal_lstsq(c, y) for c in Rcvals]
+        objs = [self._compute_err(c=scl * c) for scl, c in zip(scals, Rcvals)]
         opt_idx = np.argmin(objs)
         return svals[opt_idx], cvals[opt_idx], scals[opt_idx], objs[opt_idx]
 
@@ -614,10 +619,12 @@ class DeconvBin:
     def _compute_err(self, c: np.ndarray = None, s: np.ndarray = None) -> float:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
+            R = self.R.value
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
+            R = self.R
         if c is None:
-            c = self._compute_c(s)
+            c = R @ self._compute_c(s)
         if self.norm == "l1":
             return np.sum(np.abs(y - c))
         elif self.norm == "l2":
@@ -649,9 +656,9 @@ class DeconvBin:
             )
         elif self.norm == "l2":
             if self.free_kernel:
-                P = self.scale**2 * self.H.T @ self.H
+                P = self.scale**2 * self.H.T @ self.R.T @ self.R @ self.H
             else:
-                P = self.scale**2 * sps.eye(self.T)
+                P = self.scale**2 * self.R.T @ self.R
             assert np.isclose(P.todense(), P.T.todense()).all()
             self.P = sps.triu(P).tocsc()
         elif self.norm == "huber":
@@ -668,9 +675,9 @@ class DeconvBin:
             )
         elif self.norm == "l2":
             if self.free_kernel:
-                self.q0 = -self.scale * self.H.T @ self.y
+                self.q0 = -self.scale * self.H.T @ self.R.T @ self.y
             else:
-                self.q0 = -self.scale * self.y
+                self.q0 = -self.scale * self.R.T @ self.y
         elif self.norm == "huber":
             # TODO: add support
             raise NotImplementedError(
