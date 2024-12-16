@@ -86,8 +86,8 @@ class DeconvBin:
         max_iter_scal: int = 10,
         delta_l0: float = 1e-4,
         delta_penal: float = 1e-4,
-        atol=1e-3,
-        rtol=1e-3,
+        atol: float = 1e-3,
+        rtol: float = 1e-3,
     ) -> None:
         # book-keeping
         if y is not None:
