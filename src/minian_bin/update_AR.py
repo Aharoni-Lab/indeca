@@ -167,7 +167,7 @@ def fit_sumexp_gd(y, x=None, fit_amp=True, interp_factor=100):
         -1 / np.array([tau_d, tau_r]),
         p,
         scal,
-        p[0] * np.exp(-x / tau_d) + p[1] * np.exp(-x / tau_r),
+        scal * (p[0] * np.exp(-x / tau_d) + p[1] * np.exp(-x / tau_r)),
     )
 
 
