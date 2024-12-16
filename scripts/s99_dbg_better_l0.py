@@ -365,6 +365,10 @@ c, s_cuosqp, b, err, met_df_cuosqp = solve_deconv_l0(
 )
 
 # %% try new deconv pipeline
+it_df = pd.read_feather(
+    "./intermediate/benchmark_pipeline_5best_est/iter_df-org.feat"
+).set_index(["iter", "unit_id"])
+
 sim_ds = xr.open_dataset(IN_PATH["org"])
 C_gt = sim_ds["C"].dropna("frame", how="all")
 max_iters = 100
@@ -381,8 +385,8 @@ sig_lev = xr.DataArray(
     coords={"unit_id": C_gt.coords["unit_id"]},
     name="sig_lev",
 )
-np.random.seed(42)
-noise = np.random.normal(loc=0, scale=5e-1, size=C_gt.shape)
+# np.random.seed(42)
+noise = np.random.normal(loc=0, scale=1, size=C_gt.shape)
 Y_solve = (C_gt * sig_lev + noise).transpose("unit_id", "frame")
 theta = tau2AR(PARAM_TAU_D, PARAM_TAU_R)
 # _, _, p = AR2tau(theta[0], theta[1], solve_amp=True)
@@ -397,11 +401,32 @@ theta = tau2AR(PARAM_TAU_D, PARAM_TAU_R)
 # trunc_idx = np.where(kn > 0)[0].max()
 # kn = kn[:trunc_idx]
 metrics = []
-for uid in tqdm(np.arange(5, 100, 20)):
+# for uid in tqdm(np.arange(5, 100, 20)):
+for uid in tqdm(np.arange(95, 100)):
     y = np.array(Y_solve.sel(unit_id=uid))
-    dcv = DeconvBin(y=y, tau=(PARAM_TAU_D, PARAM_TAU_R), norm="l2", backend="cvxpy")
+    # dcv = DeconvBin(y=y, tau=(PARAM_TAU_D, PARAM_TAU_R), norm="l2", backend="osqp")
+    theta = it_df.loc[0, uid][["g0", "g1"]].astype(float).values
+    dcv = DeconvBin(y=y, theta=theta, norm="l2", backend="cvxpy")
+    dcv_osqp = DeconvBin(y=y, theta=theta, norm="l2", backend="osqp")
     # dcv = DeconvBin(y=y, coef=kn, norm="l2", backend="cvxpy")
     cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale(reset_scale=True)
+    cur_s_osqp, cur_c_osqp, cur_scal_osqp, cur_obj_osqp, cur_penal_osqp = (
+        dcv_osqp.solve_scale(reset_scale=True)
+    )
+    s1 = dcv.solve()
+    s1_osqp = dcv_osqp.solve()
+    tau = it_df.loc[1, uid][["tau_d", "tau_r"]].astype(float).values
+    dcv.update(tau=tau)
+    dcv_osqp.update(tau=tau)
+    s2 = dcv.solve()
+    dcv_osqp.prob.update_settings(verbose=True)
+    s2_osqp = dcv_osqp.solve()
+    dcv_osqp.prob.update_settings(verbose=False)
+    cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale()
+    cur_s_osqp, cur_c_osqp, cur_scal_osqp, cur_obj_osqp, cur_penal_osqp = (
+        dcv_osqp.solve_scale()
+    )
+    break
     cur_met = pd.DataFrame(
         [
             {
@@ -415,14 +440,23 @@ for uid in tqdm(np.arange(5, 100, 20)):
         ]
     )
     metrics.append(cur_met)
-metrics = pd.concat(metrics, ignore_index=True)
+# metrics = pd.concat(metrics, ignore_index=True)
+# %%
+fig = px.line(cur_s)
+fig.add_scatter(y=cur_s_osqp)
+# fig.add_scatter(y=cur_s_osqp)
+fig.show()
 
 # %%
-metrics.to_feather("./met_free_cvxpy.feat")
-print("free kernel, cvxpy:")
-print(pd.read_feather("./met_free_cvxpy.feat"))
-print("free kernel, osqp:")
-print(pd.read_feather("./met_free_osqp.feat"))
+s2_ref = s2
+s_ref = cur_s
+
+# %%
+metrics.to_feather("./met_ar_cvxpy.feat")
+# print("free kernel, cvxpy:")
+# print(pd.read_feather("./met_free_cvxpy.feat"))
+# print("free kernel, osqp:")
+# print(pd.read_feather("./met_free_osqp.feat"))
 print("ar mode, cvxpy:")
 print(pd.read_feather("./met_ar_cvxpy.feat"))
 print("ar mode, osqp:")

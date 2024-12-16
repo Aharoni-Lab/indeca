@@ -10,7 +10,7 @@ import xarray as xr
 from tqdm.auto import tqdm
 
 from minian_bin.simulation import exp_pulse
-from minian_bin.update_AR import fit_sumexp_gd, fit_sumexp_iter
+from minian_bin.update_AR import fit_sumexp_gd, fit_sumexp_iter, solve_fit_h_num
 from minian_bin.utilities import norm, scal_lstsq
 
 FIG_PATH = "./figs/dbg_ar"
@@ -141,3 +141,27 @@ for gt, edf in err_df.groupby("gt"):
         )
         fig.update_layout(height=2000)
         fig.write_html(os.path.join(FIG_PATH, "{}-{}.html".format(zvar, gt)))
+
+# %% debug fitting
+import plotly.express as px
+from scipy.signal import medfilt
+from statsmodels.robust import norms
+
+from minian_bin.simulation import exp_pulse
+
+h = np.load("h.npy")[1:]
+p = 1 / (np.exp(-1 / 6) - np.exp(-1))
+h_true, _, _ = exp_pulse(6, 1, len(h), p_d=p, p_r=-p)
+scal_true = scal_lstsq(h_true, h)
+w = np.ones_like(h)
+for i in range(10):
+    lams, p, scal, h_fit = fit_sumexp_gd(h, y_weight=w, fit_amp="scale")
+    taus = -1 / lams
+    print(taus)
+    # w = -norms.AndrewWave().weights(h - h_fit) + 2
+    # w = ((h - h_fit) ** 2).clip(1e-3, None)
+
+fig = px.line(h)
+fig.add_scatter(y=h_fit)
+fig.add_scatter(y=h_true * scal_true)
+fig.show()
