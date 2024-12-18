@@ -5,12 +5,14 @@ import warnings
 import dask.array as darr
 import numba as nb
 import numpy as np
+import pandas as pd
 import sparse
 import xarray as xr
 from numpy import random
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import root_scalar
 from scipy.stats import multivariate_normal
+from tqdm.auto import tqdm
 
 from .minian_functions import save_minian, shift_perframe, write_video
 
@@ -46,13 +48,52 @@ def gauss_cell(
     return A
 
 
-@nb.jit(nopython=True, nogil=True, cache=True)
-def apply_arcoef(s: np.ndarray, g: np.ndarray):
-    c = np.zeros_like(s)
-    g_r = g[::-1].copy()
-    for idx in range(len(g), len(s)):
-        c[idx] = s[idx] + c[idx - len(g) : idx] @ g_r
+# @nb.jit(nopython=True, nogil=True, cache=True)
+def apply_arcoef(s: np.ndarray, g: np.ndarray, shifted: bool = False):
+    c = np.zeros(len(s), dtype=float)
+    for i in range(len(s)):
+        if shifted:
+            sidx = i - 1
+        else:
+            sidx = i
+        if i > 1:
+            c[i] = s[sidx] + g[0] * c[i - 1] + g[1] * c[i - 2]
+        elif i > 0:
+            c[i] = s[sidx] + g[0] * c[i - 1]
+        else:
+            if sidx >= 0:
+                c[i] = s[sidx]
+            else:
+                c[i] = 0
     return c
+
+
+def apply_exp(
+    s: np.ndarray,
+    tau_d: float,
+    tau_r: float,
+    p_d: float = 1,
+    p_r: float = -1,
+    kn_len: int = None,
+    trunc_thres: float = None,
+):
+    if kn_len is None:
+        kn_len = len(s)
+    t = np.arange(kn_len).astype(float)
+    if tau_d > tau_r and tau_r > 0:
+        kn = np.abs(p_d * np.exp(-t / tau_d) + p_r * np.exp(-t / tau_r))
+    elif tau_d > 0:
+        kn = np.abs(p_d * np.exp(-t / tau_d))
+        kn[0] = 0
+        warnings.warn(
+            "Ignoring rise time, tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r)
+        )
+    else:
+        raise ValueError("Invalid tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r))
+    if trunc_thres is not None:
+        trunc_idx = np.where(kn > trunc_thres)[0].max()
+        kn = kn[:trunc_idx]
+    return np.convolve(kn, s, mode="full")[: len(s)]
 
 
 def ar_trace(
@@ -70,21 +111,29 @@ def ar_trace(
 
 
 def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres=1e-6):
+    # uses a 2 state markov model to generate more 'bursty' spike trains
     S = markov_fire(frame, P).astype(float)
-    t = np.arange(1, frame + 1)  # skip the first 0 from biexponential kernel
+    t = np.arange(0, frame)
+    # Creates bi-exponential convolution kernel
     v = np.exp(-t / tau_d) - np.exp(-t / tau_r)
-    v = v[v > trunc_thres]
+    # Trims the length of the kernel once it reaches a small value
+    v = v[: np.where(v > trunc_thres)[0].max()]
+    # Convolves spiking with kernel to generate upscaled calcium
     C = np.convolve(v, S, mode="full")[:frame]
     return C, S
 
 
 def markov_fire(frame: int, P: np.ndarray):
+    # makes sure markov probabilities are correct shape
     assert P.shape == (2, 2)
+    # make sure probabilities sum to 1
     assert (P.sum(axis=1) == 1).all()
     while True:
+        # allocate array for spiking and generate
         S = np.zeros(frame, dtype=int)
         for i in range(1, len(S)):
             S[i] = np.random.choice([0, 1], p=P[S[i - 1], :])
+        # make sure at least one firing exists
         if S.sum() > 0:
             break
     return S
@@ -127,6 +176,48 @@ def random_walk(
     return walk
 
 
+def simulate_traces(
+    num_cells: int,
+    length_in_sec: float,
+    tmp_P: np.ndarray,
+    tmp_tau_d: float,
+    tmp_tau_r: float,
+    approx_fps: float = 30,
+    spike_sampling_rate=500,
+    noise: float = 0.01,
+):
+    # TODO: make this compatibale with exp_trace and incorporate this with rest of the simulation pipeline
+    upsample_factor = np.round(spike_sampling_rate / approx_fps).astype(int)
+    fps = spike_sampling_rate / upsample_factor
+    num_samples = np.round(length_in_sec * fps).astype(
+        int
+    )  # number of samples for normal calcium
+    tmp_tau_d = tmp_tau_d * fps
+    tmp_tau_r = tmp_tau_r * fps
+
+    traces = []
+    for i in tqdm(range(num_cells), desc="Simulating cells", unit="cell"):
+        C_upsampled, S_upsampled, C, S = exp_trace(
+            num_samples, tmp_P, tmp_tau_d, tmp_tau_r, upsample_factor=upsample_factor
+        )
+        traces.append({"C_true": C_upsampled, "S_true": S_upsampled, "C": C, "S": S})
+    # Add Gaussian noise to C
+    for trace in traces:
+        noise_array = np.random.normal(0, noise, size=trace["C"].shape)
+        trace["C_noisy"] = trace["C"] + noise_array
+
+    # Add the noisy C to the DataFrame
+    df = pd.DataFrame(traces)
+    df["fps"] = fps
+    df["upsample_factor"] = upsample_factor
+    df["spike_sampling_rate"] = spike_sampling_rate
+    df = pd.DataFrame(traces)
+    df["fps"] = fps
+    df["upsample_factor"] = upsample_factor
+    df["spike_sampling_rate"] = spike_sampling_rate
+    return df
+
+
 def simulate_data(
     ncell: int,
     dims: dict,
@@ -149,7 +240,6 @@ def simulate_data(
     zero_thres=1e-8,
     chk_size=1000,
     upsample: int = 1,
-    useAR: bool = False,
 ):
     ff, hh, ww = (
         dims["frame"],
@@ -188,21 +278,15 @@ def simulate_data(
     A = darr.from_array(
         sparse.COO.from_numpy(np.where(A > zero_thres, A, 0)), chunks=-1
     )
-    if useAR:
-        traces = [
-            ar_trace(
-                ff * upsample,
-                tmp_P,
-                tau_d=tmp_tau_d * upsample,
-                tau_r=tmp_tau_r * upsample,
-            )
-            for _ in range(len(cent))
-        ]
-    else:
-        traces = [
-            exp_trace(ff * upsample, tmp_P, tmp_tau_d * upsample, tmp_tau_r * upsample)
-            for _ in range(len(cent))
-        ]
+    traces = [
+        ar_trace(
+            ff * upsample,
+            tmp_P,
+            tau_d=tmp_tau_d * upsample,
+            tau_r=tmp_tau_r * upsample,
+        )
+        for _ in range(len(cent))
+    ]
     if upsample > 1:
         C_true = darr.from_array(
             np.stack([t[0] for t in traces]).T, chunks=(chk_size, -1)
@@ -367,19 +451,28 @@ def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post
     return Y.astype(np.uint8)
 
 
-def tau2AR(tau_d, tau_r):
+def tau2AR(tau_d, tau_r, p=1, return_scl=False):
     z1, z2 = np.exp(-1 / tau_d), np.exp(-1 / tau_r)
-    return np.real(z1 + z2), np.real(-z1 * z2)
+    if return_scl:
+        scl = p * (z1 - z2)
+        return np.real(z1 + z2), np.real(-z1 * z2), scl
+    else:
+        return np.real(z1 + z2), np.real(-z1 * z2)
 
 
-def AR2tau(theta1, theta2):
+def AR2tau(theta1, theta2, solve_amp: bool = False):
     rts = np.roots([1, -theta1, -theta2])
     z1, z2 = rts
     if np.imag(z1) == 0 and np.isclose(z1, 0) and z1 < 0:
         z1 = np.abs(z1)
     if np.imag(z2) == 0 and np.isclose(z2, 0) and z2 < 0:
         z2 = np.abs(z2)
-    return np.nan_to_num([-1 / np.log(z1), -1 / np.log(z2)])
+    tau_d, tau_r = np.nan_to_num([-1 / np.log(z1), -1 / np.log(z2)])
+    if solve_amp:
+        p = 1 / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+        return tau_d, tau_r, p
+    else:
+        return tau_d, tau_r
 
 
 def AR2exp(theta1, theta2):
@@ -397,19 +490,25 @@ def AR2exp(theta1, theta2):
         return False, np.array([a, b]), coef
 
 
-def ar_pulse(theta1, theta2, nsamp):
+def generate_pulse(nsamp):
     t = np.arange(nsamp).astype(float)
     pulse = np.zeros_like(t)
     pulse[0] = 1
-    ar = np.zeros_like(t)
-    for i in range(len(t)):
-        if i > 1:
-            ar[i] = pulse[i] + theta1 * ar[i - 1] + theta2 * ar[i - 2]
-        elif i > 0:
-            ar[i] = pulse[i] + theta1 * ar[i - 1]
-        else:
-            ar[i] = pulse[i]
+    return pulse, t
+
+
+def ar_pulse(theta1, theta2, nsamp, shifted=False):
+    pulse, t = generate_pulse(nsamp)
+    ar = apply_arcoef(pulse, np.array([theta1, theta2]), shifted=shifted)
     return ar, t, pulse
+
+
+def exp_pulse(
+    tau_d, tau_r, nsamp, p_d=1, p_r=-1, kn_len: int = None, trunc_thres: float = None
+):
+    pulse, t = generate_pulse(nsamp)
+    exp = apply_exp(pulse, tau_d, tau_r, p_d, p_r, kn_len, trunc_thres)
+    return exp, t, pulse
 
 
 def eval_exp(t, is_biexp, tconst, coefs):

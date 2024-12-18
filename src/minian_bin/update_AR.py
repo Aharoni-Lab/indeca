@@ -7,7 +7,9 @@ import scipy.sparse as sps
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import curve_fit
 
+from .deconv import construct_R
 from .update_bin import construct_G
+from .utilities import scal_lstsq
 
 
 def convolve_g(s, g):
@@ -96,7 +98,7 @@ def fit_sumexp_split(y):
     )
 
 
-def fit_sumexp_gd(y, x=None, interp_factor=100):
+def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
     T = len(y)
     if x is None:
         x = np.arange(T)
@@ -119,14 +121,46 @@ def fit_sumexp_gd(y, x=None, interp_factor=100):
         np.argmin(np.abs(y_interp[idx_max_interp:] - (1 / np.e) * fmax))
         + idx_max_interp
     ) / interp_factor
-    res = curve_fit(
-        lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
-        x,
-        y,
-        p0=(tau_d_init, tau_r_init),
-        bounds=(0, np.inf),
-    )
-    tau_d, tau_r = res[0]
+    if fit_amp == "scale":
+        res = curve_fit(
+            lambda x, d, r, scal: scal
+            * (np.exp(-x / d) - np.exp(-x / r))
+            / (np.exp(-1 / d) - np.exp(-1 / r)),
+            x,
+            y,
+            p0=(tau_d_init, tau_r_init, 1),
+            bounds=(0, np.inf),
+            sigma=y_weight,
+            absolute_sigma=True,
+            # loss="huber",
+            # f_scale=1e-2,
+            # tr_solver="exact",
+        )
+        tau_d, tau_r, scal = res[0]
+        p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+    elif fit_amp == True:
+        res = curve_fit(
+            lambda x, d, r: (np.exp(-x / d) - np.exp(-x / r))
+            / (np.exp(-1 / d) - np.exp(-1 / r)),
+            x,
+            y,
+            p0=(tau_d_init, tau_r_init),
+            bounds=(0, np.inf),
+        )
+        tau_d, tau_r = res[0]
+        p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+        scal = 1
+    else:
+        res = curve_fit(
+            lambda x, d, r: np.exp(-x / d) - np.exp(-x / r),
+            x,
+            y,
+            p0=(tau_d_init, tau_r_init),
+            bounds=(0, np.inf),
+        )
+        tau_d, tau_r = res[0]
+        p = np.array([1, -1])
+        scal = 1
     if tau_d <= tau_r:
         warnings.warn(
             "decaying time smaller than rising time: tau_d: {}, tau_r: {}\nreversing coefficients".format(
@@ -136,9 +170,41 @@ def fit_sumexp_gd(y, x=None, interp_factor=100):
         tau_d, tau_r = tau_r, tau_d
     return (
         -1 / np.array([tau_d, tau_r]),
-        np.array([1, -1]),
-        np.exp(-x / tau_d) - np.exp(-x / tau_r),
+        p,
+        scal,
+        scal * (p[0] * np.exp(-x / tau_d) + p[1] * np.exp(-x / tau_r)),
     )
+
+
+def fit_sumexp_iter(y, max_iters=50, atol=1e-3, **kwargs):
+    _, _, scal, y_fit = fit_sumexp_gd(y, fit_amp="scale")
+    y_norm = y / scal
+    p = 1
+    coef_df = []
+    for i_iter in range(max_iters):
+        lams, _, _, y_fit = fit_sumexp_gd(y_norm / p, fit_amp=False, **kwargs)
+        taus = -1 / lams
+        p_new = 1 / (np.exp(lams[0]) - np.exp(lams[1]))
+        coef_df.append(
+            pd.DataFrame(
+                [
+                    {
+                        "i_iter": i_iter,
+                        "p": p,
+                        "tau_d": taus[0],
+                        "tau_r": taus[1],
+                    }
+                ]
+            )
+        )
+        if np.abs(p_new - p) < atol:
+            break
+        else:
+            p = p_new
+    else:
+        warnings.warn("max scale iteration reached for sumexp fitting")
+    coef_df = pd.concat(coef_df, ignore_index=True)
+    return lams, p, scal, y_fit, coef_df
 
 
 def lst_l1(A, b):
@@ -150,47 +216,50 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, s_len=60, norm="l1", smth_penalty=0, ignore_len=0):
+def solve_h(y, s, scal, h_len=60, norm="l1", smth_penalty=0, ignore_len=0, up_factor=1):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
     if multi_unit:
         ncell, T = s.shape
+        y_len = y.shape[1]
     else:
         T = len(s)
-    if s_len is None:
-        s_len = T
+        y_len = len(y)
+    R = construct_R(y_len, up_factor)
+    if h_len is None:
+        h_len = T
     else:
-        s_len = min(s_len, T)
+        h_len = min(h_len, T)
     if multi_unit:
         b = cp.Variable((ncell, 1))
     else:
         b = cp.Variable()
-    h = cp.Variable(s_len)
+    h = cp.Variable(h_len)
     h = cp.hstack([h, 0])
     if multi_unit:
-        conv_term = cp.vstack([cp.convolve(ss, h)[:T] for ss in s])
+        conv_term = cp.vstack([R @ cp.convolve(ss, h)[:T] for ss in s])
     else:
-        conv_term = cp.convolve(s, h)[:T]
+        conv_term = R @ cp.convolve(s, h)[:T]
     norm_ord = {"l1": 1, "l2": 2}[norm]
     obj = cp.Minimize(
-        cp.norm(y - conv_term - b, norm_ord)
+        cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, norm_ord)
         + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
     )
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
     prob.solve()
-    return np.concatenate([h.value, np.zeros(T - s_len - 1)])
+    return np.concatenate([h.value, np.zeros(T - h_len - 1)])
 
 
 def solve_fit_h(
     y,
     s,
+    scal,
     N=2,
     s_len=60,
     norm="l1",
     tol=1e-3,
-    fit_method="numerical",
     max_iters: int = 30,
     verbose=False,
 ):
@@ -199,15 +268,8 @@ def solve_fit_h(
     smth_penal = 0
     niter = 0
     while niter < max_iters:
-        h = solve_h(y, s, s_len, norm, smth_penal)
-        if fit_method == "solve":
-            lams, ps, h_fit = fit_sumexp(h, N)
-        elif fit_method == "numerical":
-            lams, ps, h_fit = fit_sumexp_gd(h)
-        else:
-            raise NotImplementedError(
-                "`fit_method` has to be one of ['solve', 'numerical']"
-            )
+        h = solve_h(y, s, scal, s_len, norm, smth_penal)
+        lams, ps, h_fit = fit_sumexp(h, N)
         met = {
             "iter": niter,
             "smth_penal": smth_penal,
@@ -248,6 +310,15 @@ def solve_fit_h(
     else:
         warnings.warn("max smth iteration reached")
     return lams, ps, h, h_fit, metric_df, h_df
+
+
+def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l1", up_factor=1):
+    h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
+    pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
+    lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
+    h_fit_pad = np.zeros_like(h)
+    h_fit_pad[: len(h_fit)] = h_fit
+    return lams, p, scal, h, h_fit_pad
 
 
 def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
