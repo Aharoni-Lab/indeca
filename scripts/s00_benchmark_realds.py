@@ -38,7 +38,7 @@ if __name__ == "__main__":
         dashboard_address="0.0.0.0:12345",
     )
     client = Client(cluster)
-    subset = {"frame": slice(0, 5000)}
+    subset = {"frame": slice(0, 20000)}
     for dsname in DS_LS:
         Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
