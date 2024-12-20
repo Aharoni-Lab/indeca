@@ -634,7 +634,11 @@ class DeconvBin:
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        self.H = sps.csc_matrix(convolution_matrix(coef, self.T)[: self.T, :])
+        self.H = sps.diags(
+            [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
+            offsets=-np.arange(len(coef)),
+            format="csc",
+        )
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
