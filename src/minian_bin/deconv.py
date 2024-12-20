@@ -21,10 +21,12 @@ from minian_bin.utilities import scal_lstsq
 
 def construct_R(T: int, up_factor: int):
     if up_factor > 1:
-        rs_vec = np.zeros(T * up_factor)
-        rs_vec[:up_factor] = 1
         return sps.csc_matrix(
-            np.stack([np.roll(rs_vec, up_factor * i) for i in range(T)], axis=0)
+            (
+                np.ones(T * up_factor),
+                (np.repeat(np.arange(T), up_factor), np.arange(T * up_factor)),
+            ),
+            shape=(T, T * up_factor),
         )
     else:
         return sps.eye(T, format="csc")
