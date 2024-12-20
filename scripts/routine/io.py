@@ -41,9 +41,9 @@ def load_gt_ds(ds_path):
         filter(lambda fn: fn.endswith(".mat"), os.listdir(ds_path))
     ):
         fluo_df, _ = load_gt_mat(os.path.join(ds_path, matfile))
-        fluo_df["cell_id"] = icell
+        fluo_df["unit_id"] = icell
         fluo.append(fluo_df)
-    fluo = pd.concat(fluo).set_index(["cell_id", "frame"])
-    C_true = fluo["fluo_mean"].rename("C_true").to_xarray()
+    fluo = pd.concat(fluo).set_index(["unit_id", "frame"])
+    Y = fluo["fluo_mean"].rename("Y").to_xarray()
     S_true = fluo["ap_count"].rename("S_true").to_xarray()
-    return C_true, S_true
+    return Y, S_true
