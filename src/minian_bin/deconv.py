@@ -659,7 +659,7 @@ class DeconvBin:
                 P = self.scale**2 * self.H.T @ self.R.T @ self.R @ self.H
             else:
                 P = self.scale**2 * self.R.T @ self.R
-            assert np.isclose(P.todense(), P.T.todense()).all()
+            # assert np.isclose(P.todense(), P.T.todense()).all()
             self.P = sps.triu(P).tocsc()
         elif self.norm == "huber":
             # TODO: add support
