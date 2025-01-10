@@ -760,7 +760,11 @@ class DeconvBin:
         if self.free_kernel:
             self.A = sps.eye(len(self.nzidx_s), format="csc")
         else:
-            self.A = sps.csc_matrix(self.G_org[:, self.nzidx_c])
+            G_sub = self.G_org[:, self.nzidx_c]
+            zmask = np.array(
+                np.logical_and(G_sub.sum(axis=1) == 0, self.G_org.sum(axis=1) != 0)
+            ).squeeze()
+            self.A = sps.csc_matrix(G_sub[~zmask, :])
 
     def _update_bounds(self) -> None:
         if self.free_kernel:
@@ -768,10 +772,6 @@ class DeconvBin:
             self.ub = np.ones(len(self.nzidx_s))
             self.ub_inf = np.full(len(self.nzidx_s), np.inf)
         else:
-            self.lb, self.ub, self.ub_inf = (
-                np.zeros(self.T),
-                np.zeros(self.T),
-                np.zeros(self.T),
-            )
-            self.ub[self.nzidx_s] = 1
-            self.ub_inf[self.nzidx_s] = np.inf
+            self.lb = np.zeros(self.A.shape[0])
+            self.ub = np.ones(self.A.shape[0])
+            self.ub_inf = np.full(self.A.shape[0], np.inf)
