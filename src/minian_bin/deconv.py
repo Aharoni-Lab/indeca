@@ -98,7 +98,6 @@ class DeconvBin:
             assert y_len is not None
             self.y_len = y_len
         if theta is not None:
-            self.free_kernel = False
             self.theta = np.array(theta)
             tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
             self.tau = np.array([tau_d, tau_r])
@@ -112,7 +111,6 @@ class DeconvBin:
                 trunc_thres=atol,
             )
         elif tau is not None:
-            self.free_kernel = False
             self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
             _, _, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
@@ -126,7 +124,6 @@ class DeconvBin:
                 trunc_thres=atol,
             )
         else:
-            self.free_kernel = True
             if coef is None:
                 assert coef_len is not None
                 coef = np.ones(coef_len * upsamp)
@@ -141,8 +138,10 @@ class DeconvBin:
         elif penal == "l0":
             l0_penal = 1
             l1_penal = 0
+        self.free_kernel = True
         self.penal = penal
         self.l0_penal = l0_penal
+        self.w_org = np.ones(self.T)
         self.w = np.ones(self.T)
         self.upsamp = upsamp
         self.norm = norm
@@ -284,7 +283,7 @@ class DeconvBin:
             if l0_penal is not None:
                 self.l0_penal = l0_penal
             if w is not None:
-                self.w = w
+                self._update_w(w)
             if l0_penal is not None or w is not None:
                 self.l0_w.value = self.l0_penal * self.w
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
@@ -314,7 +313,7 @@ class DeconvBin:
             if l0_penal is not None:
                 self.l0_penal = l0_penal
             if w is not None:
-                self.w = w
+                self._update_w(w)
             # update internal variables
             updt_HG, updt_P, updt_A, updt_q0, updt_q = [False] * 5
             if coef is not None:
@@ -628,12 +627,12 @@ class DeconvBin:
 
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         if s is not None:
-            return (self.H @ s)[self.nzidx_c]
+            return self.H @ s
         else:
             if self.backend == "cvxpy":
                 return self.c.value.squeeze()
             elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-                return (self.H @ self.s)[self.nzidx_c]
+                return self.H @ self.s
 
     def _compute_err(
         self, y_fit: np.ndarray = None, c: np.ndarray = None, s: np.ndarray = None
@@ -658,6 +657,7 @@ class DeconvBin:
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
         self._update_R()
+        self._update_w()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             self._setup_prob_osqp()
 
@@ -669,6 +669,7 @@ class DeconvBin:
             self.nzidx_s = np.where(opt_s > self.delta_penal)[0]
             self.nzidx_c = np.where(opt_c > self.delta_penal)[0]
             self._update_R()
+            self._update_w()
             self._setup_prob_osqp()
             if len(self.nzidx_c) < self.T:
                 res = self.prob.solve()
@@ -681,12 +682,17 @@ class DeconvBin:
             # TODO: add support
             raise NotImplementedError("masking not supported for cvxpy backend")
 
+    def _update_w(self, w_new=None) -> None:
+        if w_new is not None:
+            self.w_org = w_new
+        if self.free_kernel:
+            self.w = self.w_org[self.nzidx_s]
+        else:
+            self.w = self.w_org
+
     def _update_R(self) -> None:
         self.R_org = construct_R(self.y_len, self.upsamp)
-        if self.free_kernel:
-            self.R = self.R_org
-        else:
-            self.R = self.R_org[:, self.nzidx_c]
+        self.R = self.R_org[:, self.nzidx_c]
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
@@ -695,7 +701,7 @@ class DeconvBin:
             offsets=-np.arange(len(coef)),
             format="csc",
         )
-        self.H = self.H_org[:, self.nzidx_s]
+        self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
