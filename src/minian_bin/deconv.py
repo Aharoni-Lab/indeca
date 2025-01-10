@@ -464,7 +464,7 @@ class DeconvBin:
             self.update(**{pn: opt_penal})
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
             if opt_scl == 0:
-                raise ValueError("could not find non-zero solution")
+                warnings.warn("could not find non-zero solution")
         return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(self, reset_scale: bool = True) -> Tuple[np.ndarray]:
@@ -508,6 +508,9 @@ class DeconvBin:
                     np.abs(cur_obj - last_obj) < self.atol,
                 )
             ):
+                break
+            elif cur_scl == 0:
+                warnings.warn("exit with zero solution")
                 break
             elif np.abs(cur_scl - prev_scals).min() < self.atol:
                 self.update(scale=(cur_scl + last_scal) / 2)
@@ -605,6 +608,10 @@ class DeconvBin:
             opt_s = self.s.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             x = res[0] if self.backend == "emosqp" else res.x
+            # osqp mistakenly report primal infeasibility when using masks with high l1 penalty
+            # manually set solution to zero in such cases
+            if res.info.status == "primal infeasible":
+                x = np.zeros_like(x, dtype=float)
             if self.free_kernel:
                 opt_s = x
             else:
@@ -647,19 +654,29 @@ class DeconvBin:
         elif self.norm == "huber":
             return np.sum(huber(1, y - y_fit)) * 2
 
-    def _update_mask(self, amp_constraint: bool = True) -> None:
+    def _reset_mask(self) -> None:
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
         self._update_R()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             self._setup_prob_osqp()
+
+    def _update_mask(self, amp_constraint: bool = True) -> None:
+        self._reset_mask()
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
             opt_s = self.solve(amp_constraint)
-            # opt_c = self.H @ opt_s
+            opt_c = self.H @ opt_s
             self.nzidx_s = np.where(opt_s > self.delta_penal)[0]
-            # TODO: update nzidx_c as well
-            # self.nzidx_c = np.where(opt_c > self.delta_penal)[0]
+            self.nzidx_c = np.where(opt_c > self.delta_penal)[0]
             self._update_R()
             self._setup_prob_osqp()
+            if len(self.nzidx_c) < self.T:
+                res = self.prob.solve()
+                # osqp mistakenly report primal infeasible in some cases
+                # disable masking in such cases
+                # potentially related: https://github.com/osqp/osqp/issues/485
+                if res.info.status == "primal infeasible":
+                    self._reset_mask()
         else:
             # TODO: add support
             raise NotImplementedError("masking not supported for cvxpy backend")
