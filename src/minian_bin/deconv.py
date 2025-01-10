@@ -614,7 +614,7 @@ class DeconvBin:
             if self.free_kernel:
                 opt_s = x
             else:
-                opt_s = (self.G @ x)[self.nzidx_s]
+                opt_s = self.G @ x
             self.s = opt_s
         if return_obj:
             if self.backend == "cvxpy":
@@ -671,7 +671,7 @@ class DeconvBin:
             self._update_R()
             self._update_w()
             self._setup_prob_osqp()
-            if len(self.nzidx_c) < self.T:
+            if not self.free_kernel and len(self.nzidx_c) < self.T:
                 res = self.prob.solve()
                 # osqp mistakenly report primal infeasible in some cases
                 # disable masking in such cases
@@ -685,10 +685,7 @@ class DeconvBin:
     def _update_w(self, w_new=None) -> None:
         if w_new is not None:
             self.w_org = w_new
-        if self.free_kernel:
-            self.w = self.w_org[self.nzidx_s]
-        else:
-            self.w = self.w_org
+        self.w = self.w_org[self.nzidx_s]
 
     def _update_R(self) -> None:
         self.R_org = construct_R(self.y_len, self.upsamp)
@@ -713,7 +710,7 @@ class DeconvBin:
             self.G_org = sps.bmat(
                 [[None, G_diag], [np.zeros((1, 1)), None]], format="csc"
             )
-            self.G = self.G_org[:, self.nzidx_c]
+            self.G = self.G_org[:, self.nzidx_c][self.nzidx_s, :]
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
