@@ -579,7 +579,7 @@ class DeconvBin:
                 verbose=False,
                 polish=True,
                 warm_start=True if self.backend == "osqp" else False,
-                max_iter=int(1e4) if self.backend == "osqp" else None,
+                max_iter=int(1e5) if self.backend == "osqp" else None,
             )
             self.prob.setup(
                 P=self.P.copy(),
@@ -593,7 +593,7 @@ class DeconvBin:
                 verbose=False,
                 polish=True,
                 warm_start=True if self.backend == "osqp" else False,
-                max_iter=int(1e4) if self.backend == "osqp" else None,
+                max_iter=int(1e5) if self.backend == "osqp" else None,
             )
 
     def _solve(
