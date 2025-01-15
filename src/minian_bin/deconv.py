@@ -138,7 +138,7 @@ class DeconvBin:
         elif penal == "l0":
             l0_penal = 1
             l1_penal = 0
-        self.free_kernel = True
+        self.free_kernel = False
         self.penal = penal
         self.l0_penal = l0_penal
         self.w_org = np.ones(self.T)
