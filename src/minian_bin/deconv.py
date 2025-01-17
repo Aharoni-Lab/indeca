@@ -622,7 +622,7 @@ class DeconvBin:
             x = res[0] if self.backend == "emosqp" else res.x
             # osqp mistakenly report primal infeasibility when using masks with high l1 penalty
             # manually set solution to zero in such cases
-            if res.info.status == "primal infeasible":
+            if res.info.status in ["primal infeasible", "primal infeasible inaccurate"]:
                 x = np.zeros_like(x, dtype=float)
             if self.free_kernel:
                 opt_s = x
