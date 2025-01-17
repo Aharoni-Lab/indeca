@@ -451,8 +451,6 @@ class DeconvBin:
                     break
                 else:
                     ub = ub / 2
-            else:
-                warnings.warn("max ub iterations reached")
 
             def opt_fn(x):
                 self.update(**{pn: x.item()})
@@ -464,7 +462,7 @@ class DeconvBin:
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
                 eps=self.atol,
-                vol_tol=1e-2,
+                vol_tol=min(1e-2, 1e-2 / ub),
             )
             if not res.success:
                 warnings.warn(
@@ -474,7 +472,9 @@ class DeconvBin:
                 )
             opt_penal = res.x.item()
             self.update(**{pn: opt_penal})
+            self.prob.update_settings(warm_start=False)
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
+            self.prob.update_settings(warm_start=True)
             if opt_scl == 0:
                 warnings.warn("could not find non-zero solution")
         return opt_s, opt_c, opt_scl, opt_obj, opt_penal
