@@ -416,11 +416,20 @@ class DeconvBin:
             th_max=self.th_max,
             reverse_thres=True,
         )
+        svals = [ss for ss in svals if ss.sum() > 0]
+        if not len(svals) > 0:
+            return (
+                np.full(len(self.nzidx_s), np.nan),
+                np.full(len(self.nzidx_c), np.nan),
+                0,
+                np.inf,
+            )
         cvals = [self._compute_c(s) for s in svals]
         R = self.R.value if self.backend == "cvxpy" else self.R
         yfvals = [R @ c for c in cvals]
         scals = [scal_lstsq(yf, y) for yf in yfvals]
         objs = [self._compute_err(y_fit=scl * yf) for scl, yf in zip(scals, yfvals)]
+        objs = np.where(np.array(scals) > 0, objs, np.inf)
         opt_idx = np.argmin(objs)
         return svals[opt_idx], cvals[opt_idx], scals[opt_idx], objs[opt_idx]
 
