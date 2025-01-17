@@ -397,7 +397,11 @@ class DeconvBin:
                         self.max_iter_l0
                     )
                 )
-        return np.abs(opt_s)
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
+            self.s = np.abs(opt_s)
+            return self.s
+        else:
+            return np.abs(opt_s)
 
     def solve_thres(self) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
