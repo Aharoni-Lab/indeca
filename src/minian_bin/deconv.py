@@ -658,7 +658,7 @@ class DeconvBin:
         if y_fit is None:
             if c is None:
                 c = self._compute_c(s)
-            y_fit = self.R @ c
+            y_fit = self.R @ c * self.scale
         if self.norm == "l1":
             return np.sum(np.abs(y - y_fit))
         elif self.norm == "l2":
