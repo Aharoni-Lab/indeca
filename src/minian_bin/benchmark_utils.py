@@ -127,7 +127,7 @@ def apply_dtw(src_arr, dst_arr, psi=0, window=10, **kwargs):
 def compute_ROC_percell(
     S, S_true, nthres=None, ds=None, th_min=0.1, th_max=0.9, use_warp=False, meta=dict()
 ):
-    S, S_true = np.array(S), np.array(S_true)
+    S, S_true = np.nan_to_num(np.array(S)), np.nan_to_num(np.array(S_true))
     pos_idx, neg_idx = np.where(S_true > 0)[0], np.where(S_true == 0)[0]
     true_pos = np.sum(np.array(S_true[pos_idx]))
     true_neg = len(neg_idx)
