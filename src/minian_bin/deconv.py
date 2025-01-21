@@ -21,10 +21,12 @@ from minian_bin.utilities import scal_lstsq
 
 def construct_R(T: int, up_factor: int):
     if up_factor > 1:
-        rs_vec = np.zeros(T * up_factor)
-        rs_vec[:up_factor] = 1
         return sps.csc_matrix(
-            np.stack([np.roll(rs_vec, up_factor * i) for i in range(T)], axis=0)
+            (
+                np.ones(T * up_factor),
+                (np.repeat(np.arange(T), up_factor), np.arange(T * up_factor)),
+            ),
+            shape=(T, T * up_factor),
         )
     else:
         return sps.eye(T, format="csc")
@@ -96,7 +98,6 @@ class DeconvBin:
             assert y_len is not None
             self.y_len = y_len
         if theta is not None:
-            self.free_kernel = False
             self.theta = np.array(theta)
             tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
             self.tau = np.array([tau_d, tau_r])
@@ -110,7 +111,6 @@ class DeconvBin:
                 trunc_thres=atol,
             )
         elif tau is not None:
-            self.free_kernel = False
             self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
             _, _, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
@@ -124,13 +124,11 @@ class DeconvBin:
                 trunc_thres=atol,
             )
         else:
-            self.free_kernel = True
             if coef is None:
                 assert coef_len is not None
                 coef = np.ones(coef_len * upsamp)
         self.coef_len = len(coef)
         self.T = self.y_len * upsamp
-        R = construct_R(self.y_len, upsamp)
         if penal is None:
             l0_penal = 0
             l1_penal = 0
@@ -140,8 +138,10 @@ class DeconvBin:
         elif penal == "l0":
             l0_penal = 1
             l1_penal = 0
+        self.free_kernel = False
         self.penal = penal
         self.l0_penal = l0_penal
+        self.w_org = np.ones(self.T)
         self.w = np.ones(self.T)
         self.upsamp = upsamp
         self.norm = norm
@@ -156,9 +156,17 @@ class DeconvBin:
         self.delta_penal = delta_penal
         self.atol = atol
         self.rtol = rtol
+        self.nzidx_s = np.arange(self.T)
+        self.nzidx_c = np.arange(self.T)
+        self.x_cache = None
+        if y is not None:
+            self.huber_k = 0.5 * np.std(y)
+        else:
+            self.huber_k = 0
+        self._update_R()
         # setup cvxpy
         if self.backend == "cvxpy":
-            self.R = cp.Constant(R, name="R")
+            self.R = cp.Constant(self.R, name="R")
             self.c = cp.Variable((self.T, 1), nonneg=True, name="c")
             self.s = cp.Variable((self.T, 1), nonneg=True, name="s", boolean=mixin)
             self.y = cp.Parameter(shape=(self.y_len, 1), name="y")
@@ -231,7 +239,6 @@ class DeconvBin:
                 self.coef = coef
             self.c = np.zeros(self.T * upsamp)
             self.s = np.zeros(self.T * upsamp)
-            self.R = R
             self.l1_penal = l1_penal
             self.scale = scale
             if use_base:
@@ -239,77 +246,7 @@ class DeconvBin:
                 raise NotImplementedError(
                     "Baseline term not yet supported with backend {}".format(backend)
                 )
-            self._update_HG()
-            self._update_P()
-            self._update_q0()
-            self._update_q()
-            self._update_A()
-            self._update_bounds()
-            if backend == "emosqp":
-                m = osqp.OSQP()
-                m.setup(
-                    P=self.P,
-                    q=self.q,
-                    A=self.A,
-                    l=self.lb,
-                    u=self.ub_inf,
-                    check_termination=25,
-                    eps_abs=self.atol * 1e-4,
-                    eps_rel=1e-8,
-                )
-                m.codegen(
-                    "osqp-codegen-prob_free",
-                    parameters="matrices",
-                    python_ext_name="emosqp_free",
-                    force_rewrite=True,
-                )
-                m.update(u=self.ub)
-                m.codegen(
-                    "osqp-codegen-prob",
-                    parameters="matrices",
-                    python_ext_name="emosqp",
-                    force_rewrite=True,
-                )
-                import emosqp
-                import emosqp_free
-
-                self.prob_free = emosqp_free
-                self.prob = emosqp
-            elif backend in ["osqp", "cuosqp"]:
-                if backend == "osqp":
-                    self.prob_free = osqp.OSQP()
-                    self.prob = osqp.OSQP()
-                elif backend == "cuosqp":
-                    self.prob_free = cuosqp.OSQP()
-                    self.prob = cuosqp.OSQP()
-                self.prob_free.setup(
-                    P=self.P.copy(),
-                    q=self.q.copy(),
-                    A=self.A.copy(),
-                    l=self.lb.copy(),
-                    u=self.ub_inf.copy(),
-                    check_termination=25,
-                    eps_abs=1e-5 if backend == "osqp" else self.atol * 1e-4,
-                    eps_rel=1e-5 if backend == "osqp" else 1e-8,
-                    verbose=False,
-                    polish=True,
-                    warm_start=True if backend == "osqp" else False,
-                    max_iter=int(1e4) if backend == "osqp" else None,
-                )
-                self.prob.setup(
-                    P=self.P.copy(),
-                    q=self.q.copy(),
-                    A=self.A.copy(),
-                    l=self.lb.copy(),
-                    u=self.ub.copy(),
-                    check_termination=25,
-                    eps_abs=1e-5 if backend == "osqp" else self.atol * 1e-4,
-                    eps_rel=1e-5 if backend == "osqp" else 1e-8,
-                    verbose=False,
-                    polish=True,
-                    warm_start=True if backend == "osqp" else False,
-                    max_iter=int(1e4) if backend == "osqp" else None,
-                )
+            self._setup_prob_osqp()
 
     def update(
         self,
@@ -351,7 +288,7 @@ class DeconvBin:
             if l0_penal is not None:
                 self.l0_penal = l0_penal
             if w is not None:
-                self.w = w
+                self._update_w(w)
             if l0_penal is not None or w is not None:
                 self.l0_w.value = self.l0_penal * self.w
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
@@ -381,26 +318,41 @@ class DeconvBin:
             if l0_penal is not None:
                 self.l0_penal = l0_penal
             if w is not None:
-                self.w = w
+                self._update_w(w)
             # update internal variables
-            updt_HG, updt_P, updt_A, updt_q0, updt_q = [False] * 5
+            updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds = [False] * 6
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
-            if updt_HG:
-                self._update_A()
-                updt_A = True
-            if any((scale is not None, scale_mul is not None, updt_HG)):
-                self._update_P()
-                updt_P = True
-            if any((scale is not None, scale_mul is not None, y is not None, updt_HG)):
-                self._update_q0()
-                updt_q0 = True
-            if any(
-                (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
-            ):
-                self._update_q()
-                updt_q = True
+            if self.norm == "huber":
+                if any((scale is not None, scale_mul is not None, updt_HG)):
+                    self._update_A()
+                    updt_A = True
+                if any(
+                    (w is not None, l0_penal is not None, l1_penal is not None, updt_HG)
+                ):
+                    self._update_q()
+                    updt_q = True
+                if y is not None:
+                    self._update_bounds()
+                    updt_bounds = True
+            else:
+                if updt_HG:
+                    self._update_A()
+                    updt_A = True
+                if any((scale is not None, scale_mul is not None, updt_HG)):
+                    self._update_P()
+                    updt_P = True
+                if any(
+                    (scale is not None, scale_mul is not None, y is not None, updt_HG)
+                ):
+                    self._update_q0()
+                    updt_q0 = True
+                if any(
+                    (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
+                ):
+                    self._update_q()
+                    updt_q = True
             # update prob
             if self.backend == "emosqp":
                 if updt_P:
@@ -414,11 +366,15 @@ class DeconvBin:
                     Px=self.P.copy().data if updt_P else None,
                     q=self.q.copy() if updt_q else None,
                     Ax=self.A.copy().data if updt_A else None,
+                    l=self.lb.copy() if updt_bounds else None,
+                    u=self.ub_inf.copy() if updt_bounds else None,
                 )
                 self.prob.update(
                     Px=self.P.copy().data if updt_P else None,
                     q=self.q.copy() if updt_q else None,
                     Ax=self.A.copy().data if updt_A else None,
+                    l=self.lb.copy() if updt_bounds else None,
+                    u=self.ub.copy() if updt_bounds else None,
                 )
 
     def solve(self, amp_constraint: bool = True) -> np.ndarray:
@@ -465,7 +421,11 @@ class DeconvBin:
                         self.max_iter_l0
                     )
                 )
-        return np.abs(opt_s)
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
+            self.s = np.abs(opt_s)
+            return self.s
+        else:
+            return np.abs(opt_s)
 
     def solve_thres(self) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
@@ -480,21 +440,35 @@ class DeconvBin:
             th_max=self.th_max,
             reverse_thres=True,
         )
+        svals = [ss for ss in svals if ss.sum() > 0]
+        if not len(svals) > 0:
+            return (
+                np.full(len(self.nzidx_s), np.nan),
+                np.full(len(self.nzidx_c), np.nan),
+                0,
+                np.inf,
+            )
         cvals = [self._compute_c(s) for s in svals]
         R = self.R.value if self.backend == "cvxpy" else self.R
-        Rcvals = [R @ c for c in cvals]
-        scals = [scal_lstsq(c, y) for c in Rcvals]
-        objs = [self._compute_err(c=scl * c) for scl, c in zip(scals, Rcvals)]
+        yfvals = [R @ c for c in cvals]
+        scals = [scal_lstsq(yf, y) for yf in yfvals]
+        objs = [self._compute_err(y_fit=scl * yf) for scl, yf in zip(scals, yfvals)]
+        objs = np.where(np.array(scals) > 0, objs, np.inf)
         opt_idx = np.argmin(objs)
         return svals[opt_idx], cvals[opt_idx], scals[opt_idx], objs[opt_idx]
 
-    def solve_penal(self) -> Tuple[np.ndarray]:
+    def solve_penal(self, masking=True) -> Tuple[np.ndarray]:
         if self.penal is None:
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
             opt_penal = 0
         elif self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
-            ub = self._compute_err(s=np.zeros(self.T))
+            self.update(**{pn: 0})
+            if masking:
+                self._reset_cache()
+                self._update_mask()
+            self._update_cache()
+            ub = self._compute_err(s=np.zeros(len(self.nzidx_s)))
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
                 s = self.solve()
@@ -503,8 +477,6 @@ class DeconvBin:
                     break
                 else:
                     ub = ub / 2
-            else:
-                warnings.warn("max ub iterations reached")
 
             def opt_fn(x):
                 self.update(**{pn: x.item()})
@@ -516,7 +488,7 @@ class DeconvBin:
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
                 eps=self.atol,
-                vol_tol=1e-2,
+                vol_tol=min(1e-2, 1e-2 / ub),
             )
             if not res.success:
                 warnings.warn(
@@ -528,7 +500,7 @@ class DeconvBin:
             self.update(**{pn: opt_penal})
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
             if opt_scl == 0:
-                raise ValueError("could not find non-zero solution")
+                warnings.warn("could not find non-zero solution")
         return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(self, reset_scale: bool = True) -> Tuple[np.ndarray]:
@@ -573,13 +545,92 @@ class DeconvBin:
                 )
             ):
                 break
+            elif cur_scl == 0:
+                warnings.warn("exit with zero solution")
+                break
             elif np.abs(cur_scl - prev_scals).min() < self.atol:
                 self.update(scale=(cur_scl + last_scal) / 2)
             else:
                 self.update(scale=cur_scl)
         else:
             warnings.warn("max scale iterations reached")
-        return cur_s, cur_c, cur_scl, cur_obj, cur_penal
+        opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
+        opt_s[self.nzidx_s] = cur_s
+        opt_c[self.nzidx_c] = cur_c
+        return opt_s, opt_c, cur_scl, cur_obj, cur_penal
+
+    def _setup_prob_osqp(self) -> None:
+        self._update_HG()
+        self._update_P()
+        self._update_q0()
+        self._update_q()
+        self._update_A()
+        self._update_bounds()
+        if self.backend == "emosqp":
+            m = osqp.OSQP()
+            m.setup(
+                P=self.P,
+                q=self.q,
+                A=self.A,
+                l=self.lb,
+                u=self.ub_inf,
+                check_termination=25,
+                eps_abs=self.atol * 1e-4,
+                eps_rel=1e-8,
+            )
+            m.codegen(
+                "osqp-codegen-prob_free",
+                parameters="matrices",
+                python_ext_name="emosqp_free",
+                force_rewrite=True,
+            )
+            m.update(u=self.ub)
+            m.codegen(
+                "osqp-codegen-prob",
+                parameters="matrices",
+                python_ext_name="emosqp",
+                force_rewrite=True,
+            )
+            import emosqp
+            import emosqp_free
+
+            self.prob_free = emosqp_free
+            self.prob = emosqp
+        elif self.backend in ["osqp", "cuosqp"]:
+            if self.backend == "osqp":
+                self.prob_free = osqp.OSQP()
+                self.prob = osqp.OSQP()
+            elif self.backend == "cuosqp":
+                self.prob_free = cuosqp.OSQP()
+                self.prob = cuosqp.OSQP()
+            self.prob_free.setup(
+                P=self.P.copy(),
+                q=self.q.copy(),
+                A=self.A.copy(),
+                l=self.lb.copy(),
+                u=self.ub_inf.copy(),
+                check_termination=25,
+                eps_abs=1e-5 if self.backend == "osqp" else self.atol * 1e-4,
+                eps_rel=1e-5 if self.backend == "osqp" else 1e-8,
+                verbose=False,
+                polish=True,
+                warm_start=True if self.backend == "osqp" else False,
+                max_iter=int(1e5) if self.backend == "osqp" else None,
+            )
+            self.prob.setup(
+                P=self.P.copy(),
+                q=self.q.copy(),
+                A=self.A.copy(),
+                l=self.lb.copy(),
+                u=self.ub.copy(),
+                check_termination=25,
+                eps_abs=1e-5 if self.backend == "osqp" else self.atol * 1e-4,
+                eps_rel=1e-5 if self.backend == "osqp" else 1e-8,
+                verbose=False,
+                polish=True,
+                warm_start=True if self.backend == "osqp" else False,
+                max_iter=int(1e5) if self.backend == "osqp" else None,
+            )
 
     def _solve(
         self, amp_constraint: bool = True, return_obj: bool = False
@@ -588,16 +639,26 @@ class DeconvBin:
             prob = self.prob
         else:
             prob = self.prob_free
+        if self.backend in ["osqp", "emosqp", "cuosqp"] and self.x_cache is not None:
+            prob.warm_start(x=self.x_cache)
         res = prob.solve()
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             x = res[0] if self.backend == "emosqp" else res.x
-            if self.free_kernel:
-                opt_s = x
+            # osqp mistakenly report primal infeasibility when using masks with high l1 penalty
+            # manually set solution to zero in such cases
+            if res.info.status in ["primal infeasible", "primal infeasible inaccurate"]:
+                x = np.zeros_like(x, dtype=float)
+            if self.norm == "huber":
+                xlen = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
+                sol = x[:xlen]
             else:
-                opt_s = self.G @ x
-            self.s = opt_s
+                sol = x
+            if self.free_kernel:
+                opt_s = sol
+            else:
+                opt_s = self.G @ sol
         if return_obj:
             if self.backend == "cvxpy":
                 opt_obj = res
@@ -616,25 +677,86 @@ class DeconvBin:
             elif self.backend in ["osqp", "emosqp", "cuosqp"]:
                 return self.H @ self.s
 
-    def _compute_err(self, c: np.ndarray = None, s: np.ndarray = None) -> float:
+    def _compute_err(
+        self, y_fit: np.ndarray = None, c: np.ndarray = None, s: np.ndarray = None
+    ) -> float:
         if self.backend == "cvxpy":
-            y = self.y.value.squeeze()
-            R = self.R.value
+            # TODO: add support
+            raise NotImplementedError
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
-            R = self.R
-        if c is None:
-            c = R @ self._compute_c(s)
+        if y_fit is None:
+            if c is None:
+                c = self._compute_c(s)
+            y_fit = self.R @ c * self.scale
         if self.norm == "l1":
-            return np.sum(np.abs(y - c))
+            return np.sum(np.abs(y - y_fit))
         elif self.norm == "l2":
-            return np.sum((y - c) ** 2)
+            return np.sum((y - y_fit) ** 2)
         elif self.norm == "huber":
-            return np.sum(huber(1, y - c)) * 2
+            r = y - y_fit
+            err_hub = huber(self.huber_k, r)
+            err_qud = r**2 / 2
+            return np.sum(np.where(r >= 0, err_hub, err_qud))
+
+    def _reset_cache(self) -> None:
+        self.x_cache = None
+
+    def _update_cache(self, amp_constraint: bool = True) -> None:
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
+            if amp_constraint:
+                prob = self.prob
+            else:
+                prob = self.prob_free
+            res = prob.solve()
+            self.x_cache = res[0] if self.backend == "emosqp" else res.x
+
+    def _reset_mask(self) -> None:
+        self.nzidx_s = np.arange(self.T)
+        self.nzidx_c = np.arange(self.T)
+        self._update_R()
+        self._update_w()
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
+            self._setup_prob_osqp()
+
+    def _update_mask(self, amp_constraint: bool = True) -> None:
+        self._reset_mask()
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
+            opt_s = self.solve(amp_constraint)
+            opt_c = self.H @ opt_s
+            self.nzidx_s = np.where(opt_s > self.delta_penal)[0]
+            self.nzidx_c = np.where(opt_c > self.delta_penal)[0]
+            self._update_R()
+            self._update_w()
+            self._setup_prob_osqp()
+            if not self.free_kernel and len(self.nzidx_c) < self.T:
+                res = self.prob.solve()
+                # osqp mistakenly report primal infeasible in some cases
+                # disable masking in such cases
+                # potentially related: https://github.com/osqp/osqp/issues/485
+                if res.info.status == "primal infeasible":
+                    self._reset_mask()
+        else:
+            # TODO: add support
+            raise NotImplementedError("masking not supported for cvxpy backend")
+
+    def _update_w(self, w_new=None) -> None:
+        if w_new is not None:
+            self.w_org = w_new
+        self.w = self.w_org[self.nzidx_s]
+
+    def _update_R(self) -> None:
+        self.R_org = construct_R(self.y_len, self.upsamp)
+        self.R = self.R_org[:, self.nzidx_c]
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        self.H = sps.csc_matrix(convolution_matrix(coef, self.T)[: self.T, :])
+        self.H_org = sps.diags(
+            [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
+            offsets=-np.arange(len(coef)),
+            format="csc",
+        )
+        self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
@@ -643,7 +765,10 @@ class DeconvBin:
                 offsets=np.arange(0, -theta.shape[0] - 1, -1),
                 format="csc",
             )
-            self.G = sps.bmat([[None, G_diag], [np.zeros((1, 1)), None]], format="csc")
+            self.G_org = sps.bmat(
+                [[None, G_diag], [np.zeros((1, 1)), None]], format="csc"
+            )
+            self.G = self.G_org[:, self.nzidx_c][self.nzidx_s, :]
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
@@ -659,13 +784,26 @@ class DeconvBin:
                 P = self.scale**2 * self.H.T @ self.R.T @ self.R @ self.H
             else:
                 P = self.scale**2 * self.R.T @ self.R
-            assert np.isclose(P.todense(), P.T.todense()).all()
-            self.P = sps.triu(P).tocsc()
+            # assert np.isclose(P.todense(), P.T.todense()).all()
         elif self.norm == "huber":
-            # TODO: add support
-            raise NotImplementedError(
-                "huber norm not yet supported with backend {}".format(self.backend)
-            )
+            lc, ls, ly = len(self.nzidx_c), len(self.nzidx_s), self.y_len
+            if self.free_kernel:
+                P = sps.bmat(
+                    [
+                        [sps.csc_matrix((ls, ls)), None, None],
+                        [None, sps.csc_matrix((ly, ly)), None],
+                        [None, None, sps.eye(ly, format="csc")],
+                    ]
+                )
+            else:
+                P = sps.bmat(
+                    [
+                        [sps.csc_matrix((lc, lc)), None, None],
+                        [None, sps.csc_matrix((ly, ly)), None],
+                        [None, None, sps.eye(ly, format="csc")],
+                    ]
+                )
+        self.P = sps.triu(P).tocsc()
 
     def _update_q0(self) -> None:
         if self.norm == "l1":
@@ -679,9 +817,10 @@ class DeconvBin:
             else:
                 self.q0 = -self.scale * self.R.T @ self.y
         elif self.norm == "huber":
-            # TODO: add support
-            raise NotImplementedError(
-                "huber norm not yet supported with backend {}".format(self.backend)
+            ly = self.y_len
+            lx = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
+            self.q0 = (
+                np.concatenate([np.zeros(lx), np.ones(ly), np.ones(ly)]) * self.huber_k
             )
 
     def _update_q(self) -> None:
@@ -701,21 +840,68 @@ class DeconvBin:
                 self.q = (
                     self.q0
                     + self.l0_penal * self.w @ self.G
-                    + self.l1_penal * np.ones_like(self.q0) @ self.G
+                    + self.l1_penal * np.ones(self.G.shape[0]) @ self.G
                 )
         elif self.norm == "huber":
-            # TODO: add support
-            raise NotImplementedError(
-                "huber norm not yet supported with backend {}".format(self.backend)
-            )
+            pad_k = np.zeros(self.y_len)
+            if self.free_kernel:
+                self.q = (
+                    self.q0
+                    + self.l0_penal * np.concatenate([self.w, pad_k, pad_k])
+                    + self.l1_penal
+                    * np.concatenate([np.ones(len(self.nzidx_s)), pad_k, pad_k])
+                )
+            else:
+                self.q = (
+                    self.q0
+                    + self.l0_penal * np.concatenate([self.w @ self.G, pad_k, pad_k])
+                    + self.l1_penal
+                    * np.concatenate([np.ones(self.G.shape[0]) @ self.G, pad_k, pad_k])
+                )
 
     def _update_A(self) -> None:
         if self.free_kernel:
-            self.A = sps.eye(self.T, format="csc")
+            Ax = sps.eye(len(self.nzidx_s), format="csc")
+            Ar = self.scale * self.R @ self.H
         else:
-            self.A = sps.csc_matrix(self.G)
+            Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
+            Ar = self.scale * self.R
+        if self.norm == "huber":
+            e = sps.eye(self.y_len, format="csc")
+            self.A = sps.bmat(
+                [
+                    [Ax, None, None],
+                    [None, e, None],
+                    [None, None, -e],
+                    [Ar, e, e],
+                ],
+                format="csc",
+            )
+        else:
+            self.A = Ax
 
     def _update_bounds(self) -> None:
-        self.lb = np.zeros(self.T)
-        self.ub = np.ones(self.T)
-        self.ub_inf = np.full(self.T, np.inf)
+        if self.norm == "huber":
+            xlen = len(self.nzidx_s) if self.free_kernel else self.T
+            self.lb = np.concatenate(
+                [np.zeros(xlen + self.y_len * 2), self.y - self.huber_k]
+            )
+            self.ub = np.concatenate(
+                [np.ones(xlen), np.full(self.y_len * 2, np.inf), self.y - self.huber_k]
+            )
+            self.ub_inf = np.concatenate(
+                [np.full(xlen + self.y_len * 2, np.inf), self.y - self.huber_k]
+            )
+        else:
+            if self.free_kernel:
+                self.lb = np.zeros(len(self.nzidx_s))
+                self.ub = np.ones(len(self.nzidx_s))
+                self.ub_inf = np.full(len(self.nzidx_s), np.inf)
+            else:
+                self.lb, self.ub, self.ub_inf = (
+                    np.zeros(self.T),
+                    np.zeros(self.T),
+                    np.zeros(self.T),
+                )
+                self.ub[self.nzidx_s] = 1
+                self.ub_inf[self.nzidx_s] = np.inf
