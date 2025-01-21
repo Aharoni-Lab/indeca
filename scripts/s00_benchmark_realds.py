@@ -19,7 +19,7 @@ DS_LS = ["X-DS09-GCaMP6f-m-V1"]
 INT_PATH = "./intermediate/benchmark_realds"
 FIG_PATH = "./figs/benchmark_realds"
 PARAM_MAX_ITERS = 20
-PARAM_UP_FAC = 1
+PARAM_UP_FAC = 3
 PARAM_KN_LEN = 100
 
 os.makedirs(INT_PATH, exist_ok=True)
@@ -38,7 +38,7 @@ if __name__ == "__main__":
         dashboard_address="0.0.0.0:12345",
     )
     client = Client(cluster)
-    subset = {"frame": slice(0, 4000)}
+    subset = {"frame": slice(0, 20000)}
     for dsname in DS_LS:
         Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
@@ -51,7 +51,7 @@ if __name__ == "__main__":
             pipeline_bin(
                 np.array(Y),
                 PARAM_UP_FAC,
-                # tau_init=(30, 3),
+                tau_init=(30, 3),
                 max_iters=PARAM_MAX_ITERS,
                 return_iter=True,
                 ar_use_all=True,
