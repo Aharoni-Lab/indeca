@@ -44,21 +44,22 @@ if __name__ == "__main__":
         Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
         act_uid = S_true.max("frame") > 0
         Y, S_true = Y.sel(unit_id=act_uid), S_true.sel(unit_id=act_uid)
-        Y = (Y - Y.mean("frame")).clip(0, None) * 100
+        Y = (Y - Y.quantile(0.1, "frame")).clip(0, None) * 10
         updt_ds = [Y.rename("Y"), S_true.rename("S_true")]
         R = construct_R(Y.sizes["frame"], PARAM_UP_FAC)
         C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h_iter, h_fit_iter = (
             pipeline_bin(
                 np.array(Y),
                 PARAM_UP_FAC,
+                tau_init=(30, 3),
                 max_iters=PARAM_MAX_ITERS,
                 return_iter=True,
                 ar_use_all=True,
                 ar_kn_len=PARAM_KN_LEN,
-                est_noise_freq=0.06,
+                est_noise_freq=0.03,
                 est_use_smooth=True,
                 est_add_lag=50,
-                deconv_norm="l2",
+                deconv_norm="huber",
                 deconv_backend="osqp",
                 da_client=client,
             )
