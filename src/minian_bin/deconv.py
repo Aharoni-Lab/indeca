@@ -158,6 +158,7 @@ class DeconvBin:
         self.rtol = rtol
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
+        self.x_cache = None
         if y is not None:
             self.huber_k = 0.5 * np.std(y)
         else:
@@ -462,9 +463,11 @@ class DeconvBin:
             opt_penal = 0
         elif self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
+            self.update(**{pn: 0})
             if masking:
-                self.update(**{pn: 0})
+                self._reset_cache()
                 self._update_mask()
+            self._update_cache()
             ub = self._compute_err(s=np.zeros(len(self.nzidx_s)))
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
@@ -495,9 +498,7 @@ class DeconvBin:
                 )
             opt_penal = res.x.item()
             self.update(**{pn: opt_penal})
-            self.prob.update_settings(warm_start=False)
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
-            self.prob.update_settings(warm_start=True)
             if opt_scl == 0:
                 warnings.warn("could not find non-zero solution")
         return opt_s, opt_c, opt_scl, opt_obj, opt_penal
@@ -638,6 +639,8 @@ class DeconvBin:
             prob = self.prob
         else:
             prob = self.prob_free
+        if self.backend in ["osqp", "emosqp", "cuosqp"] and self.x_cache is not None:
+            prob.warm_start(x=self.x_cache)
         res = prob.solve()
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
@@ -695,6 +698,18 @@ class DeconvBin:
             err_hub = huber(self.huber_k, r)
             err_qud = r**2 / 2
             return np.sum(np.where(r >= 0, err_hub, err_qud))
+
+    def _reset_cache(self) -> None:
+        self.x_cache = None
+
+    def _update_cache(self, amp_constraint: bool = True) -> None:
+        if self.backend in ["osqp", "emosqp", "cuosqp"]:
+            if amp_constraint:
+                prob = self.prob
+            else:
+                prob = self.prob_free
+            res = prob.solve()
+            self.x_cache = res[0] if self.backend == "emosqp" else res.x
 
     def _reset_mask(self) -> None:
         self.nzidx_s = np.arange(self.T)
