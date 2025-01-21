@@ -44,7 +44,7 @@ if __name__ == "__main__":
         Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
         act_uid = S_true.max("frame") > 0
         Y, S_true = Y.sel(unit_id=act_uid), S_true.sel(unit_id=act_uid)
-        Y = (Y - Y.mean("frame")).clip(0, None) * 10
+        Y = (Y - Y.quantile(0.1, "frame")).clip(0, None) * 10
         updt_ds = [Y.rename("Y"), S_true.rename("S_true")]
         R = construct_R(Y.sizes["frame"], PARAM_UP_FAC)
         C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h_iter, h_fit_iter = (
