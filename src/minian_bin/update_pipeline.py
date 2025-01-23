@@ -5,6 +5,7 @@ import pandas as pd
 from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
+from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
 from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h_num
@@ -45,6 +46,12 @@ def pipeline_bin(
 ):
     # 0. housekeeping
     ncell, T = Y.shape
+    if da_client is not None:
+        dashboard = da_client.submit(
+            Dashboard, Y=Y, kn_len=ar_kn_len, actor=True
+        ).result()
+    else:
+        dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         theta = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
@@ -102,6 +109,8 @@ def pipeline_bin(
                     penal=deconv_penal,
                     atol=deconv_atol,
                     backend=deconv_backend,
+                    dashboard=dashboard,
+                    dashboard_uid=i,
                 ),
                 y,
                 theta[i],
@@ -119,10 +128,13 @@ def pipeline_bin(
                 penal=deconv_penal,
                 atol=deconv_atol,
                 backend=deconv_backend,
+                dashboard=dashboard,
+                dashboard_uid=i,
             )
             for i, y in enumerate(Y)
         ]
     for i_iter in trange(max_iters, desc="iteration"):
+        dashboard.set_iter(i_iter)
         # 2.1 deconvolution
         res = []
         for icell, y in tqdm(
@@ -196,6 +208,9 @@ def pipeline_bin(
                 norm=ar_norm,
                 up_factor=up_factor,
             )
+            dashboard.update(
+                h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
+            )
             cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))
             for d in dcv:
@@ -212,6 +227,7 @@ def pipeline_bin(
                 lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
                     y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
                 )
+                dashboard.update(uid=icell, h=h, h_fit=h_fit)
                 cur_tau = -1 / lams
                 tau[icell, :] = cur_tau
                 if da_client is not None:

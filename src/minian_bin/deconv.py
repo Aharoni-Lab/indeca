@@ -90,6 +90,8 @@ class DeconvBin:
         delta_penal: float = 1e-4,
         atol: float = 1e-3,
         rtol: float = 1e-3,
+        dashboard=None,
+        dashboard_uid=None,
     ) -> None:
         # book-keeping
         if y is not None:
@@ -156,6 +158,8 @@ class DeconvBin:
         self.delta_penal = delta_penal
         self.atol = atol
         self.rtol = rtol
+        self.dashboard = dashboard
+        self.dashboard_uid = dashboard_uid
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
         self.x_cache = None
@@ -247,6 +251,7 @@ class DeconvBin:
                     "Baseline term not yet supported with backend {}".format(backend)
                 )
             self._setup_prob_osqp()
+        self.dashboard.update(h=self.coef.value if backend == "cvxpy" else self.coef)
 
     def update(
         self,
@@ -511,6 +516,15 @@ class DeconvBin:
         metric_df = None
         for i in range(self.max_iter_scal):
             cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal()
+            if self.dashboard is not None:
+                pad_s = np.zeros(self.T)
+                pad_s[self.nzidx_s] = cur_s
+                self.dashboard.update(
+                    uid=self.dashboard_uid,
+                    c=self.R @ cur_c,
+                    s=self.R_org @ pad_s,
+                    scale=cur_scl,
+                )
             if metric_df is None:
                 prev_scals = np.array([np.inf])
                 opt_obj = np.inf
