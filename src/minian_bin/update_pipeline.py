@@ -168,6 +168,12 @@ def pipeline_bin(
                 "penal": penal,
             }
         )
+        dashboard.update(
+            tau_d=cur_metric["tau_d"].squeeze(),
+            tau_r=cur_metric["tau_r"].squeeze(),
+            err=cur_metric["err"].squeeze(),
+            scale=cur_metric["scale"].squeeze(),
+        )
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
         C_ls.append(C)
         S_ls.append(S)

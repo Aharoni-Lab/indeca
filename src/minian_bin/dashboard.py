@@ -29,14 +29,18 @@ class Dashboard:
         self.it_update = 0
         self.it_view = 0
         self.it_vars = {
-            "c": np.zeros((max_iters, ncell, T)),
-            "s": np.zeros((max_iters, ncell, T)),
-            "h": np.zeros((max_iters, ncell, kn_len)),
-            "h_fit": np.zeros((max_iters, ncell, kn_len)),
-            "scale": np.ones((max_iters, ncell)),
+            "c": np.full((max_iters, ncell, T), np.nan),
+            "s": np.full((max_iters, ncell, T), np.nan),
+            "h": np.full((max_iters, ncell, kn_len), np.nan),
+            "h_fit": np.full((max_iters, ncell, kn_len), np.nan),
+            "scale": np.full((max_iters, ncell), np.nan),
+            "tau_d": np.full((max_iters, ncell), np.nan),
+            "tau_r": np.full((max_iters, ncell), np.nan),
+            "err": np.full((max_iters, ncell), np.nan),
         }
         self._make_pane_cells()
-        self.pn_main = pn.Column(self.pn_cells)
+        self._make_pane_iters()
+        self.pn_main = pn.Column(self.pn_iters, self.pn_cells)
         self.dash = pn.template.MaterialTemplate(title="Minian-bin Dashboard")
         self.dash.main.append(self.pn_main)
         pn.serve(self.dash, port=port, threaded=True)
@@ -82,6 +86,52 @@ class Dashboard:
             sizing_mode="stretch_width",
         )
 
+    def _make_pane_iters(self):
+        self.fig_iters = dict()
+        for met in ["scale", "err"]:
+            fig = go.Figure(
+                data=[
+                    go.Scatter(
+                        y=self.it_vars[met][:, u],
+                        name=met,
+                        mode="lines+markers",
+                        uid=u,
+                        text="cell{}".format(u),
+                        legendgroup=met,
+                        showlegend=u == 0,
+                    )
+                    for u in range(self.ncell)
+                ]
+            )
+            fig.update_layout(autosize=True, margin={"l": 0, "r": 0, "t": 0, "b": 0})
+            self.fig_iters[met] = fig
+        fig_tau = go.Figure()
+        for met in ["tau_d", "tau_r"]:
+            fig_tau.add_traces(
+                [
+                    go.Scatter(
+                        y=self.it_vars[met][:, u],
+                        name=met,
+                        mode="lines+markers",
+                        uid=u,
+                        text="cell{}".format(u),
+                        legendgroup=met,
+                        showlegend=u == 0,
+                    )
+                    for u in range(self.ncell)
+                ]
+            )
+        fig_tau.update_layout(autosize=True, margin={"l": 0, "r": 0, "t": 0, "b": 0})
+        self.fig_iters["taus"] = fig_tau
+        self.pn_iters = pn.Accordion(
+            *[
+                (k, pn.pane.plotly.Plotly(v, sizing_mode="stretch_both"))
+                for k, v in self.fig_iters.items()
+            ],
+            sizing_mode="stretch_width",
+            height=400,
+        )
+
     def _update_cells_fig(self, data: np.ndarray, uid: int, vname: str):
         fig = self.fig_cells[uid]
         for d in fig.data:
@@ -90,6 +140,18 @@ class Dashboard:
                 break
         else:
             raise ValueError(f"no data with name {vname}")
+
+    def _refresh_iters_fig(self, uid: int, vname: str):
+        if vname in ["scale", "err"]:
+            self.fig_iters[vname].data[uid].y = self.it_vars[vname][:, uid]
+        elif vname in ["tau_d", "tau_r"]:
+            dats = [
+                d
+                for d in self.fig_iters["taus"].data
+                if d.name == vname and d.uid == str(uid)
+            ]
+            assert len(dats) == 1
+            dats[0].y = self.it_vars[vname][:, uid]
 
     def set_iter(self, it: int):
         self.it_update = it
@@ -105,7 +167,14 @@ class Dashboard:
                     self.it_vars[vname][self.it_update, u, :] = dat
                     if self.it_update == self.it_view:
                         self._update_cells_fig(dat, u, vname)
-                elif vname in ["scale"]:
-                    self.it_vars[vname][self.it_update, u] = dat
-                    if self.it_update == self.it_view:
-                        self._update_cells_fig(self.Y[u] / dat, u, "y")
+                elif vname in ["tau_d", "tau_r", "err", "scale"]:
+                    try:
+                        d = dat.item()
+                    except ValueError:
+                        d = dat[u]
+                    except AttributeError:
+                        d = dat
+                    self.it_vars[vname][self.it_update, u] = d
+                    self._refresh_iters_fig(u, vname)
+                    if vname == "scale" and self.it_update == self.it_view:
+                        self._update_cells_fig(self.Y[u] / d, u, "y")
