@@ -1,7 +1,10 @@
 import numpy as np
 import panel as pn
 import plotly.graph_objects as go
+from plotly.exceptions import PlotlyKeyError
+from plotly.figure_factory import create_trisurf
 from plotly.subplots import make_subplots
+from scipy.spatial import Delaunay
 
 
 class Dashboard:
@@ -37,6 +40,12 @@ class Dashboard:
             "tau_d": np.full((max_iters, ncell), np.nan),
             "tau_r": np.full((max_iters, ncell), np.nan),
             "err": np.full((max_iters, ncell), np.nan),
+            "penal_err": np.array(
+                [
+                    [{"penal": [], "scale": [], "err": []} for _ in range(ncell)]
+                    for _ in range(max_iters)
+                ]
+            ),
         }
         self._make_pane_cells()
         self._make_pane_iters()
@@ -47,12 +56,13 @@ class Dashboard:
 
     def _make_pane_cells(self):
         self.fig_cells = [None] * self.ncell
+        self.fig_penal = [go.Figure()] * self.ncell
         for icell, y in enumerate(self.Y):
             fig = make_subplots(
-                cols=3,
-                subplot_titles=("traces", "kernel", "error"),
+                cols=2,
+                subplot_titles=("traces", "kernel"),
                 horizontal_spacing=0.02,
-                column_widths=[0.7, 0.15, 0.15],
+                column_widths=[0.85, 0.15],
             )
             fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
             for v in ["c", "s"]:
@@ -71,15 +81,33 @@ class Dashboard:
                     row=1,
                     col=2,
                 )
-            fig.add_trace(
-                go.Scatter(y=np.zeros(10), mode="lines", name="error"), row=1, col=3
-            )
             fig.update_layout(autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0})
             self.fig_cells[icell] = fig
+            x = np.array([0, 0, 1, 1])
+            y = np.array([0, 1, 1, 0])
+            z = np.array([0, 0, 1, 1])
+            fig = create_trisurf(
+                x=x,
+                y=y,
+                z=z,
+                simplices=Delaunay(np.stack([x, y], axis=1)).simplices,
+                plot_edges=False,
+            )
+            fig.update_layout(
+                autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0}, title="error"
+            )
+            self.fig_penal[icell] = fig
         self.pn_cells = pn.Feed(
             *[
-                pn.pane.plotly.Plotly(f, sizing_mode="stretch_width", height=200)
-                for f in self.fig_cells
+                pn.Row(
+                    *[
+                        pn.pane.plotly.Plotly(
+                            f, sizing_mode="stretch_width", height=200
+                        ),
+                        pn.pane.plotly.Plotly(p, width=1000, height=200),
+                    ]
+                )
+                for f, p in zip(self.fig_cells, self.fig_penal)
             ],
             # load_buffer=6,
             height=840,
@@ -153,6 +181,26 @@ class Dashboard:
             assert len(dats) == 1
             dats[0].y = self.it_vars[vname][:, uid]
 
+    def _refresh_err_penal_fit(self, uid: int):
+        ex = np.array(self.it_vars["penal_err"][self.it_view, uid]["penal"])
+        ey = np.array(self.it_vars["penal_err"][self.it_view, uid]["scale"])
+        err = np.log(np.array(self.it_vars["penal_err"][self.it_view, uid]["err"]))
+        if len(np.unique(ex)) > 1 and len(np.unique(ey)) > 1:
+            fig = self.fig_penal[uid]
+            fig_new = create_trisurf(
+                x=ex,
+                y=ey,
+                z=err,
+                simplices=Delaunay(np.stack([ex, ey], axis=1)).simplices,
+                plot_edges=False,
+            )
+            for idat in range(len(fig.data)):
+                for attr in ["x", "y", "z", "i", "j", "k", "facecolor"]:
+                    try:
+                        fig.data[idat][attr] = fig_new.data[idat][attr]
+                    except PlotlyKeyError:
+                        pass
+
     def set_iter(self, it: int):
         self.it_update = it
 
@@ -178,3 +226,7 @@ class Dashboard:
                     self._refresh_iters_fig(u, vname)
                     if vname == "scale" and self.it_update == self.it_view:
                         self._update_cells_fig(self.Y[u] / d, u, "y")
+                        self._refresh_err_penal_fit(u)
+                elif vname in ["penal_err"]:
+                    for v in ["penal", "scale", "err"]:
+                        self.it_vars[vname][self.it_update, u][v].append(dat[v])
