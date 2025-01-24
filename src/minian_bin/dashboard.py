@@ -109,8 +109,7 @@ class Dashboard:
                 for f, p in zip(self.fig_cells, self.fig_penal)
             ],
             # load_buffer=6,
-            height=950,
-            sizing_mode="stretch_width",
+            sizing_mode="stretch_both",
         )
 
     def _make_pane_iters(self):
@@ -130,7 +129,9 @@ class Dashboard:
                     for u in range(self.ncell)
                 ]
             )
-            fig.update_layout(autosize=True, margin={"l": 0, "r": 0, "t": 0, "b": 0})
+            fig.update_layout(
+                autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0}, title=met
+            )
             self.fig_iters[met] = fig
         fig_tau = go.Figure()
         for met in ["tau_d", "tau_r"]:
@@ -148,15 +149,24 @@ class Dashboard:
                     for u in range(self.ncell)
                 ]
             )
-        fig_tau.update_layout(autosize=True, margin={"l": 0, "r": 0, "t": 0, "b": 0})
+        fig_tau.update_layout(
+            autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0}, title="taus"
+        )
         self.fig_iters["taus"] = fig_tau
-        self.pn_iters = pn.Accordion(
+        self.pn_iters = pn.FloatPanel(
             *[
-                (k, pn.pane.plotly.Plotly(v, sizing_mode="stretch_both"))
-                for k, v in self.fig_iters.items()
+                pn.pane.plotly.Plotly(f, sizing_mode="stretch_width", height=280)
+                for f in self.fig_iters.values()
             ],
-            sizing_mode="stretch_width",
-            height=340,
+            name="iterations",
+            config={
+                "headerControls": {
+                    "close": "remove",
+                    "maximize": "remove",
+                    "smallify": "remove",
+                }
+            },
+            sizing_mode="stretch_both",
         )
 
     def _update_cells_fig(self, data: np.ndarray, uid: int, vname: str):
