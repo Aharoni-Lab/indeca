@@ -4,6 +4,6 @@ channels:
 dependencies:
   - nvidia/label/cuda-11.8.0::cuda
   - nvidia/label/cuda-11.8.0::cuda-toolkit
-  - python
+  - python<3.13
   - jupyter
   - pip
