@@ -97,11 +97,13 @@ class Dashboard:
             *[
                 pn.Row(
                     *[
+                        pn.pane.plotly.Plotly(f, sizing_mode="stretch_both"),
                         pn.pane.plotly.Plotly(
-                            f, sizing_mode="stretch_width", height=300
+                            p, sizing_mode="stretch_height", width=450
                         ),
-                        pn.pane.plotly.Plotly(p, width=450, height=300),
-                    ]
+                    ],
+                    sizing_mode="stretch_width",
+                    height=300,
                 )
                 for f, p in zip(self.fig_cells, self.fig_penal)
             ],
