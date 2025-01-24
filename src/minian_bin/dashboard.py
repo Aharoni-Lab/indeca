@@ -1,10 +1,7 @@
 import numpy as np
 import panel as pn
 import plotly.graph_objects as go
-from plotly.exceptions import PlotlyKeyError
-from plotly.figure_factory import create_trisurf
 from plotly.subplots import make_subplots
-from scipy.spatial import Delaunay
 
 
 class Dashboard:
