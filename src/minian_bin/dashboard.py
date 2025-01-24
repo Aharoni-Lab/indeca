@@ -87,7 +87,7 @@ class Dashboard:
                 xaxis_title="frame",
             )
             self.fig_cells[icell] = fig
-            fig = go.Figure(go.Heatmap(zsmooth="best"))
+            fig = go.Figure(go.Heatmap(colorscale="viridis_r", zsmooth="best"))
             fig.update_layout(
                 autosize=True,
                 margin={"l": 0, "r": 0, "t": 30, "b": 0},
