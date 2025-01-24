@@ -62,7 +62,7 @@ class Dashboard:
                 cols=2,
                 subplot_titles=("traces", "kernel"),
                 horizontal_spacing=0.02,
-                column_widths=[0.85, 0.15],
+                column_widths=[0.9, 0.1],
             )
             fig.add_trace(go.Scatter(y=y, mode="lines", name="y"), row=1, col=1)
             for v in ["c", "s"]:
@@ -81,20 +81,19 @@ class Dashboard:
                     row=1,
                     col=2,
                 )
-            fig.update_layout(autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0})
-            self.fig_cells[icell] = fig
-            x = np.array([0, 0, 1, 1])
-            y = np.array([0, 1, 1, 0])
-            z = np.array([0, 0, 1, 1])
-            fig = create_trisurf(
-                x=x,
-                y=y,
-                z=z,
-                simplices=Delaunay(np.stack([x, y], axis=1)).simplices,
-                plot_edges=False,
-            )
             fig.update_layout(
-                autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0}, title="error"
+                autosize=True,
+                margin={"l": 0, "r": 0, "t": 30, "b": 0},
+                xaxis_title="frame",
+            )
+            self.fig_cells[icell] = fig
+            fig = go.Figure(go.Heatmap(zsmooth="best"))
+            fig.update_layout(
+                autosize=True,
+                margin={"l": 0, "r": 0, "t": 30, "b": 0},
+                title="error",
+                xaxis_title="penalty",
+                yaxis_title="scale",
             )
             self.fig_penal[icell] = fig
         self.pn_cells = pn.Feed(
@@ -102,15 +101,15 @@ class Dashboard:
                 pn.Row(
                     *[
                         pn.pane.plotly.Plotly(
-                            f, sizing_mode="stretch_width", height=200
+                            f, sizing_mode="stretch_width", height=300
                         ),
-                        pn.pane.plotly.Plotly(p, width=1000, height=200),
+                        pn.pane.plotly.Plotly(p, width=450, height=300),
                     ]
                 )
                 for f, p in zip(self.fig_cells, self.fig_penal)
             ],
             # load_buffer=6,
-            height=840,
+            height=950,
             sizing_mode="stretch_width",
         )
 
@@ -157,7 +156,7 @@ class Dashboard:
                 for k, v in self.fig_iters.items()
             ],
             sizing_mode="stretch_width",
-            height=400,
+            height=340,
         )
 
     def _update_cells_fig(self, data: np.ndarray, uid: int, vname: str):
@@ -185,21 +184,10 @@ class Dashboard:
         ex = np.array(self.it_vars["penal_err"][self.it_view, uid]["penal"])
         ey = np.array(self.it_vars["penal_err"][self.it_view, uid]["scale"])
         err = np.log(np.array(self.it_vars["penal_err"][self.it_view, uid]["err"]))
-        if len(np.unique(ex)) > 1 and len(np.unique(ey)) > 1:
-            fig = self.fig_penal[uid]
-            fig_new = create_trisurf(
-                x=ex,
-                y=ey,
-                z=err,
-                simplices=Delaunay(np.stack([ex, ey], axis=1)).simplices,
-                plot_edges=False,
-            )
-            for idat in range(len(fig.data)):
-                for attr in ["x", "y", "z", "i", "j", "k", "facecolor"]:
-                    try:
-                        fig.data[idat][attr] = fig_new.data[idat][attr]
-                    except PlotlyKeyError:
-                        pass
+        err = np.clip(err, 0, np.median(err))
+        hm = go.Heatmap(x=ex, y=ey, z=err, type="heatmap")
+        for a in ["x", "y", "z"]:
+            self.fig_penal[uid].data[0][a] = hm[a]
 
     def set_iter(self, it: int):
         self.it_update = it
