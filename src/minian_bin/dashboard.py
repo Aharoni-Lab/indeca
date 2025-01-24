@@ -49,7 +49,7 @@ class Dashboard:
         self.pn_main = pn.Column(self.pn_iters, self.pn_cells)
         self.dash = pn.template.MaterialTemplate(title="Minian-bin Dashboard")
         self.dash.main.append(self.pn_main)
-        pn.serve(self.dash, port=port, threaded=True)
+        self.sv = pn.serve(self.dash, port=port, threaded=True)
 
     def _make_pane_cells(self):
         self.fig_cells = [None] * self.ncell
@@ -277,3 +277,6 @@ class Dashboard:
                 elif vname in ["penal_err"]:
                     for v in ["penal", "scale", "err"]:
                         self.it_vars[vname][self.it_update, u][v].append(dat[v])
+
+    def stop(self):
+        self.sv.stop()

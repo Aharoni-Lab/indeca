@@ -286,6 +286,7 @@ def pipeline_bin(
         ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
+    dashboard.stop()
     if return_iter:
         return opt_C, opt_S, metric_df, C_ls, S_ls, h_ls, h_fit_ls
     else:
