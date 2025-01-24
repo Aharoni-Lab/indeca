@@ -129,8 +129,13 @@ class Dashboard:
                 ]
             )
             fig.update_layout(
-                autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0}, title=met
+                autosize=True,
+                margin={"l": 0, "r": 30, "t": 30, "b": 30},
+                title=met,
+                xaxis_title="iteration",
+                hovermode="x",
             )
+            fig.add_vline(0, line_color="grey", line_dash="dash")
             self.fig_iters[met] = fig
         fig_tau = go.Figure()
         for met in ["tau_d", "tau_r"]:
@@ -149,14 +154,21 @@ class Dashboard:
                 ]
             )
         fig_tau.update_layout(
-            autosize=True, margin={"l": 0, "r": 0, "t": 30, "b": 0}, title="taus"
+            autosize=True,
+            margin={"l": 0, "r": 30, "t": 30, "b": 30},
+            title="taus",
+            xaxis_title="iteration",
+            hovermode="x",
         )
+        fig_tau.add_vline(0, line_color="grey", line_dash="dash")
         self.fig_iters["taus"] = fig_tau
+        pane_iters = []
+        for f in self.fig_iters.values():
+            p = pn.pane.plotly.Plotly(f, sizing_mode="stretch_width", height=280)
+            p.param.watch(self._update_it_view, "click_data")
+            pane_iters.append(p)
         self.pn_iters = pn.FloatPanel(
-            *[
-                pn.pane.plotly.Plotly(f, sizing_mode="stretch_width", height=280)
-                for f in self.fig_iters.values()
-            ],
+            *pane_iters,
             name="iterations",
             config={
                 "headerControls": {
@@ -177,17 +189,46 @@ class Dashboard:
         else:
             raise ValueError(f"no data with name {vname}")
 
-    def _refresh_iters_fig(self, uid: int, vname: str):
-        if vname in ["scale", "err"]:
-            self.fig_iters[vname].data[uid].y = self.it_vars[vname][:, uid]
-        elif vname in ["tau_d", "tau_r"]:
-            dats = [
-                d
-                for d in self.fig_iters["taus"].data
-                if d.name == vname and d.uid == str(uid)
-            ]
-            assert len(dats) == 1
-            dats[0].y = self.it_vars[vname][:, uid]
+    def _update_it_view(self, click_data):
+        it = int(click_data.new["points"][0]["x"])
+        self.it_view = it
+        self._refresh_it_view()
+
+    def _update_it_ind(self, it: int):
+        for f in self.fig_iters.values():
+            ln = f["layout"]["shapes"][0]
+            ln["x0"] = it
+            ln["x1"] = it
+
+    def _refresh_cells_fig(self, uid: int, vname: str = None):
+        if vname is None:
+            vnames = ["c", "s", "h", "h_fit", "scale"]
+        else:
+            vnames = [vname]
+        for vname in vnames:
+            dat = self.it_vars[vname][self.it_view, uid]
+            if vname == "scale":
+                if not np.isnan(dat):
+                    self._update_cells_fig(self.Y[uid] / dat, uid, "y")
+            else:
+                self._update_cells_fig(dat, uid, vname)
+
+    def _refresh_iters_fig(self, uid: int, vname: str = None):
+        if vname is None:
+            vnames = ["scale", "err", "tau_d", "tau_r"]
+        else:
+            vnames = [vname]
+        for vname in vnames:
+            if vname in ["scale", "err"]:
+                self.fig_iters[vname].data[uid].y = self.it_vars[vname][:, uid]
+            elif vname in ["tau_d", "tau_r"]:
+                dats = [
+                    d
+                    for d in self.fig_iters["taus"].data
+                    if d.name == vname and d.uid == str(uid)
+                ]
+                assert len(dats) == 1
+                dats[0].y = self.it_vars[vname][:, uid]
 
     def _refresh_err_penal_fit(self, uid: int):
         ex = np.array(self.it_vars["penal_err"][self.it_view, uid]["penal"])
@@ -198,7 +239,16 @@ class Dashboard:
         for a in ["x", "y", "z"]:
             self.fig_penal[uid].data[0][a] = hm[a]
 
+    def _refresh_it_view(self):
+        self._update_it_ind(self.it_view)
+        for u in range(self.ncell):
+            self._refresh_cells_fig(u)
+            self._refresh_err_penal_fit(u)
+
     def set_iter(self, it: int):
+        if self.it_update == self.it_view:
+            self.it_view = it
+            self._refresh_it_view()
         self.it_update = it
 
     def update(self, uid: int = None, **kwargs):
