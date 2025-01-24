@@ -1,7 +1,6 @@
 import warnings
 from typing import Tuple
 
-import cuosqp
 import cvxpy as cp
 import numpy as np
 import osqp
@@ -17,6 +16,11 @@ from scipy.special import huber
 from minian_bin.cnmf import filt_fft, get_ar_coef, noise_fft
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.utilities import scal_lstsq
+
+try:
+    import cuosqp
+except ImportError:
+    warnings.warn("No GPU solver support")
 
 
 def construct_R(T: int, up_factor: int):
