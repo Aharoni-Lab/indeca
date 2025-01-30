@@ -103,6 +103,7 @@ def pipeline_bin(
                 lambda yy, tt: DeconvBin(
                     y=yy,
                     theta=tt,
+                    coef_len=ar_kn_len,
                     upsamp=up_factor,
                     nthres=deconv_nthres,
                     norm=deconv_norm,
@@ -122,6 +123,7 @@ def pipeline_bin(
             DeconvBin(
                 y=y,
                 theta=theta[i],
+                coef_len=ar_kn_len,
                 upsamp=up_factor,
                 nthres=deconv_nthres,
                 norm=deconv_norm,
