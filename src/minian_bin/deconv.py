@@ -436,7 +436,7 @@ class DeconvBin:
         else:
             return np.abs(opt_s)
 
-    def solve_thres(self) -> Tuple[np.ndarray]:
+    def solve_thres(self, scaling: bool = True) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
@@ -460,7 +460,10 @@ class DeconvBin:
         cvals = [self._compute_c(s) for s in svals]
         R = self.R.value if self.backend == "cvxpy" else self.R
         yfvals = [R @ c for c in cvals]
-        scals = [scal_lstsq(yf, y) for yf in yfvals]
+        if scaling:
+            scals = [scal_lstsq(yf, y) for yf in yfvals]
+        else:
+            scals = [self.scale] * len(yfvals)
         objs = [self._compute_err(y_fit=scl * yf) for scl, yf in zip(scals, yfvals)]
         objs = np.where(np.array(scals) > 0, objs, np.inf)
         opt_idx = np.argmin(objs)
@@ -489,7 +492,7 @@ class DeconvBin:
 
             def opt_fn(x):
                 self.update(**{pn: x.item()})
-                _, _, _, obj = self.solve_thres()
+                _, _, _, obj = self.solve_thres(scaling=False)
                 self.dashboard.update(
                     uid=self.dashboard_uid,
                     penal_err={"penal": x.item(), "scale": self.scale, "err": obj},
