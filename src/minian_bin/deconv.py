@@ -512,7 +512,7 @@ class DeconvBin:
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
                 eps=self.atol,
-                vol_tol=min(1e-2, 1e-2 / ub),
+                vol_tol=min(1e-7 * ub, 0.1),
             )
             if not res.success:
                 warnings.warn(
