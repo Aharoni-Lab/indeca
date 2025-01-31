@@ -445,6 +445,8 @@ class DeconvBin:
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
         opt_s = self.solve()
+        R = self.R.value if self.backend == "cvxpy" else self.R
+        res = y - self.scale * R @ self._compute_c(opt_s)
         svals = max_thres(
             opt_s,
             self.nthres,
@@ -461,16 +463,19 @@ class DeconvBin:
                 np.inf,
             )
         cvals = [self._compute_c(s) for s in svals]
-        R = self.R.value if self.backend == "cvxpy" else self.R
         yfvals = [R @ c for c in cvals]
         if scaling:
             scals = [scal_lstsq(yf, y) for yf in yfvals]
         else:
             scals = [self.scale] * len(yfvals)
-        objs = [self._compute_err(y_fit=scl * yf) for scl, yf in zip(scals, yfvals)]
+        objs = [
+            self._compute_err(y_fit=scl * yf, res=res) for scl, yf in zip(scals, yfvals)
+        ]
         objs = np.where(np.array(scals) > 0, objs, np.inf)
         opt_idx = np.argmin(objs)
-        return svals[opt_idx], cvals[opt_idx], scals[opt_idx], objs[opt_idx]
+        bin_s = svals[opt_idx]
+        err = self._compute_err(s=bin_s)
+        return bin_s, cvals[opt_idx], scals[opt_idx], err
 
     def solve_penal(self, masking=True) -> Tuple[np.ndarray]:
         if self.penal is None:
@@ -706,13 +711,19 @@ class DeconvBin:
                 return self.H @ self.s
 
     def _compute_err(
-        self, y_fit: np.ndarray = None, c: np.ndarray = None, s: np.ndarray = None
+        self,
+        y_fit: np.ndarray = None,
+        c: np.ndarray = None,
+        s: np.ndarray = None,
+        res: np.ndarray = None,
     ) -> float:
         if self.backend == "cvxpy":
             # TODO: add support
             raise NotImplementedError
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
+        if res is not None:
+            y = y - res
         if y_fit is None:
             if c is None:
                 c = self._compute_c(s)
