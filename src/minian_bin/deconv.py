@@ -255,7 +255,10 @@ class DeconvBin:
                     "Baseline term not yet supported with backend {}".format(backend)
                 )
             self._setup_prob_osqp()
-        self.dashboard.update(h=self.coef.value if backend == "cvxpy" else self.coef)
+        self.dashboard.update(
+            h=self.coef.value if backend == "cvxpy" else self.coef,
+            uid=self.dashboard_uid,
+        )
 
     def update(
         self,
