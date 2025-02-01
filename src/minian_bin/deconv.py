@@ -11,6 +11,7 @@ import xarray as xr
 from line_profiler import profile
 from scipy.linalg import convolution_matrix
 from scipy.optimize import direct
+from scipy.signal import ShortTimeFFT
 from scipy.special import huber
 
 from minian_bin.cnmf import filt_fft, get_ar_coef, noise_fft
@@ -85,6 +86,7 @@ class DeconvBin:
         mixin: bool = False,
         backend: str = "cvxpy",
         nthres: int = 1000,
+        err_weighting: bool = True,
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
@@ -167,6 +169,10 @@ class DeconvBin:
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
         self.x_cache = None
+        self.err_wt = np.ones(self.y_len) if err_weighting else None
+        if self.err_wt is not None:
+            self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
+            self.yspec = self._get_stft_spec(y)
         if y is not None:
             self.huber_k = 0.5 * np.std(y)
         else:
@@ -728,12 +734,14 @@ class DeconvBin:
             if c is None:
                 c = self._compute_c(s)
             y_fit = self.R @ c * self.scale
+        r = y - y_fit
+        if self.err_wt is not None:
+            r = self.err_wt * r
         if self.norm == "l1":
-            return np.sum(np.abs(y - y_fit))
+            return np.sum(np.abs(r))
         elif self.norm == "l2":
-            return np.sum((y - y_fit) ** 2)
+            return np.sum((r) ** 2)
         elif self.norm == "huber":
-            r = y - y_fit
             err_hub = huber(self.huber_k, r)
             err_qud = r**2 / 2
             return np.sum(np.where(r >= 0, err_hub, err_qud))
@@ -796,6 +804,13 @@ class DeconvBin:
             format="csc",
         )
         self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
+        if self.err_wt is not None:
+            hspec = self._get_stft_spec(coef)[:, int(self.coef_len / 2)]
+            self.err_wt = (
+                (hspec.reshape(-1, 1) * self.yspec).sum(axis=0)
+                / np.linalg.norm(hspec)
+                / np.linalg.norm(self.yspec, axis=0)
+            )
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
@@ -811,6 +826,12 @@ class DeconvBin:
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
+
+    def _get_stft_spec(self, x: np.ndarray) -> np.ndarray:
+        spec = np.abs(self.stft.stft(x)) ** 2
+        t = self.stft.t(len(x))
+        t_mask = np.logical_and(t >= 0, t < len(x))
+        return spec[:, t_mask]
 
     def _update_P(self) -> None:
         if self.norm == "l1":
