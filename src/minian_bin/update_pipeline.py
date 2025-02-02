@@ -175,7 +175,7 @@ def pipeline_bin(
             err=cur_metric["err"].squeeze(),
             scale=cur_metric["scale"].squeeze(),
         )
-        dashboard.set_iter(i_iter + 1)
+        dashboard.set_iter(min(i_iter + 1, max_iters))
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
         C_ls.append(C)
         S_ls.append(S)
