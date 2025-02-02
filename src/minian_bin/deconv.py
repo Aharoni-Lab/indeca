@@ -86,7 +86,7 @@ class DeconvBin:
         mixin: bool = False,
         backend: str = "cvxpy",
         nthres: int = 1000,
-        err_weighting: bool = True,
+        err_weighting: str = "corr",
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
@@ -169,8 +169,9 @@ class DeconvBin:
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
         self.x_cache = None
+        self.err_weighting = err_weighting
         self.err_wt = np.ones(self.y_len) if err_weighting else None
-        if self.err_wt is not None:
+        if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = self._get_stft_spec(y)
         if y is not None:
@@ -804,13 +805,22 @@ class DeconvBin:
             format="csc",
         )
         self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
-        if self.err_wt is not None:
+        if self.err_weighting == "fft":
             hspec = self._get_stft_spec(coef)[:, int(self.coef_len / 2)]
             self.err_wt = (
                 (hspec.reshape(-1, 1) * self.yspec).sum(axis=0)
                 / np.linalg.norm(hspec)
                 / np.linalg.norm(self.yspec, axis=0)
             )
+        elif self.err_weighting == "corr":
+            for i in range(self.y_len):
+                yseg = self.y[i : i + self.coef_len]
+                if len(yseg) <= 1:
+                    continue
+                cseg = coef[: len(yseg)]
+                with np.errstate(all="ignore"):
+                    self.err_wt[i] = np.corrcoef(yseg, cseg)[0, 1].clip(0, 1)
+            self.err_wt = np.nan_to_num(self.err_wt)
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
