@@ -170,7 +170,7 @@ class DeconvBin:
         self.nzidx_c = np.arange(self.T)
         self.x_cache = None
         self.err_weighting = err_weighting
-        self.err_wt = np.ones(self.y_len) if err_weighting else None
+        self.err_wt = np.ones(self.y_len)
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = self._get_stft_spec(y)
@@ -261,6 +261,7 @@ class DeconvBin:
                 raise NotImplementedError(
                     "Baseline term not yet supported with backend {}".format(backend)
                 )
+            self._update_Wt()
             self._setup_prob_osqp()
         self.dashboard.update(
             h=self.coef.value if backend == "cvxpy" else self.coef,
@@ -343,6 +344,9 @@ class DeconvBin:
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
+                if self.err_weighting:
+                    self._update_Wt()
+                    updt_q0 = True
             if self.norm == "huber":
                 if any((scale is not None, scale_mul is not None, updt_HG)):
                     self._update_A()
@@ -797,14 +801,8 @@ class DeconvBin:
         self.R_org = construct_R(self.y_len, self.upsamp)
         self.R = self.R_org[:, self.nzidx_c]
 
-    def _update_HG(self) -> None:
+    def _update_Wt(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        self.H_org = sps.diags(
-            [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
-            offsets=-np.arange(len(coef)),
-            format="csc",
-        )
-        self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
         if self.err_weighting == "fft":
             hspec = self._get_stft_spec(coef)[:, int(self.coef_len / 2)]
             self.err_wt = (
@@ -821,6 +819,16 @@ class DeconvBin:
                 with np.errstate(all="ignore"):
                     self.err_wt[i] = np.corrcoef(yseg, cseg)[0, 1].clip(0, 1)
             self.err_wt = np.nan_to_num(self.err_wt)
+        self.Wt = sps.diags(self.err_wt)
+
+    def _update_HG(self) -> None:
+        coef = self.coef.value if self.backend == "cvxpy" else self.coef
+        self.H_org = sps.diags(
+            [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
+            offsets=-np.arange(len(coef)),
+            format="csc",
+        )
+        self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
@@ -851,9 +859,17 @@ class DeconvBin:
             )
         elif self.norm == "l2":
             if self.free_kernel:
-                P = self.scale**2 * self.H.T @ self.R.T @ self.R @ self.H
+                P = (
+                    self.scale**2
+                    * self.H.T
+                    @ self.R.T
+                    @ self.Wt.T
+                    @ self.Wt
+                    @ self.R
+                    @ self.H
+                )
             else:
-                P = self.scale**2 * self.R.T @ self.R
+                P = self.scale**2 * self.R.T @ self.Wt.T @ self.Wt @ self.R
             # assert np.isclose(P.todense(), P.T.todense()).all()
         elif self.norm == "huber":
             lc, ls, ly = len(self.nzidx_c), len(self.nzidx_s), self.y_len
@@ -883,9 +899,11 @@ class DeconvBin:
             )
         elif self.norm == "l2":
             if self.free_kernel:
-                self.q0 = -self.scale * self.H.T @ self.R.T @ self.y
+                self.q0 = (
+                    -self.scale * self.H.T @ self.R.T @ self.Wt.T @ self.Wt @ self.y
+                )
             else:
-                self.q0 = -self.scale * self.R.T @ self.y
+                self.q0 = -self.scale * self.R.T @ self.Wt.T @ self.Wt @ self.y
         elif self.norm == "huber":
             ly = self.y_len
             lx = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
