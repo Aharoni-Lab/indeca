@@ -402,7 +402,7 @@ class DeconvBin:
 
     def solve(self, amp_constraint: bool = True) -> np.ndarray:
         if self.l0_penal == 0:
-            opt_s = self._solve(amp_constraint)
+            opt_s, opt_b = self._solve(amp_constraint)
         else:
             metric_df = None
             for i in range(self.max_iter_l0):
@@ -446,7 +446,8 @@ class DeconvBin:
                 )
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             self.s = np.abs(opt_s)
-            return self.s
+            self.b = opt_b
+            return self.s, self.b
         else:
             return np.abs(opt_s)
 
@@ -455,9 +456,9 @@ class DeconvBin:
             y = self.y.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
-        opt_s = self.solve()
+        opt_s, opt_b = self.solve()
         R = self.R.value if self.backend == "cvxpy" else self.R
-        res = y - self.scale * R @ self._compute_c(opt_s)
+        res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
         svals = max_thres(
             opt_s,
             self.nthres,
@@ -502,7 +503,7 @@ class DeconvBin:
             ub = self._compute_err(s=np.zeros(len(self.nzidx_s)))
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
-                s = self.solve()
+                s, _ = self.solve()
                 if (s > self.delta_penal).sum() > 0:
                     ub = ub * 2
                     break
@@ -541,7 +542,7 @@ class DeconvBin:
     def solve_scale(self, reset_scale: bool = True) -> Tuple[np.ndarray]:
         if reset_scale:
             self.update(scale=1)
-            s_free = self.solve(amp_constraint=False)
+            s_free, _ = self.solve(amp_constraint=False)
             self.update(scale=np.ptp(s_free))
         metric_df = None
         for i in range(self.max_iter_scal):
@@ -699,18 +700,19 @@ class DeconvBin:
                 sol = x[:xlen]
             else:
                 sol = x
+            opt_b = sol[0]
             if self.free_kernel:
-                opt_s = sol
+                opt_s = sol[1:]
             else:
-                opt_s = self.G @ sol
+                opt_s = self.G @ sol[1:]
         if return_obj:
             if self.backend == "cvxpy":
                 opt_obj = res
             elif self.backend in ["osqp", "emosqp", "cuosqp"]:
                 opt_obj = self._compute_err()
-            return opt_s, opt_obj
+            return opt_s, opt_b, opt_obj
         else:
-            return opt_s
+            return opt_s, opt_b
 
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         if s is not None:
@@ -774,7 +776,7 @@ class DeconvBin:
     def _update_mask(self, amp_constraint: bool = True) -> None:
         self._reset_mask()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            opt_s = self.solve(amp_constraint)
+            opt_s, _ = self.solve(amp_constraint)
             opt_c = self.H @ opt_s
             self.nzidx_s = np.where(opt_s > self.delta_penal)[0]
             self.nzidx_c = np.where(opt_c > self.delta_penal)[0]
@@ -851,6 +853,20 @@ class DeconvBin:
         t_mask = np.logical_and(t >= 0, t < len(x))
         return spec[:, t_mask]
 
+    def _get_M(self) -> sps.csc_matrix:
+        if self.free_kernel:
+            return sps.hstack(
+                [
+                    np.ones((self.R.shape[0], 1)),
+                    self.scale * self.R @ self.H,
+                ],
+                format="csc",
+            )
+        else:
+            return sps.hstack(
+                [np.ones((self.R.shape[0], 1)), self.scale * self.R], format="csc"
+            )
+
     def _update_P(self) -> None:
         if self.norm == "l1":
             # TODO: add support
@@ -858,19 +874,8 @@ class DeconvBin:
                 "l1 norm not yet supported with backend {}".format(self.backend)
             )
         elif self.norm == "l2":
-            if self.free_kernel:
-                P = (
-                    self.scale**2
-                    * self.H.T
-                    @ self.R.T
-                    @ self.Wt.T
-                    @ self.Wt
-                    @ self.R
-                    @ self.H
-                )
-            else:
-                P = self.scale**2 * self.R.T @ self.Wt.T @ self.Wt @ self.R
-            # assert np.isclose(P.todense(), P.T.todense()).all()
+            M = self._get_M()
+            P = M.T @ self.Wt.T @ self.Wt @ M
         elif self.norm == "huber":
             lc, ls, ly = len(self.nzidx_c), len(self.nzidx_s), self.y_len
             if self.free_kernel:
@@ -898,12 +903,8 @@ class DeconvBin:
                 "l1 norm not yet supported with backend {}".format(self.backend)
             )
         elif self.norm == "l2":
-            if self.free_kernel:
-                self.q0 = (
-                    -self.scale * self.H.T @ self.R.T @ self.Wt.T @ self.Wt @ self.y
-                )
-            else:
-                self.q0 = -self.scale * self.R.T @ self.Wt.T @ self.Wt @ self.y
+            M = self._get_M()
+            self.q0 = -M.T @ self.Wt.T @ self.Wt @ self.y
         elif self.norm == "huber":
             ly = self.y_len
             lx = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
@@ -919,16 +920,15 @@ class DeconvBin:
             )
         elif self.norm == "l2":
             if self.free_kernel:
-                self.q = (
-                    self.q0
-                    + self.l0_penal * self.w
-                    + self.l1_penal * np.ones_like(self.q0)
-                )
+                ww = np.concatenate([0, self.w])
+                qq = np.concatenate([0, np.ones_like(self.w)])
+                self.q = self.q0 + self.l0_penal * ww + self.l1_penal * qq
             else:
+                G_p = sps.hstack([np.zeros((self.G.shape[0], 1)), self.G], format="csc")
                 self.q = (
                     self.q0
-                    + self.l0_penal * self.w @ self.G
-                    + self.l1_penal * np.ones(self.G.shape[0]) @ self.G
+                    + self.l0_penal * self.w @ G_p
+                    + self.l1_penal * np.ones(self.G.shape[0]) @ G_p
                 )
         elif self.norm == "huber":
             pad_k = np.zeros(self.y_len)
@@ -966,7 +966,7 @@ class DeconvBin:
                 format="csc",
             )
         else:
-            self.A = Ax
+            self.A = sps.bmat([[np.ones((1, 1)), None], [None, Ax]], format="csc")
 
     def _update_bounds(self) -> None:
         if self.norm == "huber":
@@ -982,14 +982,16 @@ class DeconvBin:
             )
         else:
             if self.free_kernel:
-                self.lb = np.zeros(len(self.nzidx_s))
-                self.ub = np.ones(len(self.nzidx_s))
-                self.ub_inf = np.full(len(self.nzidx_s), np.inf)
+                self.lb = np.zeros(len(self.nzidx_s) + 1)
+                self.ub = np.concatenate([np.inf, np.ones(len(self.nzidx_s))])
+                self.ub_inf = np.full(len(self.nzidx_s) + 1, np.inf)
             else:
                 self.lb, self.ub, self.ub_inf = (
-                    np.zeros(self.T),
-                    np.zeros(self.T),
-                    np.zeros(self.T),
+                    np.zeros(self.T + 1),
+                    np.zeros(self.T + 1),
+                    np.zeros(self.T + 1),
                 )
-                self.ub[self.nzidx_s] = 1
-                self.ub_inf[self.nzidx_s] = np.inf
+                self.ub[0] = np.inf
+                self.ub[self.nzidx_s + 1] = 1
+                self.ub_inf[0] = np.inf
+                self.ub_inf[self.nzidx_s + 1] = np.inf
