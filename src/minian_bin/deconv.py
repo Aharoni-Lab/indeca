@@ -475,7 +475,7 @@ class DeconvBin:
         cvals = [self._compute_c(s) for s in svals]
         yfvals = [R @ c for c in cvals]
         if scaling:
-            scals = [scal_lstsq(yf, y) for yf in yfvals]
+            scals = [scal_lstsq(yf, y - res - opt_b) for yf in yfvals]
         else:
             scals = [self.scale] * len(yfvals)
         objs = [
