@@ -724,6 +724,7 @@ class DeconvBin:
     def _compute_err(
         self,
         y_fit: np.ndarray = None,
+        b: np.ndarray = None,
         c: np.ndarray = None,
         s: np.ndarray = None,
         res: np.ndarray = None,
@@ -735,6 +736,9 @@ class DeconvBin:
             y = self.y
         if res is not None:
             y = y - res
+        if b is None:
+            b = self.b
+        y = y - b
         if y_fit is None:
             if c is None:
                 c = self._compute_c(s)
