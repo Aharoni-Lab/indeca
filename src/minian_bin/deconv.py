@@ -924,8 +924,8 @@ class DeconvBin:
             )
         elif self.norm == "l2":
             if self.free_kernel:
-                ww = np.concatenate([0, self.w])
-                qq = np.concatenate([0, np.ones_like(self.w)])
+                ww = np.concatenate([np.zeros(1), self.w])
+                qq = np.concatenate([np.zeros(1), np.ones_like(self.w)])
                 self.q = self.q0 + self.l0_penal * ww + self.l1_penal * qq
             else:
                 G_p = sps.hstack([np.zeros((self.G.shape[0], 1)), self.G], format="csc")
@@ -987,7 +987,9 @@ class DeconvBin:
         else:
             if self.free_kernel:
                 self.lb = np.zeros(len(self.nzidx_s) + 1)
-                self.ub = np.concatenate([np.inf, np.ones(len(self.nzidx_s))])
+                self.ub = np.concatenate(
+                    [np.full(1, np.inf), np.ones(len(self.nzidx_s))]
+                )
                 self.ub_inf = np.full(len(self.nzidx_s) + 1, np.inf)
             else:
                 self.lb, self.ub, self.ub_inf = (
