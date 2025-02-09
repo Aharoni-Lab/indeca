@@ -137,15 +137,8 @@ class DeconvBin:
                 coef = np.ones(coef_len * upsamp)
         self.coef_len = len(coef)
         self.T = self.y_len * upsamp
-        if penal is None:
-            l0_penal = 0
-            l1_penal = 0
-        elif penal == "l1":
-            l0_penal = 0
-            l1_penal = 1
-        elif penal == "l0":
-            l0_penal = 1
-            l1_penal = 0
+        l0_penal = 0
+        l1_penal = 0
         self.free_kernel = False
         self.penal = penal
         self.l0_penal = l0_penal
