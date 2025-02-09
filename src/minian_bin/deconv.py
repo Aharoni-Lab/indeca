@@ -805,9 +805,11 @@ class DeconvBin:
         self.R_org = construct_R(self.y_len, self.upsamp)
         self.R = self.R_org[:, self.nzidx_c]
 
-    def _update_Wt(self) -> None:
+    def _update_Wt(self, clear=False) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        if self.err_weighting == "fft":
+        if clear:
+            self.err_wt = np.ones(self.y_len)
+        elif self.err_weighting == "fft":
             hspec = self._get_stft_spec(coef)[:, int(self.coef_len / 2)]
             self.err_wt = (
                 (hspec.reshape(-1, 1) * self.yspec).sum(axis=0)
