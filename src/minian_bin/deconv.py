@@ -498,14 +498,16 @@ class DeconvBin:
                 self._reset_cache()
                 self._update_mask()
             self._update_cache()
-            ub = self._compute_err(s=np.zeros(len(self.nzidx_s)))
+            ub = self._compute_err(s=np.zeros(len(self.nzidx_s)), b=self.y.mean())
+            ub_last = ub
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
                 s, _ = self.solve()
                 if (s > self.delta_penal).sum() > 0:
-                    ub = ub * 2
+                    ub = ub_last
                     break
                 else:
+                    ub_last = ub
                     ub = ub / 2
 
             def opt_fn(x):
