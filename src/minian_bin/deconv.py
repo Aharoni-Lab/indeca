@@ -498,8 +498,8 @@ class DeconvBin:
                 self._reset_cache()
                 self._update_mask()
             self._update_cache()
-            ub = self._compute_err(s=np.zeros(len(self.nzidx_s)), b=self.y.mean())
-            ub_last = ub
+            err_full = self._compute_err(s=np.zeros(len(self.nzidx_s)), b=self.y.mean())
+            ub, ub_last = err_full, err_full
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
                 s, _ = self.solve()
@@ -517,7 +517,10 @@ class DeconvBin:
                     uid=self.dashboard_uid,
                     penal_err={"penal": x.item(), "scale": self.scale, "err": obj},
                 )
-                return obj
+                if obj < err_full:
+                    return obj
+                else:
+                    return np.inf
 
             res = direct(
                 opt_fn,
