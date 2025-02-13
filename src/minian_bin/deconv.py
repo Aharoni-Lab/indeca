@@ -93,7 +93,7 @@ class DeconvBin:
         max_iter_penal: int = 500,
         max_iter_scal: int = 10,
         delta_l0: float = 1e-4,
-        delta_penal: float = 1e-4,
+        delta_penal: float = 1e-2,
         atol: float = 1e-3,
         rtol: float = 1e-3,
         dashboard=None,
@@ -526,8 +526,8 @@ class DeconvBin:
                 opt_fn,
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
-                eps=self.atol,
-                vol_tol=min(1e-7 * ub, 0.1),
+                locally_biased=False,
+                vol_tol=1e-3,
             )
             if not res.success:
                 warnings.warn(
@@ -602,9 +602,22 @@ class DeconvBin:
                 self.update(scale=cur_scl)
         else:
             warnings.warn("max scale iterations reached")
+        opt_idx = max(metric_df["obj"].idxmin() - 1, 0)
+        self.update(scale=metric_df.loc[opt_idx, "scale"])
+        self._update_Wt(clear=True)
+        self._reset_cache()
+        self._reset_mask()
+        cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(scaling=False)
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
         opt_c[self.nzidx_c] = cur_c
+        if self.dashboard is not None:
+            self.dashboard.update(
+                uid=self.dashboard_uid,
+                c=self.R_org @ opt_c,
+                s=self.R_org @ opt_s,
+                scale=cur_scl,
+            )
         return opt_s, opt_c, cur_scl, cur_obj, cur_penal
 
     def _setup_prob_osqp(self) -> None:
