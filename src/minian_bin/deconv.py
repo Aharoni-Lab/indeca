@@ -709,10 +709,17 @@ class DeconvBin:
             opt_s = self.s.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             x = res[0] if self.backend == "emosqp" else res.x
-            # osqp mistakenly report primal infeasibility when using masks with high l1 penalty
-            # manually set solution to zero in such cases
-            if res.info.status in ["primal infeasible", "primal infeasible inaccurate"]:
-                x = np.zeros_like(x, dtype=float)
+            if res.info.status not in ["solved", "solved inaccurate"]:
+                warnings.warn("Problem not solved. status: {}".format(res.info.status))
+                # osqp mistakenly report primal infeasibility when using masks with high l1 penalty
+                # manually set solution to zero in such cases
+                if res.info.status in [
+                    "primal infeasible",
+                    "primal infeasible inaccurate",
+                ]:
+                    x = np.zeros_like(x, dtype=float)
+                else:
+                    x = x.astype(float)
             if self.norm == "huber":
                 xlen = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
                 sol = x[:xlen]
