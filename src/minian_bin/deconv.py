@@ -481,7 +481,8 @@ class DeconvBin:
         objs = [
             self._compute_err(y_fit=scl * yf, res=res) for scl, yf in zip(scals, yfvals)
         ]
-        objs = np.where(np.array(scals) > 0, objs, np.inf)
+        scals = np.array(scals).clip(0, None)
+        objs = np.where(scals > 0, objs, np.inf)
         opt_idx = np.argmin(objs)
         bin_s = svals[opt_idx]
         err = self._compute_err(s=bin_s)
