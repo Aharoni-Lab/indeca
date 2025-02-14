@@ -393,9 +393,13 @@ class DeconvBin:
                     u=self.ub.copy() if updt_bounds else None,
                 )
 
-    def solve(self, amp_constraint: bool = True) -> np.ndarray:
+    def solve(
+        self, amp_constraint: bool = True, update_cache: bool = False
+    ) -> np.ndarray:
         if self.l0_penal == 0:
-            opt_s, opt_b = self._solve(amp_constraint)
+            opt_s, opt_b = self._solve(
+                amp_constraint=amp_constraint, update_cache=update_cache
+            )
         else:
             metric_df = None
             for i in range(self.max_iter_l0):
@@ -498,13 +502,18 @@ class DeconvBin:
             if masking:
                 self._reset_cache()
                 self._update_mask()
-            self._update_cache()
-            err_full = self._compute_err(s=np.zeros(len(self.nzidx_s)), b=self.y.mean())
+            s_min, b_min = self.solve(update_cache=True)
+            ymean = self.y.mean()
+            err_full = self._compute_err(s=np.zeros(len(self.nzidx_s)), b=ymean)
+            err_min = self._compute_err(s=s_min, b=b_min)
             ub, ub_last = err_full, err_full
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
-                s, _ = self.solve()
-                if (s > self.delta_penal).sum() > 0:
+                s, b = self.solve()
+                cur_err = self._compute_err(s=s, b=b)
+                # DIRECT finds weird solutions with high penalty and baseline,
+                # so we want to eliminate those possibilities
+                if np.abs(cur_err - err_min) < 0.5 * np.abs(err_full - err_min):
                     ub = ub_last
                     break
                 else:
@@ -697,7 +706,10 @@ class DeconvBin:
             )
 
     def _solve(
-        self, amp_constraint: bool = True, return_obj: bool = False
+        self,
+        amp_constraint: bool = True,
+        return_obj: bool = False,
+        update_cache: bool = False,
     ) -> np.ndarray:
         if amp_constraint:
             prob = self.prob
@@ -721,6 +733,9 @@ class DeconvBin:
                     x = np.zeros_like(x, dtype=float)
                 else:
                     x = x.astype(float)
+            if update_cache:
+                self.x_cache = x
+                prob.warm_start(x=x)
             if self.norm == "huber":
                 xlen = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
                 sol = x[:xlen]
@@ -785,15 +800,6 @@ class DeconvBin:
 
     def _reset_cache(self) -> None:
         self.x_cache = None
-
-    def _update_cache(self, amp_constraint: bool = True) -> None:
-        if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            if amp_constraint:
-                prob = self.prob
-            else:
-                prob = self.prob_free
-            res = prob.solve()
-            self.x_cache = res[0] if self.backend == "emosqp" else res.x
 
     def _reset_mask(self) -> None:
         self.nzidx_s = np.arange(self.T)
