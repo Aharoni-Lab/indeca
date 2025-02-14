@@ -93,7 +93,7 @@ class DeconvBin:
         max_iter_penal: int = 500,
         max_iter_scal: int = 10,
         delta_l0: float = 1e-4,
-        delta_penal: float = 1e-2,
+        delta_penal: float = 1e-3,
         atol: float = 1e-3,
         rtol: float = 1e-3,
         dashboard=None,
