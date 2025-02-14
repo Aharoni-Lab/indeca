@@ -814,8 +814,12 @@ class DeconvBin:
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             opt_s, _ = self.solve(amp_constraint)
             opt_c = self.H @ opt_s
-            self.nzidx_s = np.where(opt_s > self.delta_penal)[0]
-            self.nzidx_c = np.where(opt_c > self.delta_penal)[0]
+            nzidx_s = np.where(opt_s > self.delta_penal)[0]
+            nzidx_c = np.where(opt_c > self.delta_penal)[0]
+            if len(nzidx_s) == 0 or len(nzidx_c) == 0:
+                return
+            self.nzidx_s = nzidx_s
+            self.nzidx_c = nzidx_c
             self._update_R()
             self._update_w()
             self._setup_prob_osqp()
