@@ -91,7 +91,7 @@ class DeconvBin:
         th_max: float = 1,
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
-        max_iter_scal: int = 10,
+        max_iter_scal: int = 50,
         delta_l0: float = 1e-4,
         delta_penal: float = 1e-3,
         atol: float = 1e-3,
@@ -552,14 +552,25 @@ class DeconvBin:
                 warnings.warn("could not find non-zero solution")
         return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
-    def solve_scale(self, reset_scale: bool = True) -> Tuple[np.ndarray]:
+    def solve_scale(
+        self, reset_scale: bool = True, concur_penal: bool = False
+    ) -> Tuple[np.ndarray]:
+        if self.penal in ["l0", "l1"]:
+            pn = "{}_penal".format(self.penal)
+            self.update(**{pn: 0})
+        self._reset_cache()
+        self._reset_mask()
         if reset_scale:
             self.update(scale=1)
             s_free, _ = self.solve(amp_constraint=False)
             self.update(scale=np.ptp(s_free))
         metric_df = None
         for i in range(self.max_iter_scal):
-            cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal()
+            if concur_penal:
+                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal()
+            else:
+                cur_penal = 0
+                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(scaling=True)
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
                 pad_s[self.nzidx_s] = cur_s
