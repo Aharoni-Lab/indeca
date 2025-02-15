@@ -234,10 +234,11 @@ class Dashboard:
         ex = np.array(self.it_vars["penal_err"][self.it_view, uid]["penal"])
         ey = np.array(self.it_vars["penal_err"][self.it_view, uid]["scale"])
         err = np.log(np.array(self.it_vars["penal_err"][self.it_view, uid]["err"]))
-        err = np.clip(err, 0, np.median(err))
-        hm = go.Heatmap(x=ex, y=ey, z=err, type="heatmap")
-        for a in ["x", "y", "z"]:
-            self.fig_penal[uid].data[0][a] = hm[a]
+        if len(err) > 0:
+            err = np.clip(err, 0, np.median(err))
+            hm = go.Heatmap(x=ex, y=ey, z=err, type="heatmap")
+            for a in ["x", "y", "z"]:
+                self.fig_penal[uid].data[0][a] = hm[a]
 
     def _refresh_it_view(self):
         self._update_it_ind(self.it_view)
