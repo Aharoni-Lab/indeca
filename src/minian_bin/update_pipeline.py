@@ -142,9 +142,11 @@ def pipeline_bin(
             enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
         ):
             if da_client is not None:
-                r = da_client.submit(lambda d: d.solve_scale(), dcv[icell])
+                r = da_client.submit(
+                    lambda d: d.solve_scale(reset_scale=i_iter <= 1), dcv[icell]
+                )
             else:
-                r = dcv[icell].solve_scale()
+                r = dcv[icell].solve_scale(reset_scale=i_iter <= 1)
             res.append(r)
         if da_client is not None:
             res = da_client.gather(res)
