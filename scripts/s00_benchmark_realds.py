@@ -19,8 +19,8 @@ DS_LS = ["X-DS09-GCaMP6f-m-V1"]
 INT_PATH = "./intermediate/benchmark_realds"
 FIG_PATH = "./figs/benchmark_realds"
 PARAM_MAX_ITERS = 20
-PARAM_UP_FAC = 3
-PARAM_KN_LEN = 100
+PARAM_UP_FAC = 1
+PARAM_KN_LEN = 400
 
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
@@ -43,28 +43,27 @@ if __name__ == "__main__":
         dashboard_address="0.0.0.0:12345",
     )
     client = Client(cluster)
-    subset = {"frame": slice(0, 20000)}
+    subset = None
     for dsname in DS_LS:
         Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
         act_uid = S_true.max("frame") > 0
         Y, S_true = Y.sel(unit_id=act_uid), S_true.sel(unit_id=act_uid)
-        Y = (Y - Y.quantile(0.1, "frame")).clip(0, None) * 10
+        Y = Y * 100
         updt_ds = [Y.rename("Y"), S_true.rename("S_true")]
         R = construct_R(Y.sizes["frame"], PARAM_UP_FAC)
         C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h_iter, h_fit_iter = (
             pipeline_bin(
                 np.array(Y),
                 PARAM_UP_FAC,
-                tau_init=(30, 3),
                 max_iters=PARAM_MAX_ITERS,
                 return_iter=True,
                 ar_use_all=True,
                 ar_kn_len=PARAM_KN_LEN,
-                est_noise_freq=0.03,
+                est_noise_freq=0.05,
                 est_use_smooth=True,
                 est_add_lag=50,
-                deconv_norm="huber",
+                deconv_norm="l2",
                 deconv_backend="osqp",
                 da_client=client,
             )
