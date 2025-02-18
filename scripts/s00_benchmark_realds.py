@@ -25,7 +25,12 @@ PARAM_KN_LEN = 100
 os.makedirs(INT_PATH, exist_ok=True)
 os.makedirs(FIG_PATH, exist_ok=True)
 
-da.config.set({"distributed.scheduler.work-stealing": False})  # avoid pickling error
+da.config.set(
+    {
+        "distributed.scheduler.work-stealing": False,
+        "distributed.scheduler.worker-ttl": None,
+    }
+)  # avoid pickling error
 
 if not os.path.exists(LOCAL_DS_PATH):
     download_realds(LOCAL_DS_PATH)
