@@ -1476,6 +1476,25 @@ files = [
 ]
 
 [[package]]
+name = "llvmlite"
+version = "0.44.0"
+requires_python = ">=3.10"
+summary = "lightweight wrapper around basic LLVM functionality"
+files = [
+    {file = "llvmlite-0.44.0-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:eed7d5f29136bda63b6d7804c279e2b72e08c952b7c5df61f45db408e0ee52f3"},
+    {file = "llvmlite-0.44.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:ace564d9fa44bb91eb6e6d8e7754977783c68e90a471ea7ce913bff30bd62427"},
+    {file = "llvmlite-0.44.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c5d22c3bfc842668168a786af4205ec8e3ad29fb1bc03fd11fd48460d0df64c1"},
+    {file = "llvmlite-0.44.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f01a394e9c9b7b1d4e63c327b096d10f6f0ed149ef53d38a09b3749dcf8c9610"},
+    {file = "llvmlite-0.44.0-cp311-cp311-win_amd64.whl", hash = "sha256:d8489634d43c20cd0ad71330dde1d5bc7b9966937a263ff1ec1cebb90dc50955"},
+    {file = "llvmlite-0.44.0-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:1d671a56acf725bf1b531d5ef76b86660a5ab8ef19bb6a46064a705c6ca80aad"},
+    {file = "llvmlite-0.44.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:5f79a728e0435493611c9f405168682bb75ffd1fbe6fc360733b850c80a026db"},
+    {file = "llvmlite-0.44.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c0143a5ef336da14deaa8ec26c5449ad5b6a2b564df82fcef4be040b9cacfea9"},
+    {file = "llvmlite-0.44.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d752f89e31b66db6f8da06df8b39f9b91e78c5feea1bf9e8c1fba1d1c24c065d"},
+    {file = "llvmlite-0.44.0-cp312-cp312-win_amd64.whl", hash = "sha256:eae7e2d4ca8f88f89d315b48c6b741dcb925d6a1042da694aa16ab3dd4cbd3a1"},
+    {file = "llvmlite-0.44.0.tar.gz", hash = "sha256:07667d66a5d150abed9157ab6c0b9393c9356f229784a4385c02f99e94fc94d4"},
+]
+
+[[package]]
 name = "locket"
 version = "1.0.0"
 requires_python = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
@@ -1796,6 +1815,29 @@ dependencies = [
 files = [
     {file = "notebook_shim-0.2.4-py3-none-any.whl", hash = "sha256:411a5be4e9dc882a074ccbcae671eda64cceb068767e9a3419096986560e1cef"},
     {file = "notebook_shim-0.2.4.tar.gz", hash = "sha256:b4b2cfa1b65d98307ca24361f5b30fe785b53c3fd07b7a47e89acb5e6ac638cb"},
+]
+
+[[package]]
+name = "numba"
+version = "0.61.0"
+requires_python = ">=3.10"
+summary = "compiling Python code using LLVM"
+dependencies = [
+    "llvmlite<0.45,>=0.44.0dev0",
+    "numpy<2.2,>=1.24",
+]
+files = [
+    {file = "numba-0.61.0-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:bf64c2d0f3d161af603de3825172fb83c2600bcb1d53ae8ea568d4c53ba6ac08"},
+    {file = "numba-0.61.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:de5aa7904741425f28e1028b85850b31f0a245e9eb4f7c38507fb893283a066c"},
+    {file = "numba-0.61.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:21c2fe25019267a608e2710a6a947f557486b4b0478b02e45a81cf606a05a7d4"},
+    {file = "numba-0.61.0-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:74250b26ed6a1428763e774dc5b2d4e70d93f73795635b5412b8346a4d054574"},
+    {file = "numba-0.61.0-cp311-cp311-win_amd64.whl", hash = "sha256:b72bbc8708e98b3741ad0c63f9929c47b623cc4ee86e17030a4f3e301e8401ac"},
+    {file = "numba-0.61.0-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:152146ecdbb8d8176f294e9f755411e6f270103a11c3ff50cecc413f794e52c8"},
+    {file = "numba-0.61.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:5cafa6095716fcb081618c28a8d27bf7c001e09696f595b41836dec114be2905"},
+    {file = "numba-0.61.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:ffe9fe373ed30638d6e20a0269f817b2c75d447141f55a675bfcf2d1fe2e87fb"},
+    {file = "numba-0.61.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:9f25f7fef0206d55c1cfb796ad833cbbc044e2884751e56e798351280038484c"},
+    {file = "numba-0.61.0-cp312-cp312-win_amd64.whl", hash = "sha256:550d389573bc3b895e1ccb18289feea11d937011de4d278b09dc7ed585d1cdcb"},
+    {file = "numba-0.61.0.tar.gz", hash = "sha256:888d2e89b8160899e19591467e8fdd4970e07606e1fbc248f239c89818d5f925"},
 ]
 
 [[package]]
@@ -2708,6 +2750,21 @@ summary = "A modern CSS selector implementation for Beautiful Soup."
 files = [
     {file = "soupsieve-2.6-py3-none-any.whl", hash = "sha256:e72c4ff06e4fb6e4b5a9f0f55fe6e81514581fca1515028625d0f299c602ccc9"},
     {file = "soupsieve-2.6.tar.gz", hash = "sha256:e2e68417777af359ec65daac1057404a3c8a5455bb8abc36f1a9866ab1a51abb"},
+]
+
+[[package]]
+name = "sparse"
+version = "0.15.5"
+requires_python = ">=3.8"
+summary = "Sparse n-dimensional arrays for the PyData ecosystem"
+dependencies = [
+    "numba>=0.49",
+    "numpy>=1.17",
+    "scipy>=0.19",
+]
+files = [
+    {file = "sparse-0.15.5-py2.py3-none-any.whl", hash = "sha256:cf608731f8564916443427bca323fe118e8c25a712ddf02dbe7673a961139706"},
+    {file = "sparse-0.15.5.tar.gz", hash = "sha256:4c76ce0c96f5cd5c31b7e79e650f0022424c2b16f05f10049e9c6381ee4be266"},
 ]
 
 [[package]]
