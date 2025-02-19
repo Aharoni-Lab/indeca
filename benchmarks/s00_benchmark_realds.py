@@ -9,8 +9,8 @@ import xarray as xr
 from dask.distributed import Client, LocalCluster
 from plotly.subplots import make_subplots
 from routine.io import download_realds, load_gt_ds
+from routine.utils import compute_ROC
 
-from minian_bin.benchmark_utils import compute_ROC
 from minian_bin.deconv import construct_R
 from minian_bin.pipeline import pipeline_bin
 

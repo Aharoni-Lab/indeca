@@ -15,7 +15,7 @@ from scipy.optimize import direct
 from scipy.special import huber
 from tqdm.auto import tqdm
 
-from minian_bin.benchmark_utils import compute_ROC
+from benchmarks.benchmark_utils import compute_ROC
 from minian_bin.deconv import DeconvBin
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.update_bin import (
