@@ -7,17 +7,8 @@ from tqdm.auto import tqdm, trange
 
 from .dashboard import Dashboard
 from .deconv import DeconvBin
-from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
-from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h_num
-from .update_bin import (
-    construct_R,
-    estimate_coefs,
-    prob_deconv,
-    solve_deconv,
-    solve_deconv_bin,
-    solve_deconv_bin_direct,
-    sum_downsample,
-)
+from .simulation import AR2tau, ar_pulse, tau2AR
+from .update_AR import estimate_coefs, fit_sumexp_gd, solve_fit_h_num
 
 
 @profile
@@ -293,61 +284,3 @@ def pipeline_bin(
         return opt_C, opt_S, metric_df, C_ls, S_ls, h_ls, h_fit_ls
     else:
         return opt_C, opt_S, metric_df
-
-
-def pipeline_cnmf(
-    Y,
-    up_factor=1,
-    p=2,
-    ar_mode=True,
-    ar_kn_len=60,
-    tau_init=None,
-    est_noise_freq=0.4,
-    est_use_smooth=True,
-    est_add_lag=20,
-    sps_penal=1,
-):
-    # 0. housekeeping
-    ncell, T = Y.shape
-    R = construct_R(T, up_factor)
-    # 1. estimate parameters
-    g = np.empty((ncell, p))
-    tau = np.empty((ncell, p))
-    ps = np.empty((ncell, p))
-    tn = np.empty(ncell)
-    for icell, y in enumerate(Y):
-        cur_g, cur_tn = estimate_coefs(
-            y,
-            p=p,
-            noise_freq=est_noise_freq,
-            use_smooth=est_use_smooth,
-            add_lag=est_add_lag,
-        )
-        g[icell, :] = cur_g
-        tau[icell, :] = AR2tau(*cur_g)
-        ps[icell, :] = np.array([1, -1])
-        tn[icell] = cur_tn
-    if tau_init is not None:
-        g = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
-        tau = np.tile(tau_init, (ncell, 1))
-        ps = np.tile([1, -1], (ncell, 1))
-    C_cnmf, S_cnmf = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
-    # 2 cnmf algorithm
-    prob = prob_deconv(
-        T, coef_len=p if ar_mode else ar_kn_len, ar_mode=ar_mode, use_base=True, R=R
-    )
-    for icell, y in enumerate(Y):
-        if ar_mode:
-            cur_coef = g[icell]
-        else:
-            cur_coef = exp_pulse(
-                tau[icell, 0],
-                tau[icell, 1],
-                ar_kn_len,
-                p_d=ps[icell, 0],
-                p_r=ps[icell, 1],
-            )[0]
-        c, s, _ = solve_deconv(y, prob, coef=cur_coef, l1_penal=sps_penal * tn[icell])
-        C_cnmf[icell, :] = c.squeeze()
-        S_cnmf[icell, :] = s.squeeze()
-    return C_cnmf, S_cnmf

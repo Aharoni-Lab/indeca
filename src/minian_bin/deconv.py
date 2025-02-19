@@ -14,7 +14,6 @@ from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT
 from scipy.special import huber
 
-from minian_bin.cnmf import filt_fft, get_ar_coef, noise_fft
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.utilities import scal_lstsq
 

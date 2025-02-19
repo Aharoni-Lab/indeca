@@ -11,7 +11,6 @@ from line_profiler import profile
 from scipy.linalg import convolution_matrix
 from scipy.optimize import direct
 
-from .cnmf import filt_fft, get_ar_coef, noise_fft
 from .simulation import tau2AR
 from .utilities import scal_lstsq
 
@@ -41,19 +40,6 @@ def construct_R(T: int, up_factor: int):
     return sps.coo_matrix(
         np.stack([np.roll(rs_vec, up_factor * i) for i in range(T)], axis=0)
     )
-
-
-def estimate_coefs(
-    y: np.ndarray, p: int, noise_freq: tuple, use_smooth: bool, add_lag: int
-):
-    tn = noise_fft(y, noise_range=(noise_freq, 1))
-    if use_smooth:
-        y_ar = filt_fft(y.squeeze(), noise_freq, "low")
-        tn_ar = noise_fft(y_ar, noise_range=(noise_freq, 1))
-    else:
-        y_ar, tn_ar = y, tn
-    g = get_ar_coef(y_ar, np.nan_to_num(tn_ar), p=p, add_lag=add_lag)
-    return g, tn
 
 
 def prob_deconv(
