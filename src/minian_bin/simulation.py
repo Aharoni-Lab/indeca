@@ -14,8 +14,6 @@ from scipy.optimize import root_scalar
 from scipy.stats import multivariate_normal
 from tqdm.auto import tqdm
 
-from .minian_functions import save_minian, shift_perframe, write_video
-
 
 def gauss_cell(
     height: int,
@@ -410,27 +408,13 @@ def simulate_data(
         return Y, A, C, S, shifts
 
 
-def generate_data(dpath, save_Y=False, use_minian=False, **kwargs):
+def generate_data(dpath, save_Y=False, **kwargs):
     dat_vars = simulate_data(**kwargs)
-    Y = dat_vars[0]
     if not save_Y:
         dat_vars = dat_vars[1:]
-    if use_minian:
-        for dat in dat_vars:
-            save_minian(dat, dpath=os.path.join(dpath, "simulated"), overwrite=True)
-        write_video(
-            Y,
-            vpath=dpath,
-            vname="simulated",
-            vext="avi",
-            options={"r": "60", "pix_fmt": "gray", "vcodec": "ffv1"},
-            chunked=True,
-        )
-        return tuple(dat_vars)
-    else:
-        ds = xr.merge(dat_vars)
-        ds.to_netcdf(dpath)
-        return ds
+    ds = xr.merge(dat_vars)
+    ds.to_netcdf(dpath)
+    return ds
 
 
 def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post_gain):
@@ -441,7 +425,7 @@ def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post
     Y += Y_bg
     del Y_bg
     for i, sh in enumerate(shifts):
-        Y[i, :, :] = shift_perframe(Y[i, :, :], sh, fill=0)
+        Y[i, :, :] = shift_frame(Y[i, :, :], sh, fill=0)
     noise = np.random.normal(scale=noise_scale, size=Y.shape)
     Y += noise
     del noise
@@ -572,3 +556,22 @@ def find_dhm(is_biexp, tconst, coefs, verbose=False):
     )
     assert rt0.converged and rt1.converged
     return (rt0.root, rt1.root), t_hat
+
+
+def shift_frame(fm, sh, fill=np.nan):
+    if np.isnan(fm).all():
+        return fm
+    sh = np.around(sh).astype(int)
+    fm = np.roll(fm, sh, axis=np.arange(fm.ndim))
+    index = [slice(None) for _ in range(fm.ndim)]
+    for ish, s in enumerate(sh):
+        index = [slice(None) for _ in range(fm.ndim)]
+        if s > 0:
+            index[ish] = slice(None, s)
+            fm[tuple(index)] = fill
+        elif s == 0:
+            continue
+        elif s < 0:
+            index[ish] = slice(s, None)
+            fm[tuple(index)] = fill
+    return fm
