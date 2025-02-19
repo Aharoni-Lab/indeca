@@ -5,11 +5,11 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sps
 from scipy.integrate import cumulative_trapezoid
+from scipy.linalg import lstsq, toeplitz
 from scipy.optimize import curve_fit
+from statsmodels.tsa.stattools import acovf
 
-from .deconv import construct_R
-from .update_bin import construct_G
-from .utilities import scal_lstsq
+from minian_bin.deconv import construct_G, construct_R
 
 
 def convolve_g(s, g):
@@ -360,3 +360,129 @@ def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
     else:
         warnings.warn("max lam iteration reached")
     return th1, th2
+
+
+def estimate_coefs(
+    y: np.ndarray, p: int, noise_freq: tuple, use_smooth: bool, add_lag: int
+):
+    tn = noise_fft(y, noise_range=(noise_freq, 1))
+    if use_smooth:
+        y_ar = filt_fft(y.squeeze(), noise_freq, "low")
+        tn_ar = noise_fft(y_ar, noise_range=(noise_freq, 1))
+    else:
+        y_ar, tn_ar = y, tn
+    g = get_ar_coef(y_ar, np.nan_to_num(tn_ar), p=p, add_lag=add_lag)
+    return g, tn
+
+
+def filt_fft(x: np.ndarray, freq: float, btype: str) -> np.ndarray:
+    """
+    Filter 1d timeseries by zero-ing bands in the fft signal.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Input timeseries.
+    freq : float
+        Cut-off frequency.
+    btype : str
+        Either `"low"` or `"high"` specify low or high pass filtering.
+
+    Returns
+    -------
+    x_filt : np.ndarray
+        Filtered timeseries.
+    """
+    _T = len(x)
+    if btype == "low":
+        zero_range = slice(int(freq * _T), None)
+    elif btype == "high":
+        zero_range = slice(None, int(freq * _T))
+    xfft = np.fft.rfft(x)
+    xfft[zero_range] = 0
+    return np.fft.irfft(xfft, len(x))
+
+
+def noise_fft(
+    px: np.ndarray, noise_range=(0.25, 0.5), noise_method="logmexp", threads=1
+) -> float:
+    """
+    Estimates noise of the input by aggregating power spectral density within
+    `noise_range`.
+
+    The PSD is estimated using FFT.
+
+    Parameters
+    ----------
+    px : np.ndarray
+        Input data.
+    noise_range : tuple, optional
+        Range of noise frequency to be aggregated as a fraction of sampling
+        frequency. By default `(0.25, 0.5)`.
+    noise_method : str, optional
+        Method of aggreagtion for noise. Should be one of `"mean"` `"median"`
+        `"logmexp"` or `"sum"`. By default "logmexp".
+    threads : int, optional
+        Number of threads to use for pyfftw. By default `1`.
+
+    Returns
+    -------
+    noise : float
+        The estimated noise level of input.
+
+    See Also
+    -------
+    get_noise_fft
+    """
+    _T = len(px)
+    nr = np.around(np.array(noise_range) * _T).astype(int)
+    px = 1 / _T * np.abs(np.fft.rfft(px)[nr[0] : nr[1]]) ** 2
+    if noise_method == "mean":
+        return np.sqrt(px.mean())
+    elif noise_method == "median":
+        return np.sqrt(px.median())
+    elif noise_method == "logmexp":
+        eps = np.finfo(px.dtype).eps
+        return np.sqrt(np.exp(np.log(px + eps).mean()))
+    elif noise_method == "sum":
+        return np.sqrt(px.sum())
+
+
+def get_ar_coef(
+    y: np.ndarray, sn: float, p: int, add_lag: int, pad: int = None
+) -> np.ndarray:
+    """
+    Estimate Autoregressive coefficients of order `p` given a timeseries `y`.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Input timeseries.
+    sn : float
+        Estimated noise level of the input `y`.
+    p : int
+        Order of the autoregressive process.
+    add_lag : int
+        Additional number of timesteps of covariance to use for the estimation.
+    pad : int, optional
+        Length of the output. If not `None` then the resulting coefficients will
+        be zero-padded to this length. By default `None`.
+
+    Returns
+    -------
+    g : np.ndarray
+        The estimated AR coefficients.
+    """
+    if add_lag == "p":
+        max_lag = p * 2
+    else:
+        max_lag = p + add_lag
+    cov = acovf(y, fft=True)
+    C_mat = toeplitz(cov[:max_lag], cov[:p]) - sn**2 * np.eye(max_lag, p)
+    g = lstsq(C_mat, cov[1 : max_lag + 1])[0]
+    if pad:
+        res = np.zeros(pad)
+        res[: len(g)] = g
+        return res
+    else:
+        return g

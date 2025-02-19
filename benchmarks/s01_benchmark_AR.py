@@ -7,17 +7,15 @@ import plotly.express as px
 import xarray as xr
 from tqdm.auto import tqdm
 
-from minian_bin.simulation import AR2exp, eval_exp, find_dhm, tau2AR
-from minian_bin.update_AR import (
+from minian_bin.AR_kernel import (
     convolve_g,
     convolve_h,
-    fit_sumexp,
+    estimate_coefs,
     solve_fit_h,
     solve_g,
-    solve_h,
 )
-from minian_bin.update_bin import construct_G, estimate_coefs
-from minian_bin.utilities import scal_like
+from minian_bin.simulation import AR2exp, eval_exp, find_dhm, tau2AR
+from minian_bin.utils import scal_like
 
 IN_PATH = "./intermediate/simulated/simulated.nc"
 INT_PATH = "./intermediate/benchmark_ar"

@@ -7,23 +7,18 @@ import plotly.express as px
 import seaborn as sns
 import xarray as xr
 from distributed import LocalCluster
-from tqdm.auto import tqdm
-
-from minian_bin.benchmark_utils import (
+from routine.cnmf import solve_deconv
+from routine.utils import (
     compute_ROC,
     norm_per_cell,
     plot_corr,
     plot_ROC,
     plot_ROC_scatter,
 )
-from minian_bin.update_bin import (
-    construct_G,
-    construct_R,
-    estimate_coefs,
-    max_thres,
-    solve_deconv,
-    solve_deconv_bin,
-)
+from tqdm.auto import tqdm
+
+from minian_bin.AR_kernel import estimate_coefs
+from minian_bin.deconv import construct_G, construct_R, max_thres
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-ar-samp.nc",

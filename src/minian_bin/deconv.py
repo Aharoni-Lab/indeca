@@ -5,18 +5,14 @@ import cvxpy as cp
 import numpy as np
 import osqp
 import pandas as pd
-import piqp
 import scipy.sparse as sps
 import xarray as xr
-from line_profiler import profile
-from scipy.linalg import convolution_matrix
 from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT
 from scipy.special import huber
 
-from minian_bin.cnmf import filt_fft, get_ar_coef, noise_fft
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
-from minian_bin.utilities import scal_lstsq
+from minian_bin.utils import scal_lstsq
 
 try:
     import cuosqp
@@ -39,6 +35,20 @@ def construct_R(T: int, up_factor: int):
 
 def sum_downsample(a, factor):
     return np.convolve(a, np.ones(factor), mode="full")[factor - 1 :: factor]
+
+
+def construct_G(fac: np.ndarray, T: int, fromTau=False):
+    fac = np.array(fac)
+    assert fac.shape == (2,)
+    if fromTau:
+        fac = np.array(tau2AR(*fac))
+    return sps.dia_matrix(
+        (
+            np.tile(np.concatenate(([1], -fac)), (T, 1)).T,
+            -np.arange(len(fac) + 1),
+        ),
+        shape=(T, T),
+    ).tocsc()
 
 
 def max_thres(

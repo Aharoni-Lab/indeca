@@ -14,7 +14,7 @@ from minian_bin.simulation import (
     markov_fire,
     tau2AR,
 )
-from minian_bin.update_AR import construct_G, fit_sumexp, fit_sumexp_split, solve_fit_h
+from minian_bin.AR_kernel import construct_G, fit_sumexp, fit_sumexp_split, solve_fit_h
 
 # %% verify AR2tau
 end = 60
