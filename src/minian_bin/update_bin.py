@@ -1,6 +1,5 @@
 import warnings
 
-import cuosqp
 import cvxpy as cp
 import numpy as np
 import osqp
@@ -15,6 +14,11 @@ from scipy.optimize import direct
 from .cnmf import filt_fft, get_ar_coef, noise_fft
 from .simulation import tau2AR
 from .utilities import scal_lstsq
+
+try:
+    import cuosqp
+except ImportError:
+    warnings.warn("No GPU solver support")
 
 
 def construct_G(fac: np.ndarray, T: int, fromTau=False):

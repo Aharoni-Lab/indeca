@@ -5,6 +5,7 @@ import pandas as pd
 from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
+from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
 from .update_AR import construct_G, fit_sumexp_gd, solve_fit_h_num
@@ -45,6 +46,12 @@ def pipeline_bin(
 ):
     # 0. housekeeping
     ncell, T = Y.shape
+    if da_client is not None:
+        dashboard = da_client.submit(
+            Dashboard, Y=Y, kn_len=ar_kn_len, actor=True
+        ).result()
+    else:
+        dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         theta = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
@@ -96,12 +103,15 @@ def pipeline_bin(
                 lambda yy, tt: DeconvBin(
                     y=yy,
                     theta=tt,
+                    coef_len=ar_kn_len,
                     upsamp=up_factor,
                     nthres=deconv_nthres,
                     norm=deconv_norm,
                     penal=deconv_penal,
                     atol=deconv_atol,
                     backend=deconv_backend,
+                    dashboard=dashboard,
+                    dashboard_uid=i,
                 ),
                 y,
                 theta[i],
@@ -113,12 +123,15 @@ def pipeline_bin(
             DeconvBin(
                 y=y,
                 theta=theta[i],
+                coef_len=ar_kn_len,
                 upsamp=up_factor,
                 nthres=deconv_nthres,
                 norm=deconv_norm,
                 penal=deconv_penal,
                 atol=deconv_atol,
                 backend=deconv_backend,
+                dashboard=dashboard,
+                dashboard_uid=i,
             )
             for i, y in enumerate(Y)
         ]
@@ -130,10 +143,10 @@ def pipeline_bin(
         ):
             if da_client is not None:
                 r = da_client.submit(
-                    lambda d: d.solve_scale(reset_scale=i_iter == 0), dcv[icell]
+                    lambda d: d.solve_scale(reset_scale=i_iter <= 1), dcv[icell]
                 )
             else:
-                r = dcv[icell].solve_scale(reset_scale=i_iter == 0)
+                r = dcv[icell].solve_scale(reset_scale=i_iter <= 1)
             res.append(r)
         if da_client is not None:
             res = da_client.gather(res)
@@ -156,6 +169,13 @@ def pipeline_bin(
                 "penal": penal,
             }
         )
+        dashboard.update(
+            tau_d=cur_metric["tau_d"].squeeze(),
+            tau_r=cur_metric["tau_r"].squeeze(),
+            err=cur_metric["err"].squeeze(),
+            scale=cur_metric["scale"].squeeze(),
+        )
+        dashboard.set_iter(min(i_iter + 1, max_iters - 1))
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
         C_ls.append(C)
         S_ls.append(S)
@@ -196,6 +216,9 @@ def pipeline_bin(
                 norm=ar_norm,
                 up_factor=up_factor,
             )
+            dashboard.update(
+                h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
+            )
             cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))
             for d in dcv:
@@ -212,6 +235,7 @@ def pipeline_bin(
                 lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
                     y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
                 )
+                dashboard.update(uid=icell, h=h, h_fit=h_fit)
                 cur_tau = -1 / lams
                 tau[icell, :] = cur_tau
                 if da_client is not None:
@@ -264,6 +288,7 @@ def pipeline_bin(
         ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
+    dashboard.stop()
     if return_iter:
         return opt_C, opt_S, metric_df, C_ls, S_ls, h_ls, h_fit_ls
     else:
