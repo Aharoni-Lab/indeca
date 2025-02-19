@@ -2,7 +2,6 @@
 import warnings
 
 import dask.array as darr
-import numba as nb
 import numpy as np
 import pandas as pd
 import sparse
