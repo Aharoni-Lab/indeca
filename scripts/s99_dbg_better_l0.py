@@ -25,8 +25,8 @@ from minian_bin.update_bin import (
     solve_deconv,
     solve_deconv_l0,
 )
-from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
-from minian_bin.utilities import scal_lstsq
+from minian_bin.pipeline import pipeline_bin, pipeline_cnmf
+from minian_bin.utils import scal_lstsq
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",

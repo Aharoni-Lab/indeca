@@ -5,17 +5,14 @@ import cvxpy as cp
 import numpy as np
 import osqp
 import pandas as pd
-import piqp
 import scipy.sparse as sps
 import xarray as xr
-from line_profiler import profile
-from scipy.linalg import convolution_matrix
 from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT
 from scipy.special import huber
 
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
-from minian_bin.utilities import scal_lstsq
+from minian_bin.utils import scal_lstsq
 
 try:
     import cuosqp

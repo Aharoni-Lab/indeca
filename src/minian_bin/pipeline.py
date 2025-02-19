@@ -8,7 +8,7 @@ from tqdm.auto import tqdm, trange
 from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .simulation import AR2tau, ar_pulse, tau2AR
-from .update_AR import estimate_coefs, fit_sumexp_gd, solve_fit_h_num
+from .AR_kernel import estimate_coefs, fit_sumexp_gd, solve_fit_h_num
 
 
 @profile

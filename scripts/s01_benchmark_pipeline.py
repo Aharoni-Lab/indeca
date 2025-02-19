@@ -23,7 +23,7 @@ from plotly.subplots import make_subplots
 
 from minian_bin.benchmark_utils import compute_ROC
 from minian_bin.simulation import exp_pulse
-from minian_bin.update_pipeline import pipeline_bin, pipeline_cnmf
+from minian_bin.pipeline import pipeline_bin, pipeline_cnmf
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",
@@ -422,7 +422,7 @@ from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
 from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_AR import solve_fit_h
+from minian_bin.AR_kernel import solve_fit_h
 from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
 
 uid = 0

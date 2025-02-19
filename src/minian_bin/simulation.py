@@ -1,5 +1,4 @@
 # %% import and definitions
-import os
 import warnings
 
 import dask.array as darr

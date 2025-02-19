@@ -3,7 +3,7 @@ import numpy as np
 import scipy.sparse as sps
 
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
-from minian_bin.update_AR import estimate_coefs
+from minian_bin.AR_kernel import estimate_coefs
 
 
 def pipeline_cnmf(

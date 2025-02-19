@@ -10,8 +10,8 @@ import xarray as xr
 from tqdm.auto import tqdm
 
 from minian_bin.simulation import exp_pulse
-from minian_bin.update_AR import fit_sumexp_gd, fit_sumexp_iter, solve_fit_h_num
-from minian_bin.utilities import norm, scal_lstsq
+from minian_bin.AR_kernel import fit_sumexp_gd, fit_sumexp_iter, solve_fit_h_num
+from minian_bin.utils import norm, scal_lstsq
 
 FIG_PATH = "./figs/dbg_ar"
 INT_PATH = "./intermediate/dbg_ar"
