@@ -167,5 +167,7 @@ cython_debug/
 # intermediate data
 /scripts/data
 /scripts/intermediate
+/benchmarks/data
+/benchmarks/intermediate
 *.npy
 *.feat
