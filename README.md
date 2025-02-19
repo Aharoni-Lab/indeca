@@ -24,7 +24,7 @@ repository of extended binary algorithms for minian
 
 1. Install cuda-toolkit 11.8 into the environment:
    ```bash
-   mamba env create -n minian-bin-dev -f environment/generic.yml
+   mamba env create -n minian-bin-dev -f environment/cuda.yml
    conda activate minian-bin-dev
    ```
 1. Obtain cuosqp source code:
