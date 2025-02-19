@@ -40,6 +40,20 @@ def sum_downsample(a, factor):
     return np.convolve(a, np.ones(factor), mode="full")[factor - 1 :: factor]
 
 
+def construct_G(fac: np.ndarray, T: int, fromTau=False):
+    fac = np.array(fac)
+    assert fac.shape == (2,)
+    if fromTau:
+        fac = np.array(tau2AR(*fac))
+    return sps.dia_matrix(
+        (
+            np.tile(np.concatenate(([1], -fac)), (T, 1)).T,
+            -np.arange(len(fac) + 1),
+        ),
+        shape=(T, T),
+    ).tocsc()
+
+
 def max_thres(
     a: xr.DataArray,
     nthres: int,

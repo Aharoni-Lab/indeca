@@ -9,8 +9,7 @@ from scipy.linalg import lstsq, toeplitz
 from scipy.optimize import curve_fit
 from statsmodels.tsa.stattools import acovf
 
-from .deconv import construct_R
-from .update_bin import construct_G
+from .deconv import construct_G, construct_R
 
 
 def convolve_g(s, g):
