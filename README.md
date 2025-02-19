@@ -12,10 +12,10 @@ repository of extended binary algorithms for minian
    git clone https://github.com/Aharoni-Lab/minian-bin.git
    cd minian-bin
    ```
-1. If you want to use conda/mamba to handle dependencies, create the environment using the file under `environments`:
+1. If you want to use conda/mamba to handle dependencies, create a conda environment:
    ```
-   mamba env create -n minian-bin-dev -f environments/generic.yml
-   conda activate minian-bin-dev
+   conda create -n minian_bin -c conda-forge python=3.12
+   conda activate minian_bin
    ```
    Otherwise skip to next step
 1. `pdm install`
