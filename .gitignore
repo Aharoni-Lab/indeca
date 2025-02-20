@@ -165,6 +165,7 @@ cython_debug/
 .vscode
 
 # intermediate data
+/data
 /scripts/data
 /scripts/intermediate
 /benchmarks/data
