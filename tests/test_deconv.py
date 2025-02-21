@@ -2,15 +2,17 @@ import pytest
 import numpy as np
 from minian_bin.deconv import DeconvBin, construct_R, construct_G, max_thres
 
+
 @pytest.fixture
 def deconv_bin_params():
     """Parameters for DeconvBin initialization."""
     return {
-        'penal': 'l1',
-        'norm': 'l1',
-        'atol': 1e-3,
-        'backend': 'cvxpy',
+        "penal": "l1",
+        "norm": "l1",
+        "atol": 1e-3,
+        "backend": "cvxpy",
     }
+
 
 class TestDeconvBin:
     @pytest.mark.skip(reason="DeconvBin initialization needs to be investigated")
@@ -34,13 +36,15 @@ class TestDeconvBin:
         """Test scale optimization."""
         pass
 
+
 def test_construct_R():
     """Test R matrix construction."""
     T = 10
     up_factor = 2
     R = construct_R(T, up_factor)
     assert R.shape == (T, T * up_factor)
-    assert hasattr(R, 'tocsc')
+    assert hasattr(R, "tocsc")
+
 
 def test_construct_G():
     """Test G matrix construction."""
@@ -48,7 +52,8 @@ def test_construct_G():
     T = 10
     G = construct_G(fac, T)
     assert G.shape == (T, T)
-    assert hasattr(G, 'tocsc')
+    assert hasattr(G, "tocsc")
+
 
 def test_max_thres(sample_xarray_dataset):
     """Test threshold computation."""
@@ -57,6 +62,7 @@ def test_max_thres(sample_xarray_dataset):
     S_ls = max_thres(data, nthres)
     assert len(S_ls) == nthres
     assert all(s.shape == data.shape for s in S_ls)
+
 
 class TestDeconvolution:
     def test_basic_deconvolution(self, sample_timeseries, deconv_parameters):
@@ -83,4 +89,4 @@ class TestDeconvolution:
     @pytest.mark.parametrize("lambda_", [0.1, 1.0, 10.0])
     def test_lambda_sensitivity(self, lambda_):
         """Test sensitivity to lambda parameter."""
-        pass 
+        pass

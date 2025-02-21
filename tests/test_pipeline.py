@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 from minian_bin.pipeline import pipeline_bin
 
+
 class TestPipeline:
     def test_pipeline_initialization(self, pipeline_config):
         """Test pipeline initialization."""

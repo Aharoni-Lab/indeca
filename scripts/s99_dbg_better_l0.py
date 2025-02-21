@@ -410,9 +410,13 @@ for uid in tqdm(np.arange(95, 100)):
     dcv_osqp = DeconvBin(y=y, theta=theta, norm="l2", backend="osqp")
     # dcv = DeconvBin(y=y, coef=kn, norm="l2", backend="cvxpy")
     cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale(reset_scale=True)
-    cur_s_osqp, cur_c_osqp, cur_scal_osqp, cur_obj_osqp, cur_penal_osqp = (
-        dcv_osqp.solve_scale(reset_scale=True)
-    )
+    (
+        cur_s_osqp,
+        cur_c_osqp,
+        cur_scal_osqp,
+        cur_obj_osqp,
+        cur_penal_osqp,
+    ) = dcv_osqp.solve_scale(reset_scale=True)
     s1 = dcv.solve()
     s1_osqp = dcv_osqp.solve()
     tau = it_df.loc[1, uid][["tau_d", "tau_r"]].astype(float).values
@@ -423,9 +427,13 @@ for uid in tqdm(np.arange(95, 100)):
     s2_osqp = dcv_osqp.solve()
     dcv_osqp.prob.update_settings(verbose=False)
     cur_s, cur_c, cur_scal, cur_obj, cur_penal = dcv.solve_scale()
-    cur_s_osqp, cur_c_osqp, cur_scal_osqp, cur_obj_osqp, cur_penal_osqp = (
-        dcv_osqp.solve_scale()
-    )
+    (
+        cur_s_osqp,
+        cur_c_osqp,
+        cur_scal_osqp,
+        cur_obj_osqp,
+        cur_penal_osqp,
+    ) = dcv_osqp.solve_scale()
     break
     cur_met = pd.DataFrame(
         [

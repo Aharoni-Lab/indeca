@@ -11,12 +11,14 @@ from minian_bin.simulation import (
     simulate_traces,
 )
 
+
 def test_gauss_cell():
     """Test Gaussian cell generation."""
     height, width = 32, 32
     sz_mean, sz_sigma, sz_min = 3.0, 0.5, 1.0
     result = gauss_cell(height, width, sz_mean, sz_sigma, sz_min)
     assert result.shape[1:] == (height, width)
+
 
 def test_apply_arcoef():
     """Test AR coefficient application."""
@@ -26,6 +28,7 @@ def test_apply_arcoef():
     result = apply_arcoef(s, g)
     assert result.shape == s.shape
 
+
 def test_apply_exp():
     """Test exponential application."""
     s = np.zeros(100)
@@ -33,6 +36,7 @@ def test_apply_exp():
     tau_d, tau_r = 5.0, 1.0
     result = apply_exp(s, tau_d, tau_r)
     assert result.shape == s.shape
+
 
 def test_ar_trace():
     """Test AR trace generation."""
@@ -43,6 +47,7 @@ def test_ar_trace():
     assert C.shape == (frame,)
     assert S.shape == (frame,)
 
+
 def test_exp_trace():
     """Test exponential trace generation."""
     frame = 100
@@ -52,6 +57,7 @@ def test_exp_trace():
     assert C.shape == (frame,)
     assert S.shape == (frame,)
 
+
 def test_markov_fire():
     """Test Markov chain spike generation."""
     frame = 100
@@ -60,17 +66,20 @@ def test_markov_fire():
     assert result.shape == (frame,)
     assert set(np.unique(result)) <= {0, 1}
 
+
 def test_random_walk():
     """Test random walk generation."""
     n_stp = 100
     result = random_walk(n_stp, stp_var=1.0)
     assert result.shape == (n_stp, 1)
 
+
 @pytest.mark.skip(reason="Unexpected keyword argument needs to be investigated")
 @pytest.mark.slow
 def test_simulate_traces():
     """Test trace simulation."""
     pass
+
 
 class TestSimulation:
     def test_basic_simulation(self, simulation_params):
@@ -101,4 +110,4 @@ class TestSimulation:
 
     def test_reproducibility(self, simulation_params):
         """Test simulation reproducibility with same seed."""
-        pass 
+        pass

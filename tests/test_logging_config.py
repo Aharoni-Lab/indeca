@@ -7,6 +7,7 @@ from minian_bin.logging_config import (
     log_dir,
 )
 
+
 class TestLoggingConfig:
     def test_basic_setup(self, test_data_dir):
         """Test basic logging setup."""
@@ -17,7 +18,7 @@ class TestLoggingConfig:
         # Set up a test logger
         logger = get_module_logger("test_file_creation")
         assert log_dir.exists()
-        log_file = log_dir / 'minian_bin.log'
+        log_file = log_dir / "minian_bin.log"
         assert log_file.exists()
 
     @pytest.mark.skip(reason="Log formatting needs to be investigated")
@@ -25,12 +26,12 @@ class TestLoggingConfig:
         """Test log message formatting."""
         logger = get_module_logger("test_formatting")
         logger.info("Test message")  # Write a test message
-        with open(log_dir / 'minian_bin.log', 'r') as f:
+        with open(log_dir / "minian_bin.log", "r") as f:
             last_line = f.readlines()[-1]
             # Check basic log format components
-            assert 'test_formatting' in last_line
-            assert 'INFO' in last_line
-            assert 'Test message' in last_line
+            assert "test_formatting" in last_line
+            assert "INFO" in last_line
+            assert "Test message" in last_line
 
     def test_log_levels(self):
         """Test different logging levels."""
@@ -49,11 +50,12 @@ class TestLoggingConfig:
         """Test logging in multiprocess environment."""
         pass
 
+
 def test_set_package_log_level():
     """Test setting package log level."""
     # Test with string level
     set_package_log_level("DEBUG")
-    logger = logging.getLogger('minian_bin')
+    logger = logging.getLogger("minian_bin")
     assert logger.level == logging.DEBUG
 
     # Test with integer level
@@ -64,8 +66,9 @@ def test_set_package_log_level():
     with pytest.raises(ValueError):
         set_package_log_level("INVALID_LEVEL")
 
+
 def test_get_module_logger():
     """Test getting module logger."""
     logger = get_module_logger("test_module")
     assert isinstance(logger, logging.Logger)
-    assert logger.name == "minian_bin.test_module" 
+    assert logger.name == "minian_bin.test_module"
