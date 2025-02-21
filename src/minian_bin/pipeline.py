@@ -15,9 +15,6 @@ from .logging_config import get_module_logger
 logger = get_module_logger('pipeline')
 logger.info("Pipeline module initialized")  # Test message on import
 
-# Add a more visible test message
-logger.warning("TESTING PIPELINE LOGGER - THIS SHOULD APPEAR IN LOG FILE")
-
 @profile
 def pipeline_bin(
     Y,
