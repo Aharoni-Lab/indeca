@@ -32,9 +32,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install pdm
     
+    - name: Lock dependencies
+      run: |
+        pdm fix
+        pdm lock --group :all
+    
     - name: Install dependencies
       run: |
-        pdm install -G test
+        pdm install --no-lock -G test
     
     - name: Run black
       run: |
@@ -79,9 +84,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install pdm
     
+    - name: Lock dependencies
+      run: |
+        pdm fix
+        pdm lock --group :all
+    
     - name: Install dependencies
       run: |
-        pdm install -G test
+        pdm install --no-lock -G test
     
     - name: Run tests
       run: |
