@@ -182,10 +182,7 @@ def pipeline_bin(
             logger.debug("Performing deconvolution")
             res = []
             for icell, y in tqdm(
-                enumerate(Y),
-                total=Y.shape[0],
-                desc="deconv",
-                leave=False
+                enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
             ):
                 if da_client is not None:
                     r = da_client.submit(
@@ -253,24 +250,15 @@ def pipeline_bin(
                 S_best = np.empty_like(S)
                 scal_best = np.empty_like(scale)
                 for icell, cell_met in metric_df.loc[1:, :].groupby("cell", sort=True):
-                    cell_met = cell_met.reset_index().sort_values(
-                        "err",
-                        ascending=True
-                    )
+                    cell_met = cell_met.reset_index().sort_values("err", ascending=True)
                     cur_idx = np.array(cell_met["iter"][:n_best])
                     metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
                         cur_idx.astype(str)
                     )
                     S_best[icell, :] = np.sum(
-                        np.stack(
-                            [S_ls[i][icell, :] for i in cur_idx],
-                            axis=0
-                        ),
-                        axis=0
+                        np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                     ) > (n_best / 2)
-                    scal_best[icell] = np.median(
-                        [scal_ls[i][icell] for i in cur_idx]
-                    )
+                    scal_best[icell] = np.median([scal_ls[i][icell] for i in cur_idx])
             else:
                 S_best = S
                 scal_best = scale
@@ -290,8 +278,7 @@ def pipeline_bin(
                     up_factor=up_factor,
                 )
                 dashboard.update(
-                    h=h[: ar_kn_len * up_factor],
-                    h_fit=h_fit[: ar_kn_len * up_factor]
+                    h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
                 )
                 cur_tau = -1 / lams
                 tau = np.tile(cur_tau, (ncell, 1))
@@ -384,8 +371,7 @@ def pipeline_bin(
         )
         for icell in range(ncell):
             opt_idx = metric_df.loc[
-                metric_df[metric_df["cell"] == icell]["err"].idxmin(),
-                "iter"
+                metric_df[metric_df["cell"] == icell]["err"].idxmin(), "iter"
             ]
             opt_C[icell, :] = C_ls[opt_idx][icell, :]
             opt_S[icell, :] = S_ls[opt_idx][icell, :]
