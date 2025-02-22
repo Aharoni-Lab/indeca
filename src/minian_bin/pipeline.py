@@ -102,7 +102,8 @@ def pipeline_bin(
                 if (np.imag(cur_tau) != 0).any():
                     # fit and convert tau to real value
                     logger.warning(
-                        f"Complex tau values detected for cell {icell}, converting to real values"
+                        f"Complex tau values detected for cell {icell}, "
+                        "converting to real values"
                     )
                     tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
                     lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp="scale")
@@ -181,7 +182,10 @@ def pipeline_bin(
             logger.debug("Performing deconvolution")
             res = []
             for icell, y in tqdm(
-                enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
+                enumerate(Y),
+                total=Y.shape[0],
+                desc="deconv",
+                leave=False
             ):
                 if da_client is not None:
                     r = da_client.submit(
@@ -286,7 +290,7 @@ def pipeline_bin(
                     up_factor=up_factor,
                 )
                 dashboard.update(
-                    h=h[: ar_kn_len * up_factor], 
+                    h=h[: ar_kn_len * up_factor],
                     h_fit=h_fit[: ar_kn_len * up_factor]
                 )
                 cur_tau = -1 / lams
@@ -380,7 +384,7 @@ def pipeline_bin(
         )
         for icell in range(ncell):
             opt_idx = metric_df.loc[
-                metric_df[metric_df["cell"] == icell]["err"].idxmin(), 
+                metric_df[metric_df["cell"] == icell]["err"].idxmin(),
                 "iter"
             ]
             opt_C[icell, :] = C_ls[opt_idx][icell, :]

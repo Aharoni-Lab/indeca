@@ -182,12 +182,11 @@ def simulate_traces(
     spike_sampling_rate=500,
     noise: float = 0.01,
 ):
-    # TODO: make this compatibale with exp_trace and incorporate this with rest of the simulation pipeline
+    # TODO: make this compatible with exp_trace and incorporate this with rest
+    # of the simulation pipeline
     upsample_factor = np.round(spike_sampling_rate / approx_fps).astype(int)
     fps = spike_sampling_rate / upsample_factor
-    num_samples = np.round(length_in_sec * fps).astype(
-        int
-    )  # number of samples for normal calcium
+    num_samples = np.round(length_in_sec * fps).astype(int)
     tmp_tau_d = tmp_tau_d * fps
     tmp_tau_r = tmp_tau_r * fps
 
