@@ -53,8 +53,8 @@ def set_package_log_level(level: Union[int, str]) -> None:
     Parameters
     ----------
     level : Union[int, str]
-        Logging level. Can be either a string ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')
-        or an integer (logging.DEBUG, logging.INFO, etc.)
+        Logging level. Can be either a string ('DEBUG', 'INFO', 'WARNING',
+        'ERROR', 'CRITICAL') or an integer (logging.DEBUG, logging.INFO, etc.)
     """
     if isinstance(level, str):
         level = level.upper()
@@ -65,7 +65,8 @@ def set_package_log_level(level: Union[int, str]) -> None:
     logger.setLevel(level)
     # Add a test message to verify logging is working
     logger.info(
-        f"minian_bin logging initialized with level: {level if isinstance(level, str) else logging.getLevelName(level)}"
+        f"minian_bin logging initialized with level: "
+        f"{level if isinstance(level, str) else logging.getLevelName(level)}"
     )
     logger.debug(
         "This is a test DEBUG message - you should only see this if level is DEBUG"

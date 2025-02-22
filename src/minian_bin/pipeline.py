@@ -202,7 +202,9 @@ def pipeline_bin(
 
             # Log some statistics about the results
             logger.debug(
-                f"Iteration {i_iter} stats - Mean error: {err.mean():.4f}, Mean scale: {scale.mean():.4f}"
+                f"Iteration {i_iter} stats - "
+                f"Mean error: {err.mean():.4f}, "
+                f"Mean scale: {scale.mean():.4f}"
             )
 
             # 2.2 save iteration results
@@ -236,7 +238,7 @@ def pipeline_bin(
             try:
                 h_ls.append(h)
                 h_fit_ls.append(h_fit)
-            except UnboundLocalError:
+            except (UnboundLocalError, NameError):
                 h_ls.append(np.full(T * up_factor, np.nan))
                 h_fit_ls.append(np.full(T * up_factor, np.nan))
 
@@ -247,15 +249,24 @@ def pipeline_bin(
                 S_best = np.empty_like(S)
                 scal_best = np.empty_like(scale)
                 for icell, cell_met in metric_df.loc[1:, :].groupby("cell", sort=True):
-                    cell_met = cell_met.reset_index().sort_values("err", ascending=True)
+                    cell_met = cell_met.reset_index().sort_values(
+                        "err",
+                        ascending=True
+                    )
                     cur_idx = np.array(cell_met["iter"][:n_best])
                     metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
                         cur_idx.astype(str)
                     )
                     S_best[icell, :] = np.sum(
-                        np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
+                        np.stack(
+                            [S_ls[i][icell, :] for i in cur_idx],
+                            axis=0
+                        ),
+                        axis=0
                     ) > (n_best / 2)
-                    scal_best[icell] = np.median([scal_ls[i][icell] for i in cur_idx])
+                    scal_best[icell] = np.median(
+                        [scal_ls[i][icell] for i in cur_idx]
+                    )
             else:
                 S_best = S
                 scal_best = scale
@@ -275,7 +286,8 @@ def pipeline_bin(
                     up_factor=up_factor,
                 )
                 dashboard.update(
-                    h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
+                    h=h[: ar_kn_len * up_factor], 
+                    h_fit=h_fit[: ar_kn_len * up_factor]
                 )
                 cur_tau = -1 / lams
                 tau = np.tile(cur_tau, (ncell, 1))
@@ -324,7 +336,8 @@ def pipeline_bin(
                     break
 
                 # converged by relative err
-                if (np.abs(err_cur - err_last) < err_rtol * err_best).all():
+                rel_err = np.abs(err_cur - err_last) < err_rtol * err_best
+                if rel_err.all():
                     logger.info("Converged: relative error tolerance reached")
                     break
 
@@ -367,7 +380,8 @@ def pipeline_bin(
         )
         for icell in range(ncell):
             opt_idx = metric_df.loc[
-                metric_df[metric_df["cell"] == icell]["err"].idxmin(), "iter"
+                metric_df[metric_df["cell"] == icell]["err"].idxmin(), 
+                "iter"
             ]
             opt_C[icell, :] = C_ls[opt_idx][icell, :]
             opt_S[icell, :] = S_ls[opt_idx][icell, :]
@@ -380,6 +394,6 @@ def pipeline_bin(
         else:
             return opt_C, opt_S, metric_df
 
-    except Exception as e:
+    except Exception:
         logger.error("Pipeline failed", exc_info=True)
         raise

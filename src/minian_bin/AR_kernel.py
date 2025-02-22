@@ -76,7 +76,7 @@ def fit_sumexp(y, N, x=None, use_l1=False):
         [A[:N], np.hstack([np.eye(N - 1), np.zeros(N - 1).reshape(-1, 1)])]
     )
     lams = np.sort(np.linalg.eigvals(A_bar))[::-1]
-    X_exp = np.hstack([np.exp(l * x).reshape((-1, 1)) for l in lams])
+    X_exp = np.hstack([np.exp(lam * x).reshape((-1, 1)) for lam in lams])
     if use_l1:
         ps = lst_l1(X_exp, y)
     else:
@@ -138,7 +138,7 @@ def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
         )
         tau_d, tau_r, scal = res[0]
         p = np.array([1, -1]) / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
-    elif fit_amp == True:
+    elif fit_amp is True:
         res = curve_fit(
             lambda x, d, r: (np.exp(-x / d) - np.exp(-x / r))
             / (np.exp(-1 / d) - np.exp(-1 / r)),
@@ -163,9 +163,9 @@ def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
         scal = 1
     if tau_d <= tau_r:
         warnings.warn(
-            "decaying time smaller than rising time: tau_d: {}, tau_r: {}\nreversing coefficients".format(
-                tau_d, tau_r
-            )
+            "decaying time smaller than rising time: "
+            f"tau_d: {tau_d}, tau_r: {tau_r}\n"
+            "reversing coefficients"
         )
         tau_d, tau_r = tau_r, tau_d
     return (

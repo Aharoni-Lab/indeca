@@ -744,9 +744,11 @@ class DeconvBin:
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             x = res[0] if self.backend == "emosqp" else res.x
             if res.info.status not in ["solved", "solved inaccurate"]:
-                warnings.warn("Problem not solved. status: {}".format(res.info.status))
-                # osqp mistakenly report primal infeasibility when using masks with high l1 penalty
-                # manually set solution to zero in such cases
+                warnings.warn(
+                    "Problem not solved. status: {}".format(res.info.status)
+                )
+                # osqp mistakenly report primal infeasibility when using masks
+                # with high l1 penalty. manually set solution to zero in such cases
                 if res.info.status in [
                     "primal infeasible",
                     "primal infeasible inaccurate",
