@@ -201,11 +201,7 @@ def simulate_traces(
         noise_array = np.random.normal(0, noise, size=trace["C"].shape)
         trace["C_noisy"] = trace["C"] + noise_array
 
-    # Add the noisy C to the DataFrame
-    df = pd.DataFrame(traces)
-    df["fps"] = fps
-    df["upsample_factor"] = upsample_factor
-    df["spike_sampling_rate"] = spike_sampling_rate
+    # Create DataFrame with all data
     df = pd.DataFrame(traces)
     df["fps"] = fps
     df["upsample_factor"] = upsample_factor
