@@ -1,7 +1,8 @@
 [flake8]
 max-line-length = 88
 extend-ignore = E203,C901
-exclude = .git,__pycache__,build,dist,.pdm-build
+exclude = .git,__pycache__,build,dist,.pdm-build,.pytest_cache,.venv,venv,tests
+filename = src/minian_bin/*.py
 per-file-ignores =
     __init__.py:F401
 max-complexity = 10 
