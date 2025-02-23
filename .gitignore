@@ -166,6 +166,9 @@ cython_debug/
 
 # intermediate data
 /data
+/figs
+/dask-worker-space
+/intermediate
 /scripts/data
 /scripts/intermediate
 /benchmarks/data
