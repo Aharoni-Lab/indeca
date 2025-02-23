@@ -12,8 +12,9 @@ from .AR_kernel import estimate_coefs, fit_sumexp_gd, solve_fit_h_num
 from .logging_config import get_module_logger
 
 # Initialize logger for this module
-logger = get_module_logger('pipeline')
+logger = get_module_logger("pipeline")
 logger.info("Pipeline module initialized")  # Test message on import
+
 
 @profile
 def pipeline_bin(
@@ -42,8 +43,10 @@ def pipeline_bin(
     # 0. housekeeping
     ncell, T = Y.shape
     logger.info(f"Starting pipeline_bin with {ncell} cells and {T} timepoints")
-    logger.debug(f"Parameters: up_factor={up_factor}, p={p}, max_iters={max_iters}, n_best={n_best}")
-    
+    logger.debug(
+        f"Parameters: up_factor={up_factor}, p={p}, max_iters={max_iters}, n_best={n_best}"
+    )
+
     if da_client is not None:
         logger.info("Using distributed client for computation")
         dashboard = da_client.submit(
@@ -52,7 +55,7 @@ def pipeline_bin(
     else:
         logger.info("Running in local mode")
         dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
-    
+
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         logger.info(f"Using provided initial tau values: {tau_init}")
@@ -73,7 +76,9 @@ def pipeline_bin(
             tau_d, tau_r, cur_p = AR2tau(*cur_theta, solve_amp=True)
             cur_tau = np.array([tau_d, tau_r])
             if (np.imag(cur_tau) != 0).any():
-                logger.warning(f"Complex tau values found for cell {icell}, fitting real values")
+                logger.warning(
+                    f"Complex tau values found for cell {icell}, fitting real values"
+                )
                 tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
                 lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp="scale")
                 cur_tau = (-1 / lams) * up_factor
@@ -82,7 +87,7 @@ def pipeline_bin(
             theta[icell, :] = cur_theta
             if icell % 100 == 0:  # Log progress every 100 cells
                 logger.debug(f"Processed initial estimates for {icell}/{ncell} cells")
-    
+
     scale = np.empty(ncell)
     # 2. iteration loop
     C_ls = []
@@ -162,8 +167,10 @@ def pipeline_bin(
         scale = np.array([r[2] for r in res])
         err = np.array([r[3] for r in res])
         penal = np.array([r[4] for r in res])
-        
-        logger.debug(f"Iteration {i_iter+1} stats - Mean error: {err.mean():.4f}, Mean scale: {scale.mean():.4f}")
+
+        logger.debug(
+            f"Iteration {i_iter+1} stats - Mean error: {err.mean():.4f}, Mean scale: {scale.mean():.4f}"
+        )
         # 2.2 save iteration results
         cur_metric = pd.DataFrame(
             {
@@ -266,11 +273,15 @@ def pipeline_bin(
             err_best = metric_prev.groupby("cell")["err"].min()
             # converged by err
             if (np.abs(err_cur - err_last) < err_atol).all():
-                logger.info(f"Converged at iteration {i_iter+1} by absolute error tolerance")
+                logger.info(
+                    f"Converged at iteration {i_iter+1} by absolute error tolerance"
+                )
                 break
             # converged by relative err
             if (np.abs(err_cur - err_last) < err_rtol * err_best).all():
-                logger.info(f"Converged at iteration {i_iter+1} by relative error tolerance")
+                logger.info(
+                    f"Converged at iteration {i_iter+1} by relative error tolerance"
+                )
                 break
             # converged by s
             S_best = np.empty((ncell, T * up_factor))
