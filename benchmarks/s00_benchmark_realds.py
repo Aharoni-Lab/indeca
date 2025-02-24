@@ -32,8 +32,13 @@ da.config.set(
     }
 )  # avoid pickling error
 
-if not os.path.exists(LOCAL_DS_PATH):
-    download_realds(LOCAL_DS_PATH)
+for dsname in DS_LS:
+    if not os.path.exists(os.path.join(LOCAL_DS_PATH, dsname)) or not os.listdir(
+        os.path.join(LOCAL_DS_PATH, dsname)
+    ):
+        # TODO: change to logging
+        print(f"Downloading {dsname}...")
+        download_realds(LOCAL_DS_PATH, dsname)
 
 if __name__ == "__main__":
     cluster = LocalCluster(
