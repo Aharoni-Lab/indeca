@@ -71,21 +71,27 @@ if __name__ == "__main__":
             est_use_smooth=True,
             est_add_lag=50,
         )
-        C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h_iter, h_fit_iter = (
-            pipeline_bin(
-                np.array(Y_solve),
-                up_factor,
-                max_iters=max_iters,
-                # tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
-                return_iter=True,
-                ar_use_all=True,
-                est_noise_freq=0.06,
-                est_use_smooth=True,
-                est_add_lag=50,
-                deconv_norm="l2",
-                deconv_backend="osqp",
-                da_client=client,
-            )
+        (
+            C_bin,
+            S_bin,
+            iter_df,
+            C_bin_iter,
+            S_bin_iter,
+            h_iter,
+            h_fit_iter,
+        ) = pipeline_bin(
+            np.array(Y_solve),
+            up_factor,
+            max_iters=max_iters,
+            # tau_init=np.array([PARAM_TAU_D * up_factor, PARAM_TAU_R * up_factor]),
+            return_iter=True,
+            ar_use_all=True,
+            est_noise_freq=0.06,
+            est_use_smooth=True,
+            est_add_lag=50,
+            deconv_norm="l2",
+            deconv_backend="osqp",
+            da_client=client,
         )
         res = {
             "C": C_bin,
