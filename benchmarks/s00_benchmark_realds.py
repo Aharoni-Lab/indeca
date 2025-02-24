@@ -86,12 +86,6 @@ da.config.set(
     }
 )  # avoid pickling error
 
-for dsname in DS_LS:
-    if not os.path.exists(os.path.join(LOCAL_DS_PATH, dsname)) or not os.listdir(
-        os.path.join(LOCAL_DS_PATH, dsname)
-    ):
-        logger.info(f"Downloading dataset: {dsname}")
-        download_realds(LOCAL_DS_PATH, dsname)
 
 if __name__ == "__main__":
     logger.info("Starting benchmark analysis")
@@ -106,6 +100,11 @@ if __name__ == "__main__":
     subset = None
 
     for dsname in DS_LS:
+        if not os.path.exists(os.path.join(LOCAL_DS_PATH, dsname)) or not os.listdir(
+            os.path.join(LOCAL_DS_PATH, dsname)
+        ):
+            logger.info(f"Downloading dataset: {dsname}")
+            download_realds(LOCAL_DS_PATH, dsname)
         logger.info(f"Processing dataset: {dsname}")
         Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
