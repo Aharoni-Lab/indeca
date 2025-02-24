@@ -179,21 +179,27 @@ if __name__ == "__main__":
         R = construct_R(Y.sizes["frame"], PARAM_UP_FAC)
 
         logger.info("Running pipeline_bin analysis")
-        C_bin, S_bin, iter_df, C_bin_iter, S_bin_iter, h_iter, h_fit_iter = (
-            pipeline_bin(
-                np.array(Y),
-                PARAM_UP_FAC,
-                max_iters=PARAM_MAX_ITERS,
-                return_iter=True,
-                ar_use_all=True,
-                ar_kn_len=PARAM_KN_LEN,
-                est_noise_freq=0.05,
-                est_use_smooth=True,
-                est_add_lag=50,
-                deconv_norm="l2",
-                deconv_backend="osqp",
-                da_client=client,
-            )
+        (
+            C_bin,
+            S_bin,
+            iter_df,
+            C_bin_iter,
+            S_bin_iter,
+            h_iter,
+            h_fit_iter,
+        ) = pipeline_bin(
+            np.array(Y),
+            PARAM_UP_FAC,
+            max_iters=PARAM_MAX_ITERS,
+            return_iter=True,
+            ar_use_all=True,
+            ar_kn_len=PARAM_KN_LEN,
+            est_noise_freq=0.05,
+            est_use_smooth=True,
+            est_add_lag=50,
+            deconv_norm="l2",
+            deconv_backend="osqp",
+            da_client=client,
         )
 
         logger.debug("Computing results")
