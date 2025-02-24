@@ -78,12 +78,10 @@ def get_module_logger(module_name: str) -> logging.Logger:
     """
     Get a logger for a specific module within minian_bin.
     For internal package use only.
-
     Parameters
     ----------
     module_name : str
         Name of the module (e.g., 'pipeline', 'deconv')
-
     Returns
     -------
     logging.Logger
