@@ -266,10 +266,11 @@ class DeconvBin:
                 )
             self._update_Wt()
             self._setup_prob_osqp()
-        self.dashboard.update(
-            h=self.coef.value if backend == "cvxpy" else self.coef,
-            uid=self.dashboard_uid,
-        )
+        if self.dashboard is not None:
+            self.dashboard.update(
+                h=self.coef.value if backend == "cvxpy" else self.coef,
+                uid=self.dashboard_uid,
+            )
 
     def update(
         self,
