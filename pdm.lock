@@ -5,7 +5,7 @@
 groups = ["default", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:1e8d3d9a7a355bec59b5d7ad7aa2ba9ba36b46baa08c73916d2ead2e04d8e7c5"
+content_hash = "sha256:1fe9068f6b4a3a2639c6825dd88771516ad26c8f95e32e4b756d01ebca8869eb"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -1302,6 +1302,20 @@ dependencies = [
 files = [
     {file = "pytest_order-1.3.0-py3-none-any.whl", hash = "sha256:2cd562a21380345dd8d5774aa5fd38b7849b6ee7397ca5f6999bbe6e89f07f6e"},
     {file = "pytest_order-1.3.0.tar.gz", hash = "sha256:51608fec3d3ee9c0adaea94daa124a5c4c1d2bb99b00269f098f414307f23dde"},
+]
+
+[[package]]
+name = "pytest-plt"
+version = "1.1.1"
+requires_python = ">=3.8"
+summary = "Fixtures for quickly making Matplotlib plots in tests"
+dependencies = [
+    "matplotlib",
+    "pytest",
+]
+files = [
+    {file = "pytest-plt-1.1.1.tar.gz", hash = "sha256:4cebb2547db028aaeecbb481356df3eb6cb3a66053ea5e9170a8683b55d41611"},
+    {file = "pytest_plt-1.1.1-py3-none-any.whl", hash = "sha256:f7b700f2a9add47666fc40e03ebd487f29ed20b558249cff48ff4aac62bd6be6"},
 ]
 
 [[package]]
