@@ -92,7 +92,9 @@ class TestDeconvBin:
 
     def test_solve(self, fixt_c, param_backend, param_norm, param_eq_atol):
         c, s, taus = fixt_c
-        deconv = DeconvBin(y=c, tau=taus, backend=param_backend, norm=param_norm)
+        deconv = DeconvBin(
+            y=c, tau=taus, err_weighting=None, backend=param_backend, norm=param_norm
+        )
         s_solve, b_solve = deconv.solve(amp_constraint=False)
         assert np.isclose(b_solve, 0, atol=param_eq_atol)
         assert np.isclose(s, s_solve, atol=param_eq_atol).all()
