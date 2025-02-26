@@ -151,6 +151,7 @@ class DeconvBin:
         l1_penal = 0
         self.free_kernel = False
         self.penal = penal
+        self.use_base = use_base
         self.l0_penal = l0_penal
         self.w_org = np.ones(self.T)
         self.w = np.ones(self.T)
@@ -259,11 +260,6 @@ class DeconvBin:
             self.s = np.zeros(self.T * upsamp)
             self.l1_penal = l1_penal
             self.scale = scale
-            if use_base:
-                # TODO: add support
-                raise NotImplementedError(
-                    "Baseline term not yet supported with backend {}".format(backend)
-                )
             self._update_Wt()
             self._setup_prob_osqp()
         if self.dashboard is not None:
@@ -1045,12 +1041,12 @@ class DeconvBin:
                 [np.full(xlen + self.y_len * 2, np.inf), self.y - self.huber_k]
             )
         else:
-            ym = self.y.mean()
+            bb = self.y.mean() if self.use_base else 0
             if self.free_kernel:
                 self.lb = np.zeros(len(self.nzidx_s) + 1)
-                self.ub = np.concatenate([np.full(1, ym), np.ones(len(self.nzidx_s))])
+                self.ub = np.concatenate([np.full(1, bb), np.ones(len(self.nzidx_s))])
                 self.ub_inf = np.concatenate(
-                    [np.full(1, ym), np.full(len(self.nzidx_s), np.inf)]
+                    [np.full(1, bb), np.full(len(self.nzidx_s), np.inf)]
                 )
             else:
                 self.lb, self.ub, self.ub_inf = (
@@ -1058,7 +1054,7 @@ class DeconvBin:
                     np.zeros(self.T + 1),
                     np.zeros(self.T + 1),
                 )
-                self.ub[0] = ym
+                self.ub[0] = bb
                 self.ub[self.nzidx_s + 1] = 1
-                self.ub_inf[0] = ym
+                self.ub_inf[0] = bb
                 self.ub_inf[self.nzidx_s + 1] = np.inf
