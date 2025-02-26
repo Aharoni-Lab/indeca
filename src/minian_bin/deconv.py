@@ -448,12 +448,9 @@ class DeconvBin:
                         self.max_iter_l0
                     )
                 )
-        if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            self.s = np.abs(opt_s)
-            self.b = opt_b
-            return self.s, self.b
-        else:
-            return np.abs(opt_s)
+        self.s = np.abs(opt_s)
+        self.b = opt_b
+        return self.s, self.b
 
     def solve_thres(
         self, scaling: bool = True, ignore_res: bool = False
@@ -738,6 +735,7 @@ class DeconvBin:
         res = prob.solve()
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
+            opt_b = 0
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             x = res[0] if self.backend == "emosqp" else res.x
             if res.info.status not in ["solved", "solved inaccurate"]:
