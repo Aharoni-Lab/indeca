@@ -98,11 +98,12 @@ def ar_trace(
     g: np.ndarray = None,
     tau_d: float = None,
     tau_r: float = None,
+    shifted: bool = False,
 ):
     if g is None:
         g = np.array(tau2AR(tau_d, tau_r))
     S = markov_fire(frame, P).astype(float)
-    C = apply_arcoef(S, g)
+    C = apply_arcoef(S, g, shifted=shifted)
     return C, S
 
 
