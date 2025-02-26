@@ -5,7 +5,7 @@
 groups = ["default", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:1fe9068f6b4a3a2639c6825dd88771516ad26c8f95e32e4b756d01ebca8869eb"
+content_hash = "sha256:31fc46c2b9fabbe0554b147bc5ea9bb8292cf30ebbfc79ab2fcf6ecb3c04d964"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -1316,6 +1316,19 @@ dependencies = [
 files = [
     {file = "pytest-plt-1.1.1.tar.gz", hash = "sha256:4cebb2547db028aaeecbb481356df3eb6cb3a66053ea5e9170a8683b55d41611"},
     {file = "pytest_plt-1.1.1-py3-none-any.whl", hash = "sha256:f7b700f2a9add47666fc40e03ebd487f29ed20b558249cff48ff4aac62bd6be6"},
+]
+
+[[package]]
+name = "pytest-repeat"
+version = "0.9.3"
+requires_python = ">=3.7"
+summary = "pytest plugin for repeating tests"
+dependencies = [
+    "pytest",
+]
+files = [
+    {file = "pytest_repeat-0.9.3-py3-none-any.whl", hash = "sha256:26ab2df18226af9d5ce441c858f273121e92ff55f5bb311d25755b8d7abdd8ed"},
+    {file = "pytest_repeat-0.9.3.tar.gz", hash = "sha256:ffd3836dfcd67bb270bec648b330e20be37d2966448c4148c4092d1e8aba8185"},
 ]
 
 [[package]]
