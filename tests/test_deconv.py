@@ -1,40 +1,111 @@
-import pytest
 import numpy as np
-from minian_bin.deconv import DeconvBin, construct_R, construct_G, max_thres
+import pytest
+
+from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
+from minian_bin.simulation import ar_trace
 
 
-@pytest.fixture
-def deconv_bin_params():
-    """Parameters for DeconvBin initialization."""
-    return {
-        "penal": "l1",
-        "norm": "l1",
-        "atol": 1e-3,
-        "backend": "cvxpy",
-    }
+@pytest.fixture()
+def param_y_len():
+    return 1000
+
+
+@pytest.fixture()
+def param_eq_atol():
+    return 1e-3
+
+
+@pytest.fixture(params=[(6, 1), (10, 3)])
+def param_taus(request):
+    return request.param
+
+
+@pytest.fixture(params=["osqp", "cvxpy"])
+def param_backend(request):
+    return request.param
+
+
+@pytest.fixture()
+def param_norm():
+    return "l2"
+
+
+@pytest.fixture(params=[0, 0.5, 1])
+def param_ns_level(request):
+    return request.param
+
+
+@pytest.fixture(params=[1, 2, 3, 4, 5])
+def param_rand_seed(request):
+    sd = request.param
+    np.random.seed(sd)
+    return sd
+
+
+@pytest.fixture()
+def param_tmp_P():
+    return np.array([[0.98, 0.02], [0.75, 0.25]])
+
+
+@pytest.fixture(params=[1, 2, 5])
+def param_upsamp(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        {"upsamp": 1, "tmp_P": np.array([[0.98, 0.02], [0.75, 0.25]])},
+        {"upsamp": 2, "tmp_P": np.array([[0.98, 0.02], [0.75, 0.25]])},
+        {"upsamp": 5, "tmp_P": np.array([[0.998, 0.002], [0.75, 0.25]])},
+    ]
+)
+def param_tmp_upsamp(request):
+    return request.param["upsamp"], request.param["tmp_P"]
+
+
+@pytest.fixture()
+def fixt_c(param_y_len, param_taus, param_tmp_P, param_rand_seed):
+    c, s = ar_trace(
+        param_y_len, param_tmp_P, tau_d=param_taus[0], tau_r=param_taus[1], shifted=True
+    )
+    return c, s, param_taus
+
+
+@pytest.fixture()
+def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand_seed):
+    upsamp, tmp_P = param_tmp_upsamp
+    c, s = ar_trace(
+        param_y_len * upsamp,
+        tmp_P,
+        tau_d=param_taus[0] * upsamp,
+        tau_r=param_taus[1] * upsamp,
+        shifted=True,
+    )
+    if upsamp > 1:
+        c = np.convolve(c, np.ones(upsamp), "valid")[::upsamp]
+        s = np.convolve(s, np.ones(upsamp), "valid")[::upsamp]
+    y = c + np.random.normal(0, param_ns_level, c.shape)
+    return y, c, s, param_taus, upsamp
 
 
 class TestDeconvBin:
-    @pytest.mark.skip(reason="DeconvBin initialization needs to be investigated")
-    def test_initialization(self, sample_timeseries, deconv_bin_params):
-        """Test DeconvBin initialization."""
-        pass
 
-    @pytest.mark.skip(reason="DeconvBin solve method needs to be investigated")
-    def test_solve(self, sample_timeseries, deconv_bin_params):
-        """Test basic deconvolution solve."""
-        pass
+    def test_solve(self, fixt_c, param_backend, param_norm, param_eq_atol):
+        c, s, taus = fixt_c
+        deconv = DeconvBin(y=c, tau=taus, backend=param_backend, norm=param_norm)
+        s_solve, b_solve = deconv.solve(amp_constraint=False)
+        assert np.isclose(b_solve, 0, atol=param_eq_atol)
+        assert np.isclose(s, s_solve, atol=param_eq_atol).all()
 
-    @pytest.mark.skip(reason="DeconvBin solve_thres method needs to be investigated")
-    @pytest.mark.slow
-    def test_solve_thres(self, sample_timeseries, deconv_bin_params):
-        """Test threshold-based solving."""
-        pass
-
-    @pytest.mark.skip(reason="DeconvBin solve_scale method needs to be investigated")
-    def test_solve_scale(self, sample_timeseries, deconv_bin_params):
-        """Test scale optimization."""
-        pass
+    def test_solve_thres(
+        self, fixt_y, param_backend, param_upsamp, param_norm, param_eq_atol
+    ):
+        y, c, s, taus, upsamp_y = fixt_y
+        deconv = DeconvBin(
+            y=y, tau=taus, upsamp=param_upsamp, backend=param_backend, norm=param_norm
+        )
+        s_bin, c_bin, scl, err = deconv.solve_thres()
+        assert np.isclose(s, s_bin, atol=param_eq_atol).all()
 
 
 def test_construct_R():
