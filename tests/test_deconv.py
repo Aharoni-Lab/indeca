@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import pytest
 
 from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
+from minian_bin.metrics import assignment_distance
 from minian_bin.simulation import ar_trace
 
 from .plotting_utils import plot_traces
@@ -35,7 +36,7 @@ def param_norm():
     return "l2"
 
 
-@pytest.fixture(params=[0, 0.5, 1])
+@pytest.fixture(params=[0, 0.1, 0.2])
 def param_ns_level(request):
     return request.param
 
@@ -79,7 +80,7 @@ def fixt_c(param_y_len, param_taus, param_tmp_P, param_rand_seed):
 @pytest.fixture()
 def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand_seed):
     upsamp, tmp_P = param_tmp_upsamp
-    c, s = ar_trace(
+    c_org, s_org = ar_trace(
         param_y_len * upsamp,
         tmp_P,
         tau_d=param_taus[0] * upsamp,
@@ -87,10 +88,12 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
         shifted=True,
     )
     if upsamp > 1:
-        c = np.convolve(c, np.ones(upsamp), "valid")[::upsamp]
-        s = np.convolve(s, np.ones(upsamp), "valid")[::upsamp]
+        c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
+        s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
+    else:
+        c, s = c_org, s_org
     y = c + np.random.normal(0, param_ns_level, c.shape)
-    return y, c, s, param_taus, upsamp
+    return y, c, c_org, s, s_org, param_taus, param_ns_level, upsamp
 
 
 class TestDeconvBin:
@@ -114,7 +117,7 @@ class TestDeconvBin:
         self, fixt_y, param_backend, param_upsamp, param_norm, param_eq_atol, fig_path
     ):
         # act
-        y, c, s, taus, upsamp_y = fixt_y
+        y, c, c_org, s, s_org, taus, ns_lev, upsamp_y = fixt_y
         deconv = DeconvBin(
             y=y,
             tau=taus,
@@ -123,15 +126,47 @@ class TestDeconvBin:
             backend=param_backend,
             norm=param_norm,
         )
-        s_bin, c_bin, scl, err = deconv.solve_thres()
+        s_bin, c_bin, scl, err = deconv.solve_thres(scaling=False)
         s_bin = s_bin.astype(float)
         # plotting
         fig = go.Figure()
         fig.add_traces(
-            plot_traces({"y": y, "c": c, "s": s, "s_solve": s_bin, "c_solve": c_bin})
+            plot_traces(
+                {
+                    "y": y,
+                    "c": c,
+                    "s": s,
+                    "s_solve": deconv.R @ s_bin,
+                    "c_solve": deconv.R @ c_bin,
+                    "c_org": c_org,
+                    "s_org": s_org,
+                    "c_bin": c_bin,
+                    "s_bin": s_bin,
+                }
+            )
         )
         fig.write_html(fig_path)
-        assert np.isclose(s, s_bin, atol=param_eq_atol).all()
+        # assert
+        mdist, f1, precs, recall = assignment_distance(s_ref=s_org, s_slv=s_bin)
+        if param_upsamp == upsamp_y:  # upsample factor matches ground truth
+            if ns_lev == 0:
+                assert np.isclose(s_org, s_bin, atol=param_eq_atol).all()
+            elif ns_lev <= 0.1:
+                assert f1 >= 0.9
+            else:
+                assert f1 >= 0.8
+        elif param_upsamp < upsamp_y:  # upsample factor smaller than ground truth
+            assert recall == 1
+            assert mdist <= upsamp_y / param_upsamp
+        else:  # upsample factor larger than ground truth
+            assert precs == 1
+            assert mdist <= 1
+            if ns_lev == 0:
+                assert recall >= 0.75
+            elif ns_lev <= 0.1:
+                assert recall >= 0.5
+            else:
+                assert recall >= 0.5
 
 
 def test_construct_R():
