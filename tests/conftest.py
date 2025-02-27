@@ -18,9 +18,18 @@ def test_data_dir():
 @pytest.fixture
 def output_figs_dir(request):
     test_path = os.path.dirname(request.path)
-    fig_path = os.path.abspath(os.path.join(test_path, "output", "figs"))
-    os.makedirs(fig_path, exist_ok=True)
-    return fig_path
+    fig_dir = os.path.abspath(os.path.join(test_path, "output", "figs"))
+    os.makedirs(fig_dir, exist_ok=True)
+    return fig_dir
+
+
+@pytest.fixture()
+def fig_path(request, output_figs_dir):
+    test_func = request.function.__name__
+    test_id = request.node.callspec.id
+    fig_dir = os.path.join(output_figs_dir, test_func)
+    os.makedirs(fig_dir, exist_ok=True)
+    return os.path.join(fig_dir, "{}.html".format(test_id))
 
 
 @pytest.fixture

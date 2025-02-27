@@ -95,35 +95,42 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
 
 class TestDeconvBin:
 
-    def test_solve(
-        self, fixt_c, param_backend, param_norm, param_eq_atol, request, output_figs_dir
-    ):
-        # execute
+    def test_solve(self, fixt_c, param_backend, param_norm, param_eq_atol, fig_path):
+        # act
         c, s, taus = fixt_c
         deconv = DeconvBin(
             y=c, tau=taus, err_weighting=None, backend=param_backend, norm=param_norm
         )
         s_solve, b_solve = deconv.solve(amp_constraint=False)
-        # save figures
-        test_func = request.function.__name__
-        test_id = request.node.callspec.id
-        fig_dir = os.path.join(output_figs_dir, test_func)
-        os.makedirs(fig_dir, exist_ok=True)
+        # plotting
         fig = go.Figure()
         fig.add_traces(plot_traces({"c": c, "s": s, "s_solve": s_solve}))
-        fig.write_html(os.path.join(fig_dir, "{}.html".format(test_id)))
+        fig.write_html(fig_path)
         # assertion
         assert np.isclose(b_solve, 0, atol=param_eq_atol)
         assert np.isclose(s, s_solve, atol=param_eq_atol).all()
 
     def test_solve_thres(
-        self, fixt_y, param_backend, param_upsamp, param_norm, param_eq_atol
+        self, fixt_y, param_backend, param_upsamp, param_norm, param_eq_atol, fig_path
     ):
+        # act
         y, c, s, taus, upsamp_y = fixt_y
         deconv = DeconvBin(
-            y=y, tau=taus, upsamp=param_upsamp, backend=param_backend, norm=param_norm
+            y=y,
+            tau=taus,
+            upsamp=param_upsamp,
+            err_weighting=None,
+            backend=param_backend,
+            norm=param_norm,
         )
         s_bin, c_bin, scl, err = deconv.solve_thres()
+        s_bin = s_bin.astype(float)
+        # plotting
+        fig = go.Figure()
+        fig.add_traces(
+            plot_traces({"y": y, "c": c, "s": s, "s_solve": s_bin, "c_solve": c_bin})
+        )
+        fig.write_html(fig_path)
         assert np.isclose(s, s_bin, atol=param_eq_atol).all()
 
 
