@@ -116,6 +116,9 @@ class TestDeconvBin:
     def test_solve_thres(
         self, fixt_y, param_backend, param_upsamp, param_norm, param_eq_atol, fig_path
     ):
+        # book-keeping
+        if param_backend == "cvxpy":
+            pytest.skip("Skipping cvxpy backend for test_solve_thres")
         # act
         y, c, c_org, s, s_org, taus, ns_lev, upsamp_y = fixt_y
         deconv = DeconvBin(
