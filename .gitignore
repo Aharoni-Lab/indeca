@@ -173,5 +173,6 @@ cython_debug/
 /scripts/intermediate
 /benchmarks/data
 /benchmarks/intermediate
+/tests/output
 *.npy
 *.feat

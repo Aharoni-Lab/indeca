@@ -1,10 +1,11 @@
-import pytest
-import numpy as np
-import tempfile
 import os
+import tempfile
 from pathlib import Path
-import xarray as xr
+
+import numpy as np
 import pandas as pd
+import pytest
+import xarray as xr
 
 
 @pytest.fixture
@@ -12,6 +13,14 @@ def test_data_dir():
     """Fixture to provide a temporary directory for test data."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
+
+
+@pytest.fixture
+def output_figs_dir(request):
+    test_path = os.path.dirname(request.path)
+    fig_path = os.path.abspath(os.path.join(test_path, "output", "figs"))
+    os.makedirs(fig_path, exist_ok=True)
+    return fig_path
 
 
 @pytest.fixture
