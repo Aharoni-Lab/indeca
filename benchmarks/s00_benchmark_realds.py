@@ -145,16 +145,16 @@ da.config.set(
 if __name__ == "__main__":
     logger.info("Starting benchmark analysis")
     logger.debug("Creating Dask cluster with 16 workers")
-    cluster = LocalCluster(
-        n_workers=16,
-        threads_per_worker=1,
-        processes=True,
-        dashboard_address="0.0.0.0:12345",
-    )
-    client = Client(cluster)
+    # cluster = LocalCluster(
+    #     n_workers=16,
+    #     threads_per_worker=1,
+    #     processes=True,
+    #     dashboard_address="0.0.0.0:12345",
+    # )
+    # client = Client(cluster)
     subset = {
-        "frame": slice(0, 6000),
-        "unit_id": slice(0, 20),
+        "frame": slice(0, 8000),
+        "unit_id": slice(0, 5),
     }  # set to None for no subset
     logger.debug(f"Data subsetting: {subset}")
     for dsname in DS_LS:
@@ -199,7 +199,7 @@ if __name__ == "__main__":
             est_add_lag=50,
             deconv_norm="l2",
             deconv_backend="osqp",
-            da_client=client,
+            #da_client=client,
         )
 
         logger.debug("Computing results")
