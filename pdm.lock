@@ -5,7 +5,7 @@
 groups = ["default", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:31fc46c2b9fabbe0554b147bc5ea9bb8292cf30ebbfc79ab2fcf6ecb3c04d964"
+content_hash = "sha256:102203ada9daf4de3af8e67f2d442bfa3f68980601832eed7113aef19d363f6e"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -349,6 +349,20 @@ files = [
 ]
 
 [[package]]
+name = "decopatch"
+version = "1.4.10"
+summary = "Create decorators easily in python."
+dependencies = [
+    "enum34; python_version < \"3.4\"",
+    "funcsigs; python_version < \"3.3\"",
+    "makefun>=1.5.0",
+]
+files = [
+    {file = "decopatch-1.4.10-py2.py3-none-any.whl", hash = "sha256:e151f7f93de2b1b3fd3f3272dcc7cefd1a69f68ec1c2d8e288ecd9deb36dc5f7"},
+    {file = "decopatch-1.4.10.tar.gz", hash = "sha256:957f49c93f4150182c23f8fb51d13bb3213e0f17a79e09c8cca7057598b55720"},
+]
+
+[[package]]
 name = "distributed"
 version = "2025.2.0"
 requires_python = ">=3.10"
@@ -675,6 +689,18 @@ summary = "File-based locks for Python on Linux and Windows"
 files = [
     {file = "locket-1.0.0-py2.py3-none-any.whl", hash = "sha256:b6c819a722f7b6bd955b80781788e4a66a55628b858d347536b7e81325a3a5e3"},
     {file = "locket-1.0.0.tar.gz", hash = "sha256:5c0d4c052a8bbbf750e056a8e65ccd309086f4f0f18a2eac306a8dfa4112a632"},
+]
+
+[[package]]
+name = "makefun"
+version = "1.15.6"
+summary = "Small library to dynamically create python functions."
+dependencies = [
+    "funcsigs; python_version < \"3.3\"",
+]
+files = [
+    {file = "makefun-1.15.6-py2.py3-none-any.whl", hash = "sha256:e69b870f0bb60304765b1e3db576aaecf2f9b3e5105afe8cfeff8f2afe6ad067"},
+    {file = "makefun-1.15.6.tar.gz", hash = "sha256:26bc63442a6182fb75efed8b51741dd2d1db2f176bec8c64e20a586256b8f149"},
 ]
 
 [[package]]
@@ -1288,6 +1314,23 @@ dependencies = [
 ]
 files = [
     {file = "pytest-dependency-0.6.0.tar.gz", hash = "sha256:934b0e6a39d95995062c193f7eaeed8a8ffa06ff1bcef4b62b0dc74a708bacc1"},
+]
+
+[[package]]
+name = "pytest-harvest"
+version = "1.10.5"
+summary = "Store data created during your pytest tests execution, and retrieve it at the end of the session, e.g. for applicative benchmarking purposes."
+dependencies = [
+    "decopatch",
+    "funcsigs; python_version < \"3.3\"",
+    "makefun>=1.5",
+    "packaging",
+    "pathlib2; python_version < \"3.2\"",
+    "six",
+]
+files = [
+    {file = "pytest-harvest-1.10.5.tar.gz", hash = "sha256:27cfa4cf1f2e43d1e7749c282e0fe72d30e90e89bede6b30a59b626848c7d418"},
+    {file = "pytest_harvest-1.10.5-py2.py3-none-any.whl", hash = "sha256:44a0c53dd33449ec7c0473ff2edb4887d4f105bb2d6faeb0f3784e2a15cae55c"},
 ]
 
 [[package]]
