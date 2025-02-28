@@ -5,7 +5,7 @@
 groups = ["default", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:102203ada9daf4de3af8e67f2d442bfa3f68980601832eed7113aef19d363f6e"
+content_hash = "sha256:0d8ff2c4b8d099e5e30d02737cc36762a050c1e9a973528a7261f6606acd774a"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -1372,6 +1372,19 @@ dependencies = [
 files = [
     {file = "pytest_repeat-0.9.3-py3-none-any.whl", hash = "sha256:26ab2df18226af9d5ce441c858f273121e92ff55f5bb311d25755b8d7abdd8ed"},
     {file = "pytest_repeat-0.9.3.tar.gz", hash = "sha256:ffd3836dfcd67bb270bec648b330e20be37d2966448c4148c4092d1e8aba8185"},
+]
+
+[[package]]
+name = "pytest-runtime-xfail"
+version = "1.0.3"
+requires_python = ">=3.7"
+summary = "Call runtime_xfail() to mark running test as xfail."
+dependencies = [
+    "pytest>=5.0.0",
+]
+files = [
+    {file = "pytest-runtime-xfail-1.0.3.tar.gz", hash = "sha256:5eefc17e499bd639ddc2734c588166b2f59649454cd5921efb9243268894f09d"},
+    {file = "pytest_runtime_xfail-1.0.3-py3-none-any.whl", hash = "sha256:84aa805f8a5beb82a6f26a018ce5502909cb27a0193c9e5c7123bcd5fbb6787b"},
 ]
 
 [[package]]
