@@ -98,7 +98,6 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
 
 
 class TestDeconvBin:
-
     def test_solve(
         self, fixt_c, param_backend, param_norm, param_eq_atol, test_fig_path
     ):

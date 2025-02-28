@@ -64,7 +64,6 @@ def fixture_exp_pulse(param_tau, param_p, conf_pulse_len):
 
 
 class TestARExp:
-
     def test_AR2tau(self, fixture_ar_pulse, param_conv_mode):
         theta, ar, t, pulse = fixture_ar_pulse
         if param_conv_mode == "amp":  # test traces only when enabling scaling
