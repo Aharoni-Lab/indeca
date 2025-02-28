@@ -278,11 +278,19 @@ class TestResults:
                     x="ns_lev",
                     y=met,
                     hue="ns_lev",
-                    saturation=0.6,
+                    saturation=0.5,
                     showfliers=False,
+                    palette="tab10",
                 )
                 g.map_dataframe(
-                    sns.swarmplot, x="ns_lev", y=met, hue="ns_lev", edgecolor="gray"
+                    sns.swarmplot,
+                    x="ns_lev",
+                    y=met,
+                    hue="ns_lev",
+                    edgecolor="gray",
+                    palette="tab10",
+                    size=5,
+                    linewidth=1.2,
                 )
                 g.tight_layout()
                 g.figure.savefig(
