@@ -3,6 +3,7 @@ import os
 import numpy as np
 import plotly.graph_objects as go
 import pytest
+import seaborn as sns
 
 from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
 from minian_bin.metrics import assignment_distance
@@ -98,7 +99,9 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
 
 class TestDeconvBin:
 
-    def test_solve(self, fixt_c, param_backend, param_norm, param_eq_atol, fig_path):
+    def test_solve(
+        self, fixt_c, param_backend, param_norm, param_eq_atol, test_fig_path
+    ):
         # act
         c, s, taus = fixt_c
         deconv = DeconvBin(
@@ -108,13 +111,20 @@ class TestDeconvBin:
         # plotting
         fig = go.Figure()
         fig.add_traces(plot_traces({"c": c, "s": s, "s_solve": s_solve}))
-        fig.write_html(fig_path)
+        fig.write_html(test_fig_path)
         # assertion
         assert np.isclose(b_solve, 0, atol=param_eq_atol)
         assert np.isclose(s, s_solve, atol=param_eq_atol).all()
 
     def test_solve_thres(
-        self, fixt_y, param_backend, param_upsamp, param_norm, param_eq_atol, fig_path
+        self,
+        fixt_y,
+        param_backend,
+        param_upsamp,
+        param_norm,
+        param_eq_atol,
+        test_fig_path,
+        results_bag,
     ):
         # book-keeping
         if param_backend == "cvxpy":
@@ -131,6 +141,7 @@ class TestDeconvBin:
         )
         s_bin, c_bin, scl, err = deconv.solve_thres(scaling=False)
         s_bin = s_bin.astype(float)
+        mdist, f1, precs, recall = assignment_distance(s_ref=s_org, s_slv=s_bin)
         # plotting
         fig = go.Figure()
         fig.add_traces(
@@ -148,9 +159,19 @@ class TestDeconvBin:
                 }
             )
         )
-        fig.write_html(fig_path)
+        fig.write_html(test_fig_path)
+        # save results
+        results_bag.tau_d = taus[0]
+        results_bag.tau_r = taus[1]
+        results_bag.ns_lev = ns_lev
+        results_bag.upsamp_y = upsamp_y
+        results_bag.upsamp = param_upsamp
+        results_bag.backend = param_backend
+        results_bag.mdist = mdist
+        results_bag.f1 = f1
+        results_bag.precs = precs
+        results_bag.recall = recall
         # assert
-        mdist, f1, precs, recall = assignment_distance(s_ref=s_org, s_slv=s_bin)
         if param_upsamp == upsamp_y:  # upsample factor matches ground truth
             if ns_lev == 0:
                 assert np.isclose(s_org, s_bin, atol=param_eq_atol).all()
@@ -225,3 +246,48 @@ class TestDeconvolution:
     def test_lambda_sensitivity(self, lambda_):
         """Test sensitivity to lambda parameter."""
         pass
+
+
+class TestResults:
+    def test_solve_thres_results(self, module_results_df, func_figs_dir, func_data_dir):
+        result = (
+            module_results_df.loc[
+                lambda d: d.index.str.startswith("test_solve_thres["),
+                [
+                    "tau_d",
+                    "tau_r",
+                    "ns_lev",
+                    "upsamp_y",
+                    "upsamp",
+                    "backend",
+                    "mdist",
+                    "f1",
+                    "precs",
+                    "recall",
+                ],
+            ]
+            .dropna()
+            .reset_index()
+        )
+        result.to_feather(os.path.join(func_data_dir, "metrics.feat"))
+        for (td, tr), res_sub in result.groupby(["tau_d", "tau_r"]):
+            for met in ["mdist", "f1", "precs", "recall"]:
+                g = sns.FacetGrid(res_sub, row="upsamp", col="upsamp_y")
+                g.map_dataframe(
+                    sns.boxplot,
+                    x="ns_lev",
+                    y=met,
+                    hue="ns_lev",
+                    saturation=0.6,
+                    showfliers=False,
+                )
+                g.map_dataframe(
+                    sns.swarmplot, x="ns_lev", y=met, hue="ns_lev", edgecolor="gray"
+                )
+                g.tight_layout()
+                g.figure.savefig(
+                    os.path.join(
+                        func_figs_dir, "tau({},{})-{}.svg".format(td, tr, met)
+                    ),
+                    bbox_inches="tight",
+                )

@@ -23,13 +23,34 @@ def output_figs_dir(request):
     return fig_dir
 
 
-@pytest.fixture()
-def fig_path(request, output_figs_dir):
+@pytest.fixture
+def output_data_dir(request):
+    test_path = os.path.dirname(request.path)
+    fig_dir = os.path.abspath(os.path.join(test_path, "output", "data"))
+    os.makedirs(fig_dir, exist_ok=True)
+    return fig_dir
+
+
+@pytest.fixture
+def func_figs_dir(request, output_figs_dir):
     test_func = request.function.__name__
-    test_id = request.node.callspec.id
     fig_dir = os.path.join(output_figs_dir, test_func)
     os.makedirs(fig_dir, exist_ok=True)
-    return os.path.join(fig_dir, "{}.html".format(test_id))
+    return fig_dir
+
+
+@pytest.fixture
+def func_data_dir(request, output_data_dir):
+    test_func = request.function.__name__
+    dat_dir = os.path.join(output_data_dir, test_func)
+    os.makedirs(dat_dir, exist_ok=True)
+    return dat_dir
+
+
+@pytest.fixture()
+def test_fig_path(request, func_figs_dir):
+    test_id = request.node.callspec.id
+    return os.path.join(func_figs_dir, "{}.html".format(test_id))
 
 
 @pytest.fixture
