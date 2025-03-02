@@ -453,7 +453,7 @@ class DeconvBin:
         return self.s, self.b
 
     def solve_thres(
-        self, scaling: bool = True, ignore_res: bool = False
+        self, scaling: bool = True, ignore_res: bool = False, return_intm: bool = False
     ) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
@@ -494,7 +494,10 @@ class DeconvBin:
         opt_idx = np.argmin(objs)
         bin_s = svals[opt_idx]
         err = self._compute_err(s=bin_s)
-        return bin_s, cvals[opt_idx], scals[opt_idx], err
+        if return_intm:
+            return bin_s, cvals[opt_idx], scals[opt_idx], err, opt_s
+        else:
+            return bin_s, cvals[opt_idx], scals[opt_idx], err
 
     def solve_penal(self, masking=True, scaling=True) -> Tuple[np.ndarray]:
         if self.penal is None:
