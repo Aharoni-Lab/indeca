@@ -131,15 +131,16 @@ class TestDeconvBin:
             pytest.skip("Skipping cvxpy backend for test_solve_thres")
         # act
         y, c, c_org, s, s_org, taus, ns_lev, upsamp_y = fixt_y
+        upsamp_ratio = upsamp_y / param_upsamp
         deconv = DeconvBin(
             y=y,
-            tau=taus,
+            tau=np.array(taus) * param_upsamp,
             upsamp=param_upsamp,
             err_weighting=None,
             backend=param_backend,
             norm=param_norm,
         )
-        s_bin, c_bin, scl, err = deconv.solve_thres(scaling=False)
+        deconv.update(scale=upsamp_ratio)
         s_bin = s_bin.astype(float)
         mdist, f1, precs, recall = assignment_distance(s_ref=s_org, s_slv=s_bin)
         # plotting
