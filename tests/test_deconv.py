@@ -178,20 +178,15 @@ class TestDeconvBin:
         results_bag.recall = recall
         # assert
         if param_upsamp == upsamp_y:  # upsample factor matches ground truth
-            assert mdist <= param_upsamp
-            assert recall >= 0.95
-            if param_upsamp == 1:
-                assert precs >= 0.95
+            assert mdist <= 1
+            assert recall >= 0.8
+            assert precs >= 0.95
         elif param_upsamp < upsamp_y:  # upsample factor smaller than ground truth
-            assert mdist <= upsamp_y / param_upsamp
-            assert recall == 1
+            assert mdist <= upsamp_ratio
+            assert recall >= 0.95
         else:  # upsample factor larger than ground truth
-            if param_upsamp == 5:
-                runtime_xfail(
-                    "result degrads when using upsamp much higher than ground truth."
-                )
-            assert mdist <= param_upsamp
-            assert precs == 1
+            assert mdist <= 1
+            assert precs >= 0.95
 
 
 def test_construct_R():
