@@ -286,6 +286,7 @@ class DeconvBin:
         l0_penal: float = None,
         l1_penal: float = None,
         w: np.ndarray = None,
+        update_weighting: bool = False,
     ) -> None:
         logger.debug("Starting deconvolution update")
         logger.debug(f"Update parameters - tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}")
@@ -401,7 +402,7 @@ class DeconvBin:
                 try:
                     self._update_HG()
                     updt_HG = True
-                    if self.err_weighting:
+                    if self.err_weighting and update_weighting:
                         logger.debug("Updating error weighting")
                         self._update_Wt()
                         updt_q0 = True
@@ -429,23 +430,35 @@ class DeconvBin:
                 logger.debug("Processing non-Huber norm updates")
                 if updt_HG:
                     logger.debug("Updating A matrix")
+                    A_before = self.A.copy()
                     self._update_A()
+                    assert self.A.shape == A_before.shape
+                    assert (self.A.nonzero()[0] == A_before.nonzero()[0]).all()
+                    assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
                     updt_A = True
                 if any((scale is not None, scale_mul is not None, updt_HG)):
                     logger.debug("Updating P matrix")
+                    P_before = self.P.copy()
                     self._update_P()
+                    assert self.P.shape == P_before.shape
+                    assert (self.P.nonzero()[0] == P_before.nonzero()[0]).all()
+                    assert (self.P.nonzero()[1] == P_before.nonzero()[1]).all()
                     updt_P = True
                 if any(
                     (scale is not None, scale_mul is not None, y is not None, updt_HG)
                 ):
                     logger.debug("Updating q0 vector")
+                    q0_before = self.q0.copy()
                     self._update_q0()
+                    assert self.q0.shape == q0_before.shape
                     updt_q0 = True
                 if any(
                     (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
                 ):
                     logger.debug("Updating q vector")
+                    q_before = self.q.copy()
                     self._update_q()
+                    assert self.q.shape == q_before.shape
                     updt_q = True
 
             # update prob
