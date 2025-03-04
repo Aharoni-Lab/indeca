@@ -470,14 +470,15 @@ class DeconvBin:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
         else:
             res = np.zeros_like(y)
-        svals = max_thres(
+        svals, thres = max_thres(
             opt_s,
             self.nthres,
             th_min=self.th_min,
             th_max=self.th_max,
             reverse_thres=True,
+            return_thres=True,
+            nz_only=True,
         )
-        svals = [ss for ss in svals if ss.sum() > 0]
         if not len(svals) > 0:
             return (
                 np.full(len(self.nzidx_s), np.nan),
@@ -500,7 +501,13 @@ class DeconvBin:
         bin_s = svals[opt_idx]
         err = self._compute_err(s=bin_s)
         if return_intm:
-            return bin_s, cvals[opt_idx], scals[opt_idx], err, opt_s
+            return (
+                bin_s,
+                cvals[opt_idx],
+                scals[opt_idx],
+                err,
+                (opt_s, thres, svals, cvals, yfvals, scals, objs, opt_idx),
+            )
         else:
             return bin_s, cvals[opt_idx], scals[opt_idx], err
 

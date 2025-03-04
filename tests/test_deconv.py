@@ -141,9 +141,10 @@ class TestDeconvBin:
             norm=param_norm,
         )
         deconv.update(scale=upsamp_ratio)
-        s_bin, c_bin, scl, err, s_direct = deconv.solve_thres(
+        s_bin, c_bin, scl, err, intm = deconv.solve_thres(
             scaling=False, return_intm=True
         )
+        s_direct = intm[0]
         s_bin = s_bin.astype(float)
         mdist, f1, precs, recall = assignment_distance(s_ref=s_org, s_slv=s_bin)
         # plotting
