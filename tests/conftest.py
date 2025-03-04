@@ -48,9 +48,15 @@ def func_data_dir(request, output_data_dir):
 
 
 @pytest.fixture()
-def test_fig_path(request, func_figs_dir):
+def test_fig_path_html(request, func_figs_dir):
     test_id = request.node.callspec.id
     return os.path.join(func_figs_dir, "{}.html".format(test_id))
+
+
+@pytest.fixture()
+def test_fig_path_svg(request, func_figs_dir):
+    test_id = request.node.callspec.id
+    return os.path.join(func_figs_dir, "{}.svg".format(test_id))
 
 
 @pytest.fixture

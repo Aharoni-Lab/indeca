@@ -99,7 +99,7 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
 
 class TestDeconvBin:
     def test_solve(
-        self, fixt_c, param_backend, param_norm, param_eq_atol, test_fig_path
+        self, fixt_c, param_backend, param_norm, param_eq_atol, test_fig_path_html
     ):
         # act
         c, s, taus = fixt_c
@@ -110,7 +110,7 @@ class TestDeconvBin:
         # plotting
         fig = go.Figure()
         fig.add_traces(plot_traces({"c": c, "s": s, "s_solve": s_solve}))
-        fig.write_html(test_fig_path)
+        fig.write_html(test_fig_path_html)
         # assertion
         assert np.isclose(b_solve, 0, atol=param_eq_atol)
         assert np.isclose(s, s_solve, atol=param_eq_atol).all()
@@ -122,7 +122,7 @@ class TestDeconvBin:
         param_upsamp,
         param_norm,
         param_eq_atol,
-        test_fig_path,
+        test_fig_path_html,
         results_bag,
         runtime_xfail,
     ):
@@ -165,7 +165,7 @@ class TestDeconvBin:
                 }
             )
         )
-        fig.write_html(test_fig_path)
+        fig.write_html(test_fig_path_html)
         # save results
         results_bag.tau_d = taus[0]
         results_bag.tau_r = taus[1]
