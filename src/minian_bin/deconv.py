@@ -788,6 +788,8 @@ class DeconvBin:
                 s=self.R_org @ opt_s,
                 scale=cur_scl,
             )
+        self._reset_cache()
+        self._reset_mask()
         return opt_s, opt_c, cur_scl, cur_obj, cur_penal
 
     def _setup_prob_osqp(self) -> None:
