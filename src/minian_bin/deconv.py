@@ -61,6 +61,7 @@ def max_thres(
     th_amplitude=False,
     delta=1e-8,
     reverse_thres=False,
+    nz_only: bool = False,
 ):
     amax = a.max()
     if reverse_thres:
@@ -73,6 +74,10 @@ def max_thres(
         S_ls = [(a > (amax * th).clip(delta, None)) for th in thres]
     if ds is not None:
         S_ls = [sum_downsample(s, ds) for s in S_ls]
+    if nz_only:
+        Snz = [ss.sum() > 0 for ss in S_ls]
+        S_ls = [ss for ss, nz in zip(S_ls, Snz) if nz]
+        thres = [th for th, nz in zip(thres, Snz) if nz]
     if return_thres:
         return S_ls, thres
     else:
