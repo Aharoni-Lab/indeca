@@ -15,6 +15,8 @@ def assignment_distance(
     t_ref: np.ndarray = None,
     t_slv: np.ndarray = None,
     samp_ratio: float = None,
+    tdist_thres: float = None,
+    tdist_agg: str = "median",
 ):
     if t_ref is None:
         assert s_ref is not None
@@ -33,10 +35,24 @@ def assignment_distance(
             samp_ratio = 1
     t_slv = t_slv * samp_ratio
     dist_mat = cdist(t_ref.reshape((-1, 1)), t_slv.reshape((-1, 1)))
+    if tdist_thres is not None:
+        dist_mat_mask = dist_mat <= tdist_thres
+        dist_mat = np.where(dist_mat_mask, dist_mat, tdist_thres * 1e16)
+        feas_idx_ref = dist_mat_mask.sum(axis=1).astype(bool)
+        feas_idx_slv = dist_mat_mask.sum(axis=0).astype(bool)
+        dist_mat = dist_mat[feas_idx_ref, :][:, feas_idx_slv]
     idx_ref, idx_slv = linear_sum_assignment(dist_mat)
+    tdists = dist_mat[idx_ref, idx_slv]
+    idx_mask = tdists <= tdist_thres
+    idx_ref, idx_slv, tdists = idx_ref[idx_mask], idx_slv[idx_mask], tdists[idx_mask]
     tp = len(idx_ref)
     precision = tp / len(t_slv)
     recall = tp / len(t_ref)
     f1 = 2 * (precision * recall) / (precision + recall)
-    med_dist = np.median(dist_mat[idx_ref, idx_slv])
-    return med_dist, f1, precision, recall
+    if tdist_agg == "median":
+        mdist = np.median(tdists)
+    elif tdist_agg == "mean":
+        mdist = np.mean(tdists)
+    else:
+        raise NotImplementedError("Aggregation method must be 'median' or 'mean'")
+    return mdist, f1, precision, recall
