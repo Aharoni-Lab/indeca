@@ -1,8 +1,13 @@
 import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from matplotlib.collections import LineCollection
+from matplotlib.gridspec import GridSpec
+
+from minian_bin.metrics import assignment_distance
 
 
 def plot_traces(tr_dict, **kwargs):
@@ -71,3 +76,63 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     lc.set_array(c)  # set the colors of each segment
 
     return ax.add_collection(lc)
+
+
+def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, **kwargs):
+    if not isinstance(svals, dict):
+        svals = {"": svals}
+        objs = {"": objs}
+        thres = {"": thres}
+        opt_idx = {"": opt_idx}
+    metdf = []
+    for grp, sval in svals.items():
+        ths = thres[grp]
+        oidx = opt_idx[grp]
+        obj = objs[grp]
+        dists = [assignment_distance(s_ref, ss, **kwargs) for ss in sval]
+        mdf = pd.DataFrame(
+            {
+                "group": grp,
+                "thres": ths,
+                "objs": obj,
+                "mdist": np.array([d[0] for d in dists]),
+                "f1": np.array([d[1] for d in dists]),
+                "prec": np.array([d[2] for d in dists]),
+                "recall": np.array([d[3] for d in dists]),
+                "opt_idx": int(oidx),
+            }
+        )
+        metdf.append(mdf)
+    metdf = pd.concat(metdf, ignore_index=True)
+    fig = plt.figure(constrained_layout=True, figsize=(8, 4))
+    gs = GridSpec(2, 2, figure=fig)
+    ax_err = fig.add_subplot(gs[0, 0])
+    ax_f1 = fig.add_subplot(gs[1, 0])
+    ax_roc = fig.add_subplot(gs[:, 1])
+    lw = 2
+    for grp, grpdf in metdf.groupby("group"):
+        oidx = grpdf["opt_idx"].unique().item()
+        th = np.array(grpdf["thres"])
+        colored_line(x=th, y=grpdf["objs"], c=th, ax=ax_err, linewidths=lw)
+        ax_err.plot(th, grpdf["objs"], alpha=0)
+        ax_err.set_yscale("log")
+        ax_err.axvline(th[oidx], ls="dotted", color="gray")
+        ax_err.set_xlabel("Threshold")
+        ax_err.set_ylabel("Error")
+        colored_line(x=th, y=grpdf["f1"], c=th, ax=ax_f1, linewidths=lw)
+        ax_f1.plot(th, grpdf["f1"], alpha=0)
+        ax_f1.axvline(th[oidx], ls="dotted", color="gray")
+        ax_f1.set_xlabel("Threshold")
+        ax_f1.set_ylabel("f1 Score")
+        colored_line(x=grpdf["prec"], y=grpdf["recall"], c=th, ax=ax_roc, linewidths=lw)
+        ax_roc.plot(grpdf["prec"], grpdf["recall"], alpha=0)
+        ax_roc.plot(
+            grpdf["prec"].iloc[oidx],
+            grpdf["recall"].iloc[oidx],
+            marker="x",
+            color="gray",
+            markersize=15,
+        )
+        ax_roc.set_xlabel("Precision")
+        ax_roc.set_ylabel("Recall")
+    return fig

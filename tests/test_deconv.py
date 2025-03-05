@@ -1,17 +1,15 @@
 import os
 
-import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 import pytest
 import seaborn as sns
-from matplotlib.gridspec import GridSpec
 
 from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
 from minian_bin.metrics import assignment_distance
 from minian_bin.simulation import ar_trace
 
-from .plotting_utils import colored_line, plot_traces
+from .plotting_utils import plot_met_ROC, plot_traces
 
 
 @pytest.fixture()
@@ -215,39 +213,8 @@ class TestDemoDeconv:
             scaling=False, return_intm=True
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
-        dists = [
-            assignment_distance(s_org, ss, tdist_thres=upsamp, tdist_agg="mean")
-            for ss in svals
-        ]
-        mdists = np.array([d[0] for d in dists])
-        f1s = np.array([d[1] for d in dists])
-        precs = np.array([d[2] for d in dists])
-        recals = np.array([d[3] for d in dists])
         # plotting
-        fig = plt.figure(constrained_layout=True, figsize=(8, 4))
-        gs = GridSpec(2, 2, figure=fig)
-        lw = 2
-        ax_err = fig.add_subplot(gs[0, 0])
-        ax_f1 = fig.add_subplot(gs[1, 0])
-        ax_roc = fig.add_subplot(gs[:, 1])
-        colored_line(x=thres, y=objs, c=thres, ax=ax_err, linewidths=lw)
-        ax_err.plot(thres, objs, alpha=0)
-        ax_err.set_yscale("log")
-        ax_err.axvline(thres[opt_idx], ls="dotted", color="gray")
-        ax_err.set_xlabel("Threshold")
-        ax_err.set_ylabel("Error")
-        colored_line(x=thres, y=f1s, c=thres, ax=ax_f1, linewidths=lw)
-        ax_f1.plot(thres, f1s, alpha=0)
-        ax_f1.axvline(thres[opt_idx], ls="dotted", color="gray")
-        ax_f1.set_xlabel("Threshold")
-        ax_f1.set_ylabel("f1 Score")
-        colored_line(x=precs, y=recals, c=thres, ax=ax_roc, linewidths=lw)
-        ax_roc.plot(precs, recals, alpha=0)
-        ax_roc.plot(
-            precs[opt_idx], recals[opt_idx], marker="x", color="gray", markersize=15
-        )
-        ax_roc.set_xlabel("Precision")
-        ax_roc.set_ylabel("Recall")
+        fig = plot_met_ROC(svals, s_org, objs, thres, opt_idx)
         fig.savefig(test_fig_path_svg)
 
 
