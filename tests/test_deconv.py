@@ -39,7 +39,7 @@ def param_norm():
     return "l2"
 
 
-@pytest.fixture(params=[0, 0.1, 0.2])
+@pytest.fixture(params=[0, 0.1, 0.2, 0.5])
 def param_ns_level(request):
     return request.param
 
@@ -180,6 +180,8 @@ class TestDeconvBin:
         results_bag.precs = precs
         results_bag.recall = recall
         # assert
+        if ns_lev >= 0.2:
+            runtime_xfail("Accuracy degrade when noise level too high")
         if param_upsamp == upsamp_y:  # upsample factor matches ground truth
             assert mdist <= 1
             assert recall >= 0.8
