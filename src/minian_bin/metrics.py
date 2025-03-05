@@ -43,8 +43,13 @@ def assignment_distance(
         dist_mat = dist_mat[feas_idx_ref, :][:, feas_idx_slv]
     idx_ref, idx_slv = linear_sum_assignment(dist_mat)
     tdists = dist_mat[idx_ref, idx_slv]
-    idx_mask = tdists <= tdist_thres
-    idx_ref, idx_slv, tdists = idx_ref[idx_mask], idx_slv[idx_mask], tdists[idx_mask]
+    if tdist_thres is not None:
+        idx_mask = tdists <= tdist_thres
+        idx_ref, idx_slv, tdists = (
+            idx_ref[idx_mask],
+            idx_slv[idx_mask],
+            tdists[idx_mask],
+        )
     tp = len(idx_ref)
     precision = tp / len(t_slv)
     recall = tp / len(t_ref)
