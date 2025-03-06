@@ -108,6 +108,7 @@ def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, grad_color: bool = True, **
     ax_err = fig.add_subplot(gs[0, 0])
     ax_f1 = fig.add_subplot(gs[1, 0])
     ax_roc = fig.add_subplot(gs[:, 1])
+    ax_roc.invert_xaxis()
     lw = 2
     ls = ["solid"] if grad_color else ["dotted", "dashed", "dashdot"]
     for (grp, grpdf), cur_ls in zip(metdf.groupby("group"), itt.cycle(ls)):
