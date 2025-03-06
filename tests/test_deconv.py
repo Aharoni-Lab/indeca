@@ -59,6 +59,11 @@ def param_upsamp(request):
     return request.param
 
 
+@pytest.fixture(params=[True, False])
+def param_thres_scaling(request):
+    return request.param
+
+
 @pytest.fixture(
     params=[
         {"upsamp": 1, "tmp_P": np.array([[0.98, 0.02], [0.75, 0.25]])},
@@ -219,7 +224,9 @@ class TestDeconvBin:
 
 
 class TestDemoDeconv:
-    def test_demo_solve_thres(self, fixt_deconv, test_fig_path_svg):
+    def test_demo_solve_thres(
+        self, fixt_deconv, param_thres_scaling, test_fig_path_svg
+    ):
         # book-keeping
         (
             deconv,
@@ -238,14 +245,16 @@ class TestDemoDeconv:
             pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
         # act
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
-            scaling=False, return_intm=True
+            scaling=param_thres_scaling, return_intm=True
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
         # plotting
-        fig = plot_met_ROC(svals, s_org, objs, thres, opt_idx, tdist_thres=3)
+        fig = plot_met_ROC(svals, s_org, objs, scals, thres, opt_idx, tdist_thres=3)
         fig.savefig(test_fig_path_svg)
 
-    def test_demo_solve_penal(self, fixt_deconv, test_fig_path_svg):
+    def test_demo_solve_penal(
+        self, fixt_deconv, param_thres_scaling, test_fig_path_svg
+    ):
         # book-keeping
         (
             deconv,
@@ -269,16 +278,21 @@ class TestDemoDeconv:
         deconv._reset_cache()
         deconv._reset_mask()
         deconv.update(l1_penal=opt_penal)
-        _, _, _, _, intm_pn = deconv.solve_thres(scaling=False, return_intm=True)
+        _, _, _, _, intm_pn = deconv.solve_thres(
+            scaling=param_thres_scaling, return_intm=True
+        )
         deconv.update(l1_penal=0)
-        _, _, _, _, intm_nopn = deconv.solve_thres(scaling=False, return_intm=True)
+        _, _, _, _, intm_nopn = deconv.solve_thres(
+            scaling=param_thres_scaling, return_intm=True
+        )
         # plotting
         thres = {"No Penalty": intm_nopn[1], "Penalty": intm_pn[1]}
+        scals = {"No Penalty": intm_nopn[5], "Penalty": intm_pn[5]}
         svals = {"No Penalty": intm_nopn[2], "Penalty": intm_pn[2]}
         objs = {"No Penalty": intm_nopn[6], "Penalty": intm_pn[6]}
         opt_idx = {"Penalty": intm_pn[7]}
         fig = plot_met_ROC(
-            svals, s_org, objs, thres, opt_idx, tdist_thres=3, grad_color=False
+            svals, s_org, objs, scals, thres, opt_idx, tdist_thres=3, grad_color=False
         )
         fig.savefig(test_fig_path_svg)
 

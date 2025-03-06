@@ -79,21 +79,26 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     return ax.add_collection(lc)
 
 
-def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, grad_color: bool = True, **kwargs):
+def plot_met_ROC(
+    svals, s_ref, objs, scals, thres, opt_idx, grad_color: bool = True, **kwargs
+):
     if not isinstance(svals, dict):
         svals = {"": svals}
         objs = {"": objs}
+        scals = {"": scals}
         thres = {"": thres}
         opt_idx = {"": opt_idx}
     metdf = []
     for grp, sval in svals.items():
         ths = thres[grp]
         obj = objs[grp]
+        scl = scals[grp]
         dists = [assignment_distance(s_ref, ss, **kwargs) for ss in sval]
         mdf = pd.DataFrame(
             {
                 "group": grp,
                 "thres": ths,
+                "scals": scl,
                 "objs": obj,
                 "mdist": np.array([d[0] for d in dists]),
                 "f1": np.array([d[1] for d in dists]),
@@ -104,9 +109,10 @@ def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, grad_color: bool = True, **
         metdf.append(mdf)
     metdf = pd.concat(metdf, ignore_index=True)
     fig = plt.figure(constrained_layout=True, figsize=(8, 4))
-    gs = GridSpec(2, 2, figure=fig)
+    gs = GridSpec(3, 2, figure=fig)
     ax_err = fig.add_subplot(gs[0, 0])
-    ax_f1 = fig.add_subplot(gs[1, 0])
+    ax_scl = fig.add_subplot(gs[1, 0])
+    ax_f1 = fig.add_subplot(gs[2, 0])
     ax_roc = fig.add_subplot(gs[:, 1])
     ax_roc.invert_xaxis()
     lw = 2
@@ -127,6 +133,15 @@ def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, grad_color: bool = True, **
             ax_err.plot(th, grpdf["objs"], ls=cur_ls)
         if oidx is not None:
             ax_err.axvline(th[oidx], ls="dotted", color="gray")
+        ax_scl.set_xlabel("Threshold")
+        ax_scl.set_ylabel("Scale")
+        if grad_color:
+            ax_scl.plot(th, grpdf["scals"], alpha=0)
+            colored_line(x=th, y=grpdf["scals"], c=th, ax=ax_scl, linewidths=lw)
+        else:
+            ax_scl.plot(th, grpdf["scals"], ls=cur_ls)
+        if oidx is not None:
+            ax_scl.axvline(th[oidx], ls="dotted", color="gray")
         ax_f1.set_xlabel("Threshold")
         ax_f1.set_ylabel("f1 Score")
         if grad_color:
