@@ -245,6 +245,39 @@ class TestDemoDeconv:
         fig = plot_met_ROC(svals, s_org, objs, thres, opt_idx)
         fig.savefig(test_fig_path_svg)
 
+    def test_demo_solve_penal(self, fixt_deconv, test_fig_path_svg):
+        # book-keeping
+        (
+            deconv,
+            param_backend,
+            param_norm,
+            y,
+            c,
+            c_org,
+            s,
+            s_org,
+            taus,
+            ns_lev,
+            upsamp,
+        ) = fixt_deconv
+        if param_backend == "cvxpy":
+            pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
+        # act
+        _, _, _, _, opt_penal = deconv.solve_penal(scaling=False)
+        deconv._reset_cache()
+        deconv._reset_mask()
+        deconv.update(l1_penal=opt_penal)
+        _, _, _, _, intm_pn = deconv.solve_thres(scaling=False, return_intm=True)
+        deconv.update(l1_penal=0)
+        _, _, _, _, intm_nopn = deconv.solve_thres(scaling=False, return_intm=True)
+        # plotting
+        thres = {"No Penalty": intm_nopn[1], "Penalty": intm_pn[1]}
+        svals = {"No Penalty": intm_nopn[2], "Penalty": intm_pn[2]}
+        objs = {"No Penalty": intm_nopn[6], "Penalty": intm_pn[6]}
+        opt_idx = {"Penalty": intm_pn[7]}
+        fig = plot_met_ROC(svals, s_org, objs, thres, opt_idx, grad_color=False)
+        fig.savefig(test_fig_path_svg)
+
 
 def test_construct_R():
     """Test R matrix construction."""
