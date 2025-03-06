@@ -1,3 +1,4 @@
+import itertools as itt
 import warnings
 
 import matplotlib.pyplot as plt
@@ -78,7 +79,7 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     return ax.add_collection(lc)
 
 
-def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, **kwargs):
+def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, grad_color: bool = True, **kwargs):
     if not isinstance(svals, dict):
         svals = {"": svals}
         objs = {"": objs}
@@ -108,29 +109,41 @@ def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, **kwargs):
     ax_f1 = fig.add_subplot(gs[1, 0])
     ax_roc = fig.add_subplot(gs[:, 1])
     lw = 2
-    for grp, grpdf in metdf.groupby("group"):
+    ls = ["solid"] if grad_color else ["dotted", "dashed", "dashdot"]
+    for (grp, grpdf), cur_ls in zip(metdf.groupby("group"), itt.cycle(ls)):
         try:
             oidx = opt_idx[grp]
         except KeyError:
             oidx = None
         th = np.array(grpdf["thres"])
-        ax_err.plot(th, grpdf["objs"], alpha=0)
         ax_err.set_yscale("log")
         ax_err.set_xlabel("Threshold")
         ax_err.set_ylabel("Error")
-        colored_line(x=th, y=grpdf["objs"], c=th, ax=ax_err, linewidths=lw)
+        if grad_color:
+            ax_err.plot(th, grpdf["objs"], alpha=0)
+            colored_line(x=th, y=grpdf["objs"], c=th, ax=ax_err, linewidths=lw)
+        else:
+            ax_err.plot(th, grpdf["objs"], ls=cur_ls)
         if oidx is not None:
             ax_err.axvline(th[oidx], ls="dotted", color="gray")
-        ax_f1.plot(th, grpdf["f1"], alpha=0)
         ax_f1.set_xlabel("Threshold")
         ax_f1.set_ylabel("f1 Score")
-        colored_line(x=th, y=grpdf["f1"], c=th, ax=ax_f1, linewidths=lw)
+        if grad_color:
+            ax_f1.plot(th, grpdf["f1"], alpha=0)
+            colored_line(x=th, y=grpdf["f1"], c=th, ax=ax_f1, linewidths=lw)
+        else:
+            ax_f1.plot(th, grpdf["f1"], ls=cur_ls)
         if oidx is not None:
             ax_f1.axvline(th[oidx], ls="dotted", color="gray")
-        ax_roc.plot(grpdf["prec"], grpdf["recall"], alpha=0)
         ax_roc.set_xlabel("Precision")
         ax_roc.set_ylabel("Recall")
-        colored_line(x=grpdf["prec"], y=grpdf["recall"], c=th, ax=ax_roc, linewidths=lw)
+        if grad_color:
+            ax_roc.plot(grpdf["prec"], grpdf["recall"], alpha=0)
+            colored_line(
+                x=grpdf["prec"], y=grpdf["recall"], c=th, ax=ax_roc, linewidths=lw
+            )
+        else:
+            ax_roc.plot(grpdf["prec"], grpdf["recall"], label=grp, ls=cur_ls)
         if oidx is not None:
             ax_roc.plot(
                 grpdf["prec"].iloc[oidx],
@@ -139,4 +152,5 @@ def plot_met_ROC(svals, s_ref, objs, thres, opt_idx, **kwargs):
                 color="gray",
                 markersize=15,
             )
+    fig.legend()
     return fig
