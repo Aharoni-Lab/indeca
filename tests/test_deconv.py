@@ -97,6 +97,32 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
     return y, c, c_org, s, s_org, param_taus, param_ns_level, upsamp
 
 
+@pytest.fixture()
+def fixt_deconv(fixt_y, param_backend, param_norm):
+    y, c, c_org, s, s_org, taus, ns_lev, upsamp = fixt_y
+    deconv = DeconvBin(
+        y=y,
+        tau=np.array(taus) * upsamp,
+        upsamp=upsamp,
+        err_weighting=None,
+        backend=param_backend,
+        norm=param_norm,
+    )
+    return (
+        deconv,
+        param_backend,
+        param_norm,
+        y,
+        c,
+        c_org,
+        s,
+        s_org,
+        taus,
+        ns_lev,
+        upsamp,
+    )
+
+
 class TestDeconvBin:
     def test_solve(
         self, fixt_c, param_backend, param_norm, param_eq_atol, test_fig_path_html
@@ -193,22 +219,24 @@ class TestDeconvBin:
 
 
 class TestDemoDeconv:
-    def test_demo_solve_thres(
-        self, fixt_y, param_backend, param_norm, test_fig_path_svg
-    ):
+    def test_demo_solve_thres(self, fixt_deconv, test_fig_path_svg):
         # book-keeping
+        (
+            deconv,
+            param_backend,
+            param_norm,
+            y,
+            c,
+            c_org,
+            s,
+            s_org,
+            taus,
+            ns_lev,
+            upsamp,
+        ) = fixt_deconv
         if param_backend == "cvxpy":
-            pytest.skip("Skipping cvxpy backend for test_solve_thres")
+            pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
         # act
-        y, c, c_org, s, s_org, taus, ns_lev, upsamp = fixt_y
-        deconv = DeconvBin(
-            y=y,
-            tau=np.array(taus) * upsamp,
-            upsamp=upsamp,
-            err_weighting=None,
-            backend=param_backend,
-            norm=param_norm,
-        )
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
             scaling=False, return_intm=True
         )
