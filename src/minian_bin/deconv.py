@@ -542,10 +542,11 @@ class DeconvBin:
             def opt_fn(x):
                 self.update(**{pn: x.item()})
                 _, _, _, obj = self.solve_thres(scaling=False)
-                self.dashboard.update(
-                    uid=self.dashboard_uid,
-                    penal_err={"penal": x.item(), "scale": self.scale, "err": obj},
-                )
+                if self.dashboard is not None:
+                    self.dashboard.update(
+                        uid=self.dashboard_uid,
+                        penal_err={"penal": x.item(), "scale": self.scale, "err": obj},
+                    )
                 if obj < err_full:
                     return obj
                 else:
