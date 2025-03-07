@@ -351,11 +351,6 @@ class TestDeconvolution:
         """Test edge cases and boundary conditions."""
         pass
 
-    @pytest.mark.parametrize("lambda_", [0.1, 1.0, 10.0])
-    def test_lambda_sensitivity(self, lambda_):
-        """Test sensitivity to lambda parameter."""
-        pass
-
 
 class TestResults:
     def test_results(self, module_results_df, func_data_dir):
@@ -365,9 +360,7 @@ class TestResults:
         for fname, fdf in module_results_df.groupby("func_name"):
             fdf = fdf[fdf["data"].notnull()].reset_index()
             if len(fdf) > 0:
-                param_cols = list(
-                    set(fdf.columns) - set(["lambda_", "data", "pytest_obj"])
-                )
+                param_cols = list(set(fdf.columns) - set(["data", "pytest_obj"]))
                 result = []
                 for _, frow in fdf.iterrows():
                     dat = frow["data"]
