@@ -1,6 +1,7 @@
 import os
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import pytest
 import seaborn as sns
@@ -64,15 +65,13 @@ def param_thres_scaling(request):
     return request.param
 
 
-@pytest.fixture(
-    params=[
-        {"upsamp": 1, "tmp_P": np.array([[0.98, 0.02], [0.75, 0.25]])},
-        {"upsamp": 2, "tmp_P": np.array([[0.98, 0.02], [0.75, 0.25]])},
-        {"upsamp": 5, "tmp_P": np.array([[0.998, 0.002], [0.75, 0.25]])},
-    ]
-)
-def param_tmp_upsamp(request):
-    return request.param["upsamp"], request.param["tmp_P"]
+@pytest.fixture()
+def param_tmp_upsamp(param_upsamp):
+    if param_upsamp < 5:
+        tmp = np.array([[0.98, 0.02], [0.75, 0.25]])
+    else:
+        tmp = np.array([[0.998, 0.002], [0.75, 0.25]])
+    return param_upsamp, tmp
 
 
 @pytest.fixture()
@@ -152,7 +151,6 @@ class TestDeconvBin:
         param_backend,
         param_upsamp,
         param_norm,
-        param_eq_atol,
         test_fig_path_html,
         results_bag,
         runtime_xfail,
@@ -198,16 +196,23 @@ class TestDeconvBin:
         )
         fig.write_html(test_fig_path_html)
         # save results
-        results_bag.tau_d = taus[0]
-        results_bag.tau_r = taus[1]
-        results_bag.ns_lev = ns_lev
-        results_bag.upsamp_y = upsamp_y
-        results_bag.upsamp = param_upsamp
-        results_bag.backend = param_backend
-        results_bag.mdist = mdist
-        results_bag.f1 = f1
-        results_bag.precs = precs
-        results_bag.recall = recall
+        dat = pd.DataFrame(
+            [
+                {
+                    "tau_d": taus[0],
+                    "tau_r": taus[1],
+                    "ns_lev": ns_lev,
+                    "upsamp_y": upsamp_y,
+                    "upsamp": param_upsamp,
+                    "backend": param_backend,
+                    "mdist": mdist,
+                    "f1": f1,
+                    "precs": precs,
+                    "recall": recall,
+                }
+            ]
+        )
+        results_bag.data = dat
         # assert
         if ns_lev >= 0.2:
             runtime_xfail("Accuracy degrade when noise level too high")
@@ -353,53 +358,20 @@ class TestDeconvolution:
 
 
 class TestResults:
-    def test_solve_thres_results(self, module_results_df, func_figs_dir, func_data_dir):
-        result = (
-            module_results_df.loc[
-                lambda d: d.index.str.startswith("test_solve_thres["),
-                [
-                    "tau_d",
-                    "tau_r",
-                    "ns_lev",
-                    "upsamp_y",
-                    "upsamp",
-                    "backend",
-                    "mdist",
-                    "f1",
-                    "precs",
-                    "recall",
-                ],
-            ]
-            .dropna()
-            .reset_index()
+    def test_results(self, module_results_df, func_data_dir):
+        module_results_df["func_name"] = module_results_df["pytest_obj"].apply(
+            lambda o: o.__name__
         )
-        result.to_feather(os.path.join(func_data_dir, "metrics.feat"))
-        for (td, tr), res_sub in result.groupby(["tau_d", "tau_r"]):
-            for met in ["mdist", "f1", "precs", "recall"]:
-                g = sns.FacetGrid(res_sub, row="upsamp", col="upsamp_y")
-                g.map_dataframe(
-                    sns.boxplot,
-                    x="ns_lev",
-                    y=met,
-                    hue="ns_lev",
-                    saturation=0.5,
-                    showfliers=False,
-                    palette="tab10",
+        for fname, fdf in module_results_df.groupby("func_name"):
+            fdf = fdf[fdf["data"].notnull()].reset_index()
+            if len(fdf) > 0:
+                param_cols = list(
+                    set(fdf.columns) - set(["lambda_", "data", "pytest_obj"])
                 )
-                g.map_dataframe(
-                    sns.swarmplot,
-                    x="ns_lev",
-                    y=met,
-                    hue="ns_lev",
-                    edgecolor="gray",
-                    palette="tab10",
-                    size=5,
-                    linewidth=1.2,
-                )
-                g.tight_layout()
-                g.figure.savefig(
-                    os.path.join(
-                        func_figs_dir, "tau({},{})-{}.svg".format(td, tr, met)
-                    ),
-                    bbox_inches="tight",
-                )
+                result = []
+                for _, frow in fdf.iterrows():
+                    dat = frow["data"]
+                    dat = dat.assign(**{p: [frow[p]] * len(dat) for p in param_cols})
+                    result.append(dat)
+                result = pd.concat(result, ignore_index=True)
+                result.to_feather(os.path.join(func_data_dir, "{}.feat".format(fname)))
