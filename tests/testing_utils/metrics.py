@@ -77,3 +77,9 @@ def compute_metrics(s_ref, svals, add_met, **kwargs):
     for met_name, mets in add_met.items():
         metdf[met_name] = mets
     return metdf
+
+
+def df_assign_metadata(df, meta_dict):
+    for dname, dval in meta_dict.items():
+        df[dname] = dval
+    return df

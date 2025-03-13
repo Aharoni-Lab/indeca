@@ -4,6 +4,7 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
+import seaborn as sns
 from matplotlib.collections import LineCollection
 from matplotlib.gridspec import GridSpec
 
@@ -141,3 +142,35 @@ def plot_met_ROC(metdf, grad_color: bool = True):
             )
     fig.legend()
     return fig
+
+
+def plot_agg_boxswarm(
+    dat, row, col, x, y, hue=None, facet_kws=dict(), box_kws=dict(), swarm_kws=dict()
+):
+    if hue is None:
+        hue = x
+    g = sns.FacetGrid(dat, row=row, col=col, **facet_kws)
+    g.map_dataframe(
+        sns.boxplot,
+        x=x,
+        y=y,
+        hue=hue,
+        saturation=0.5,
+        showfliers=False,
+        palette="tab10",
+        **box_kws,
+    )
+    g.map_dataframe(
+        sns.swarmplot,
+        x=x,
+        y=y,
+        hue=hue,
+        edgecolor="auto",
+        palette="tab10",
+        size=5,
+        linewidth=1.2,
+        warn_thresh=0.9,
+        **swarm_kws,
+    )
+    g.tight_layout()
+    return g

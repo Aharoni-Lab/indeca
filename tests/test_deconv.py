@@ -9,7 +9,11 @@ import seaborn as sns
 from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
 from minian_bin.simulation import ar_trace
 
-from .testing_utils.metrics import assignment_distance, compute_metrics
+from .testing_utils.metrics import (
+    assignment_distance,
+    compute_metrics,
+    df_assign_metadata,
+)
 from .testing_utils.plotting import plot_met_ROC, plot_traces
 
 
@@ -264,7 +268,7 @@ class TestDemoDeconv:
         fig.savefig(test_fig_path_svg)
 
     def test_demo_solve_penal(
-        self, fixt_deconv, param_thres_scaling, test_fig_path_svg
+        self, fixt_deconv, param_thres_scaling, test_fig_path_svg, results_bag
     ):
         # book-keeping
         (
@@ -304,6 +308,8 @@ class TestDemoDeconv:
                 "thres": intm_nopn[1],
                 "scals": intm_nopn[5],
                 "objs": intm_nopn[6],
+                "penal": 0,
+                "opt_idx": intm_nopn[7],
                 "group": "No Penalty",
             },
             tdist_thres=3,
@@ -315,16 +321,28 @@ class TestDemoDeconv:
                 "thres": intm_pn[1],
                 "scals": intm_pn[5],
                 "objs": intm_pn[6],
+                "penal": opt_penal,
                 "opt_idx": intm_pn[7],
                 "group": "Penalty",
             },
             tdist_thres=3,
         )
-        fig = plot_met_ROC(
-            pd.concat([metdf_nopn, metdf_pn], ignore_index=True),
-            grad_color=False,
-        )
+        metdf = pd.concat([metdf_nopn, metdf_pn], ignore_index=True)
+        fig = plot_met_ROC(metdf, grad_color=False)
         fig.savefig(test_fig_path_svg)
+        # save results
+        metdf = df_assign_metadata(
+            metdf,
+            {
+                "tau_d": taus[0],
+                "tau_r": taus[1],
+                "ns_lev": ns_lev,
+                "thres_scaling": param_thres_scaling,
+                "upsamp": upsamp,
+                "backend": param_backend,
+            },
+        )
+        results_bag.data = metdf
 
 
 def test_construct_R():
