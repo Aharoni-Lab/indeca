@@ -107,7 +107,7 @@ def pipeline_bin(
                     add_lag=est_add_lag,
                 )
                 logger.debug(f"Cell {icell}: Estimated coefficients successfully")
-                
+
                 tau_d, tau_r, cur_p = AR2tau(*cur_theta, solve_amp=True)
                 cur_tau = np.array([tau_d, tau_r])
                 logger.debug(f"Cell {icell}: Computed tau values: {cur_tau}")
@@ -119,7 +119,9 @@ def pipeline_bin(
                     tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
                     lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp="scale")
                     cur_tau = (-1 / lams) * up_factor
-                    logger.debug(f"Cell {icell}: Converted to real tau values: {cur_tau}")
+                    logger.debug(
+                        f"Cell {icell}: Converted to real tau values: {cur_tau}"
+                    )
 
                 cur_theta = tau2AR(cur_tau[0], cur_tau[1], cur_p)
                 tau[icell, :] = cur_tau
@@ -220,9 +222,13 @@ def pipeline_bin(
                 else:
                     r = dcv[icell].solve_scale(reset_scale=i_iter <= 1)
                 res.append(r)
-                logger.debug(f"Iteration {i_iter}, Cell {icell}: Deconvolution successful")
+                logger.debug(
+                    f"Iteration {i_iter}, Cell {icell}: Deconvolution successful"
+                )
             except Exception as e:
-                logger.error(f"Iteration {i_iter}, Cell {icell}: Deconvolution failed - {str(e)}")
+                logger.error(
+                    f"Iteration {i_iter}, Cell {icell}: Deconvolution failed - {str(e)}"
+                )
                 raise
 
         if da_client is not None:
@@ -241,7 +247,9 @@ def pipeline_bin(
             scale = np.array([r[2] for r in res])
             err = np.array([r[3] for r in res])
             penal = np.array([r[4] for r in res])
-            logger.debug(f"Iteration {i_iter}: Results processed - S shape: {S.shape}, C shape: {C.shape}")
+            logger.debug(
+                f"Iteration {i_iter}: Results processed - S shape: {S.shape}, C shape: {C.shape}"
+            )
         except Exception as e:
             logger.error(f"Failed to process deconvolution results: {str(e)}")
             raise
@@ -297,7 +305,9 @@ def pipeline_bin(
         logger.debug(f"Iteration {i_iter}: Starting AR update")
         metric_df = metric_df.set_index(["iter", "cell"])
         if n_best is not None and i_iter > n_best:
-            logger.debug(f"Iteration {i_iter}: Selecting best {n_best} iterations for update")
+            logger.debug(
+                f"Iteration {i_iter}: Selecting best {n_best} iterations for update"
+            )
             try:
                 S_best = np.empty_like(S)
                 scal_best = np.empty_like(scale)
@@ -311,7 +321,9 @@ def pipeline_bin(
                         np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                     ) > (n_best / 2)
                     scal_best[icell] = np.median([scal_ls[i][icell] for i in cur_idx])
-                logger.debug(f"Iteration {i_iter}: Best iterations selected successfully")
+                logger.debug(
+                    f"Iteration {i_iter}: Best iterations selected successfully"
+                )
             except Exception as e:
                 logger.error(f"Failed to select best iterations: {str(e)}")
                 raise
@@ -324,9 +336,13 @@ def pipeline_bin(
 
         if ar_use_all:
             logger.debug(f"Iteration {i_iter}: Updating AR parameters using all cells")
-            logger.debug(f"Input shapes - Y: {Y.shape}, S_ar: {S_ar.shape}, scal_best: {scal_best.shape}")
+            logger.debug(
+                f"Input shapes - Y: {Y.shape}, S_ar: {S_ar.shape}, scal_best: {scal_best.shape}"
+            )
             try:
-                logger.debug(f"Calling solve_fit_h_num with parameters: N={p}, s_len={ar_kn_len * up_factor}, norm={ar_norm}, up_factor={up_factor}")
+                logger.debug(
+                    f"Calling solve_fit_h_num with parameters: N={p}, s_len={ar_kn_len * up_factor}, norm={ar_norm}, up_factor={up_factor}"
+                )
                 lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
                     Y,
                     S_ar,
@@ -336,29 +352,33 @@ def pipeline_bin(
                     norm=ar_norm,
                     up_factor=up_factor,
                 )
-                logger.debug(f"solve_fit_h_num returned - lams shape: {lams.shape}, ps shape: {ps.shape}, h shape: {h.shape}")
+                logger.debug(
+                    f"solve_fit_h_num returned - lams shape: {lams.shape}, ps shape: {ps.shape}, h shape: {h.shape}"
+                )
                 logger.debug(f"AR scale value: {ar_scal}, lambda values: {lams}")
 
                 logger.debug("Updating dashboard with h and h_fit values")
                 dashboard.update(
                     h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
                 )
-                
+
                 logger.debug("Computing tau values")
                 cur_tau = -1 / lams
                 logger.debug(f"Computed cur_tau: {cur_tau}")
-                
+
                 logger.debug("Creating tau array for all cells")
                 tau = np.tile(cur_tau, (ncell, 1))
                 logger.debug(f"Final tau array shape: {tau.shape}, values: {tau}")
-                
+
                 logger.debug(f"Iteration {i_iter}: AR parameters updated successfully")
-                
+
                 logger.debug("Starting deconvolution updates")
                 for idx, d in enumerate(dcv):
                     logger.debug(f"Updating deconvolution {idx}/{len(dcv)}")
                     if da_client is not None:
-                        logger.debug(f"Submitting update for deconvolution {idx} to Dask")
+                        logger.debug(
+                            f"Submitting update for deconvolution {idx} to Dask"
+                        )
                         da_client.submit(
                             lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal), d
                         )
@@ -369,7 +389,9 @@ def pipeline_bin(
             except Exception as e:
                 logger.error(f"Failed to update AR parameters: {str(e)}")
                 logger.error(f"Error occurred at iteration {i_iter}")
-                logger.error(f"Last known variable states - Y shape: {Y.shape}, S_ar shape: {S_ar.shape}")
+                logger.error(
+                    f"Last known variable states - Y shape: {Y.shape}, S_ar shape: {S_ar.shape}"
+                )
                 raise
         else:
             logger.debug(f"Iteration {i_iter}: Updating AR parameters per cell")
@@ -380,35 +402,46 @@ def pipeline_bin(
                 logger.debug(f"Processing cell {icell}/{ncell}")
                 logger.debug(f"Cell {icell} input shapes - y: {y.shape}, s: {s.shape}")
                 try:
-                    logger.debug(f"Cell {icell}: Calling solve_fit_h_num with parameters: N={p}, s_len={ar_kn_len}, norm={ar_norm}")
+                    logger.debug(
+                        f"Cell {icell}: Calling solve_fit_h_num with parameters: N={p}, s_len={ar_kn_len}, norm={ar_norm}"
+                    )
                     lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
                         y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
                     )
-                    logger.debug(f"Cell {icell} solve_fit_h_num results - lams: {lams}, ps: {ps}, ar_scal: {ar_scal}")
-                    
+                    logger.debug(
+                        f"Cell {icell} solve_fit_h_num results - lams: {lams}, ps: {ps}, ar_scal: {ar_scal}"
+                    )
+
                     logger.debug(f"Cell {icell}: Updating dashboard")
                     dashboard.update(uid=icell, h=h, h_fit=h_fit)
-                    
+
                     logger.debug(f"Cell {icell}: Computing tau values")
                     cur_tau = -1 / lams
                     logger.debug(f"Cell {icell} cur_tau: {cur_tau}")
-                    
+
                     tau[icell, :] = cur_tau
                     logger.debug(f"Cell {icell}: Updated tau array slice")
-                    
+
                     if da_client is not None:
                         logger.debug(f"Cell {icell}: Submitting Dask update")
                         da_client.submit(
-                            lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal), dcv[icell]
+                            lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal),
+                            dcv[icell],
                         )
                     else:
                         logger.debug(f"Cell {icell}: Updating local deconvolution")
                         dcv[icell].update(tau=cur_tau, scale_mul=ar_scal)
-                    logger.debug(f"Iteration {i_iter}, Cell {icell}: AR parameters updated")
+                    logger.debug(
+                        f"Iteration {i_iter}, Cell {icell}: AR parameters updated"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to update AR parameters for cell {icell}: {str(e)}")
+                    logger.error(
+                        f"Failed to update AR parameters for cell {icell}: {str(e)}"
+                    )
                     logger.error(f"Error occurred at iteration {i_iter}")
-                    logger.error(f"Last known variable states - y shape: {y.shape}, s shape: {s.shape}")
+                    logger.error(
+                        f"Last known variable states - y shape: {y.shape}, s shape: {s.shape}"
+                    )
                     logger.error(f"scal_best value for cell: {scal_best[icell]}")
                     raise
 
@@ -421,7 +454,9 @@ def pipeline_bin(
         metric_last = metric_df[metric_df["iter"] == i_iter - 1].dropna(
             subset=["err", "scale"]
         )
-        logger.debug(f"Metrics prepared - prev shape: {metric_prev.shape}, last shape: {metric_last.shape}")
+        logger.debug(
+            f"Metrics prepared - prev shape: {metric_prev.shape}, last shape: {metric_last.shape}"
+        )
 
         if len(metric_prev) > 0:
             err_cur = cur_metric.set_index("cell")["err"]
@@ -473,7 +508,9 @@ def pipeline_bin(
     # Compute final results
     logger.info("Computing final results")
     try:
-        opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
+        opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty(
+            (ncell, T * up_factor)
+        )
         for icell in range(ncell):
             opt_idx = metric_df.loc[
                 metric_df[metric_df["cell"] == icell]["err"].idxmin(), "iter"

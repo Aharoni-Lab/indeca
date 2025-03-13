@@ -289,7 +289,9 @@ class DeconvBin:
         update_weighting: bool = False,
     ) -> None:
         logger.debug("Starting deconvolution update")
-        logger.debug(f"Update parameters - tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}")
+        logger.debug(
+            f"Update parameters - tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
+        )
         logger.debug(f"Current backend: {self.backend}")
 
         if self.backend == "cvxpy":
@@ -478,18 +480,36 @@ class DeconvBin:
                     logger.debug(f"Updating {self.backend} problem")
                     # Log details about matrices before update
                     if updt_P:
-                        logger.debug(f"P matrix update - shape: {self.P.shape}, nnz: {self.P.nnz}")
-                        logger.debug(f"P data stats - min: {self.P.data.min():.6f}, max: {self.P.data.max():.6f}, mean: {self.P.data.mean():.6f}")
+                        logger.debug(
+                            f"P matrix update - shape: {self.P.shape}, nnz: {self.P.nnz}"
+                        )
+                        logger.debug(
+                            f"P data stats - min: {self.P.data.min():.6f}, max: {self.P.data.max():.6f}, mean: {self.P.data.mean():.6f}"
+                        )
                     if updt_q:
-                        logger.debug(f"q vector update - shape: {self.q.shape}, values: min={self.q.min():.6f}, max={self.q.max():.6f}, mean={self.q.mean():.6f}")
+                        logger.debug(
+                            f"q vector update - shape: {self.q.shape}, values: min={self.q.min():.6f}, max={self.q.max():.6f}, mean={self.q.mean():.6f}"
+                        )
                     if updt_A:
-                        logger.debug(f"A matrix update - shape: {self.A.shape}, nnz: {self.A.nnz}")
-                        logger.debug(f"A data stats - min: {self.A.data.min():.6f}, max: {self.A.data.max():.6f}, mean: {self.A.data.mean():.6f}")
+                        logger.debug(
+                            f"A matrix update - shape: {self.A.shape}, nnz: {self.A.nnz}"
+                        )
+                        logger.debug(
+                            f"A data stats - min: {self.A.data.min():.6f}, max: {self.A.data.max():.6f}, mean: {self.A.data.mean():.6f}"
+                        )
                     if updt_bounds:
-                        logger.debug(f"Bounds update - lb shape: {self.lb.shape}, ub shape: {self.ub.shape}")
-                        logger.debug(f"lb stats - min: {self.lb.min():.6f}, max: {self.lb.max():.6f}, mean: {self.lb.mean():.6f}")
-                        logger.debug(f"ub stats - min: {self.ub.min():.6f}, max: {self.ub.max():.6f}, mean: {self.ub.mean():.6f}")
-                        logger.debug(f"ub_inf stats - min: {self.ub_inf.min():.6f}, max: {self.ub_inf.max():.6f}, mean: {self.ub_inf.mean():.6f}")
+                        logger.debug(
+                            f"Bounds update - lb shape: {self.lb.shape}, ub shape: {self.ub.shape}"
+                        )
+                        logger.debug(
+                            f"lb stats - min: {self.lb.min():.6f}, max: {self.lb.max():.6f}, mean: {self.lb.mean():.6f}"
+                        )
+                        logger.debug(
+                            f"ub stats - min: {self.ub.min():.6f}, max: {self.ub.max():.6f}, mean: {self.ub.mean():.6f}"
+                        )
+                        logger.debug(
+                            f"ub_inf stats - min: {self.ub_inf.min():.6f}, max: {self.ub_inf.max():.6f}, mean: {self.ub_inf.mean():.6f}"
+                        )
 
                     logger.debug("Attempting prob_free update")
                     try:
@@ -511,7 +531,9 @@ class DeconvBin:
                         if updt_A:
                             logger.error(f"Ax shape: {self.A.data.shape}")
                         if updt_bounds:
-                            logger.error(f"l shape: {self.lb.shape}, u shape: {self.ub_inf.shape}")
+                            logger.error(
+                                f"l shape: {self.lb.shape}, u shape: {self.ub_inf.shape}"
+                            )
                         raise
 
                     logger.debug("Attempting prob update")
@@ -534,7 +556,9 @@ class DeconvBin:
                         if updt_A:
                             logger.error(f"Ax shape: {self.A.data.shape}")
                         if updt_bounds:
-                            logger.error(f"l shape: {self.lb.shape}, u shape: {self.ub.shape}")
+                            logger.error(
+                                f"l shape: {self.lb.shape}, u shape: {self.ub.shape}"
+                            )
                         raise
             except Exception as e:
                 logger.error(f"Failed to update optimization problem: {str(e)}")
@@ -804,13 +828,25 @@ class DeconvBin:
         # Log detailed information about matrices and vectors before setup
         logger.debug("Matrix/Vector shapes and properties before OSQP setup:")
         logger.debug(f"P matrix - shape: {self.P.shape}, nnz: {self.P.nnz}")
-        logger.debug(f"P data stats - min: {self.P.data.min():.6f}, max: {self.P.data.max():.6f}, mean: {self.P.data.mean():.6f}")
-        logger.debug(f"q vector - shape: {self.q.shape}, values: min={self.q.min():.6f}, max={self.q.max():.6f}, mean={self.q.mean():.6f}")
+        logger.debug(
+            f"P data stats - min: {self.P.data.min():.6f}, max: {self.P.data.max():.6f}, mean: {self.P.data.mean():.6f}"
+        )
+        logger.debug(
+            f"q vector - shape: {self.q.shape}, values: min={self.q.min():.6f}, max={self.q.max():.6f}, mean={self.q.mean():.6f}"
+        )
         logger.debug(f"A matrix - shape: {self.A.shape}, nnz: {self.A.nnz}")
-        logger.debug(f"A data stats - min: {self.A.data.min():.6f}, max: {self.A.data.max():.6f}, mean: {self.A.data.mean():.6f}")
-        logger.debug(f"lb vector - shape: {self.lb.shape}, values: min={self.lb.min():.6f}, max={self.lb.max():.6f}, mean={self.lb.mean():.6f}")
-        logger.debug(f"ub vector - shape: {self.ub.shape}, values: min={self.ub.min():.6f}, max={self.ub.max():.6f}, mean={self.ub.mean():.6f}")
-        logger.debug(f"ub_inf vector - shape: {self.ub_inf.shape}, values: min={self.ub_inf.min():.6f}, max={self.ub_inf.max():.6f}, mean={self.ub_inf.mean():.6f}")
+        logger.debug(
+            f"A data stats - min: {self.A.data.min():.6f}, max: {self.A.data.max():.6f}, mean: {self.A.data.mean():.6f}"
+        )
+        logger.debug(
+            f"lb vector - shape: {self.lb.shape}, values: min={self.lb.min():.6f}, max={self.lb.max():.6f}, mean={self.lb.mean():.6f}"
+        )
+        logger.debug(
+            f"ub vector - shape: {self.ub.shape}, values: min={self.ub.min():.6f}, max={self.ub.max():.6f}, mean={self.ub.mean():.6f}"
+        )
+        logger.debug(
+            f"ub_inf vector - shape: {self.ub_inf.shape}, values: min={self.ub_inf.min():.6f}, max={self.ub_inf.max():.6f}, mean={self.ub_inf.mean():.6f}"
+        )
 
         if self.backend == "emosqp":
             logger.debug("Setting up emosqp solver")
@@ -827,7 +863,7 @@ class DeconvBin:
                     eps_rel=1e-8,
                 )
                 logger.debug("emosqp setup successful")
-                
+
                 logger.debug("Generating code for prob_free")
                 m.codegen(
                     "osqp-codegen-prob_free",
@@ -835,10 +871,10 @@ class DeconvBin:
                     python_ext_name="emosqp_free",
                     force_rewrite=True,
                 )
-                
+
                 logger.debug("Updating bounds for constrained problem")
                 m.update(u=self.ub)
-                
+
                 logger.debug("Generating code for prob")
                 m.codegen(
                     "osqp-codegen-prob",
@@ -846,10 +882,10 @@ class DeconvBin:
                     python_ext_name="emosqp",
                     force_rewrite=True,
                 )
-                
+
                 import emosqp
                 import emosqp_free
-                
+
                 self.prob_free = emosqp_free
                 self.prob = emosqp
                 logger.debug("emosqp setup completed successfully")
@@ -866,7 +902,7 @@ class DeconvBin:
                 elif self.backend == "cuosqp":
                     self.prob_free = cuosqp.OSQP()
                     self.prob = cuosqp.OSQP()
-                
+
                 logger.debug("Setting up prob_free")
                 logger.debug("Copying matrices/vectors for prob_free setup")
                 P_copy = self.P.copy()
@@ -874,13 +910,15 @@ class DeconvBin:
                 A_copy = self.A.copy()
                 lb_copy = self.lb.copy()
                 ub_inf_copy = self.ub_inf.copy()
-                
+
                 logger.debug("Verifying copy shapes match originals:")
                 logger.debug(f"P: original {self.P.shape} vs copy {P_copy.shape}")
                 logger.debug(f"q: original {self.q.shape} vs copy {q_copy.shape}")
                 logger.debug(f"A: original {self.A.shape} vs copy {A_copy.shape}")
                 logger.debug(f"lb: original {self.lb.shape} vs copy {lb_copy.shape}")
-                logger.debug(f"ub_inf: original {self.ub_inf.shape} vs copy {ub_inf_copy.shape}")
+                logger.debug(
+                    f"ub_inf: original {self.ub_inf.shape} vs copy {ub_inf_copy.shape}"
+                )
 
                 self.prob_free.setup(
                     P=P_copy,
@@ -891,7 +929,7 @@ class DeconvBin:
                     verbose=False,
                 )
                 logger.debug("prob_free setup successful")
-                
+
                 logger.debug("Setting up prob")
                 logger.debug("Copying matrices/vectors for prob setup")
                 P_copy = self.P.copy()
@@ -899,7 +937,7 @@ class DeconvBin:
                 A_copy = self.A.copy()
                 lb_copy = self.lb.copy()
                 ub_copy = self.ub.copy()
-                
+
                 logger.debug("Verifying copy shapes match originals:")
                 logger.debug(f"P: original {self.P.shape} vs copy {P_copy.shape}")
                 logger.debug(f"q: original {self.q.shape} vs copy {q_copy.shape}")
@@ -921,7 +959,9 @@ class DeconvBin:
                 logger.error(f"Failed to setup {self.backend} solver: {str(e)}")
                 logger.error("Last known matrix/vector shapes:")
                 logger.error(f"P: {self.P.shape}, q: {self.q.shape}, A: {self.A.shape}")
-                logger.error(f"lb: {self.lb.shape}, ub: {self.ub.shape}, ub_inf: {self.ub_inf.shape}")
+                logger.error(
+                    f"lb: {self.lb.shape}, ub: {self.ub.shape}, ub_inf: {self.ub_inf.shape}"
+                )
                 raise
 
     def _solve(
@@ -1251,10 +1291,10 @@ class DeconvBin:
                 )
             else:
                 self.lb, self.ub, self.ub_inf = (
-                np.zeros(self.T + 1),
-                np.zeros(self.T + 1),
-                np.zeros(self.T + 1),
-            )
+                    np.zeros(self.T + 1),
+                    np.zeros(self.T + 1),
+                    np.zeros(self.T + 1),
+                )
             self.ub[0] = ym
             self.ub[self.nzidx_s + 1] = 1
             self.ub_inf[0] = ym

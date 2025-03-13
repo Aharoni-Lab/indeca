@@ -168,7 +168,7 @@ if __name__ == "__main__":
         Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         logger.debug(f"Loaded dataset shape - Y: {Y.shape}, S_true: {S_true.shape}")
         Y = Y.dropna("frame")
-        S_true = S_true.dropna("frame") 
+        S_true = S_true.dropna("frame")
         if subset is not None:
             Y = Y.sel(subset)
             S_true = S_true.sel(subset)
