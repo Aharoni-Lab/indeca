@@ -3,12 +3,9 @@ import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import plotly.graph_objects as go
 from matplotlib.collections import LineCollection
 from matplotlib.gridspec import GridSpec
-
-from minian_bin.metrics import assignment_distance
 
 
 def plot_traces(tr_dict, **kwargs):
@@ -79,35 +76,9 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     return ax.add_collection(lc)
 
 
-def plot_met_ROC(
-    svals, s_ref, objs, scals, thres, opt_idx, grad_color: bool = True, **kwargs
-):
-    if not isinstance(svals, dict):
-        svals = {"": svals}
-        objs = {"": objs}
-        scals = {"": scals}
-        thres = {"": thres}
-        opt_idx = {"": opt_idx}
-    metdf = []
-    for grp, sval in svals.items():
-        ths = thres[grp]
-        obj = objs[grp]
-        scl = scals[grp]
-        dists = [assignment_distance(s_ref, ss, **kwargs) for ss in sval]
-        mdf = pd.DataFrame(
-            {
-                "group": grp,
-                "thres": ths,
-                "scals": scl,
-                "objs": obj,
-                "mdist": np.array([d[0] for d in dists]),
-                "f1": np.array([d[1] for d in dists]),
-                "prec": np.array([d[2] for d in dists]),
-                "recall": np.array([d[3] for d in dists]),
-            }
-        )
-        metdf.append(mdf)
-    metdf = pd.concat(metdf, ignore_index=True)
+def plot_met_ROC(metdf, grad_color: bool = True):
+    if "group" not in metdf.columns:
+        metdf["group"] = ""
     fig = plt.figure(constrained_layout=True, figsize=(8, 4))
     gs = GridSpec(3, 2, figure=fig)
     ax_err = fig.add_subplot(gs[0, 0])
@@ -119,8 +90,8 @@ def plot_met_ROC(
     ls = ["solid"] if grad_color else ["dotted", "dashed", "dashdot"]
     for (grp, grpdf), cur_ls in zip(metdf.groupby("group"), itt.cycle(ls)):
         try:
-            oidx = opt_idx[grp]
-        except KeyError:
+            oidx = int(grpdf["opt_idx"].dropna().unique().item())
+        except ValueError:
             oidx = None
         th = np.array(grpdf["thres"])
         ax_err.set_yscale("log")

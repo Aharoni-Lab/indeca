@@ -7,10 +7,10 @@ import pytest
 import seaborn as sns
 
 from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
-from minian_bin.metrics import assignment_distance
 from minian_bin.simulation import ar_trace
 
-from .plotting_utils import plot_met_ROC, plot_traces
+from .testing_utils.metrics import assignment_distance, compute_metrics
+from .testing_utils.plotting import plot_met_ROC, plot_traces
 
 
 @pytest.fixture()
@@ -254,7 +254,13 @@ class TestDemoDeconv:
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
         # plotting
-        fig = plot_met_ROC(svals, s_org, objs, scals, thres, opt_idx, tdist_thres=3)
+        metdf = compute_metrics(
+            s_org,
+            svals,
+            {"objs": objs, "scals": scals, "thres": thres, "opt_idx": opt_idx},
+            tdist_thres=3,
+        )
+        fig = plot_met_ROC(metdf)
         fig.savefig(test_fig_path_svg)
 
     def test_demo_solve_penal(
@@ -291,13 +297,32 @@ class TestDemoDeconv:
             scaling=param_thres_scaling, return_intm=True
         )
         # plotting
-        thres = {"No Penalty": intm_nopn[1], "Penalty": intm_pn[1]}
-        scals = {"No Penalty": intm_nopn[5], "Penalty": intm_pn[5]}
-        svals = {"No Penalty": intm_nopn[2], "Penalty": intm_pn[2]}
-        objs = {"No Penalty": intm_nopn[6], "Penalty": intm_pn[6]}
-        opt_idx = {"Penalty": intm_pn[7]}
+        metdf_nopn = compute_metrics(
+            s_org,
+            intm_nopn[2],
+            {
+                "thres": intm_nopn[1],
+                "scals": intm_nopn[5],
+                "objs": intm_nopn[6],
+                "group": "No Penalty",
+            },
+            tdist_thres=3,
+        )
+        metdf_pn = compute_metrics(
+            s_org,
+            intm_pn[2],
+            {
+                "thres": intm_pn[1],
+                "scals": intm_pn[5],
+                "objs": intm_pn[6],
+                "opt_idx": intm_pn[7],
+                "group": "Penalty",
+            },
+            tdist_thres=3,
+        )
         fig = plot_met_ROC(
-            svals, s_org, objs, scals, thres, opt_idx, tdist_thres=3, grad_color=False
+            pd.concat([metdf_nopn, metdf_pn], ignore_index=True),
+            grad_color=False,
         )
         fig.savefig(test_fig_path_svg)
 

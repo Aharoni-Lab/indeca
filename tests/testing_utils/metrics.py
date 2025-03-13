@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
@@ -61,3 +62,18 @@ def assignment_distance(
     else:
         raise NotImplementedError("Aggregation method must be 'median' or 'mean'")
     return mdist, f1, precision, recall
+
+
+def compute_metrics(s_ref, svals, add_met, **kwargs):
+    mets = [assignment_distance(s_ref, ss, **kwargs) for ss in svals]
+    metdf = pd.DataFrame(
+        {
+            "mdist": np.array([d[0] for d in mets]),
+            "f1": np.array([d[1] for d in mets]),
+            "prec": np.array([d[2] for d in mets]),
+            "recall": np.array([d[3] for d in mets]),
+        }
+    )
+    for met_name, mets in add_met.items():
+        metdf[met_name] = mets
+    return metdf
