@@ -11,6 +11,59 @@ IN_RES_PATH = Path(__file__).parent / "output" / "data" / "test_results"
 FIG_PATH = Path(__file__).parent / "output" / "figs" / "test_results"
 
 
+# %% plot AR results
+def AR_scatter(data, color, x, y, palette, zorder, **kwargs):
+    ax = plt.gca()
+    data = data.copy()
+    res_gt = data[data["method"] == "truth"]
+    x_gt = res_gt[x].unique().item()
+    y_gt = res_gt[y].unique().item()
+    ax.axhline(y_gt, c="gray", ls=":", zorder=0)
+    ax.axvline(x_gt, c="gray", ls=":", zorder=0)
+    data["method"] = data["method"] + data["unit"].map(
+        lambda u: "-all" if u == "all" else ""
+    )
+    for (mthd, isreal), subdf in data[data["method"] != "truth-all"].groupby(
+        ["method", "isreal"], observed=True
+    ):
+        mk_kws = (
+            {"ec": None, "fc": palette[mthd]}
+            if isreal
+            else {"ec": palette[mthd], "fc": "none"}
+        )
+        ax.scatter(subdf[x], subdf[y], label=mthd, **mk_kws, **kwargs)
+
+
+fig_path = FIG_PATH / "demo_solve_fit_h"
+fig_path.mkdir(parents=True, exist_ok=True)
+result = pd.read_feather(IN_RES_PATH / "test_demo_solve_fit_h_num.feat")
+result = result.rename(columns=lambda c: c.removesuffix("_param"))
+result["param_taus"] = result["param_taus"].map(lambda t: tuple(t.tolist()))
+cmap = plt.get_cmap("tab10").colors
+palette = {
+    "cnmf_smth": cmap[0],
+    "cnmf_raw": cmap[1],
+    "solve_fit": cmap[2],
+    "solve_fit-all": cmap[3],
+}
+for (td, tr), res_sub in result.groupby("param_taus"):
+    g = sns.FacetGrid(
+        res_sub, row="param_upsamp", col="param_ns_level", margin_titles=True
+    )
+    g.map_dataframe(
+        AR_scatter,
+        x="dhm0",
+        y="dhm1",
+        zorder={"cnmf_smth": 1, "cnmf_raw": 1, "solve_fit": 2, "solve_fit-all": 3},
+        palette=palette,
+        lw=0.6,
+        s=6,
+    )
+    g.add_legend()
+    g.figure.savefig(fig_path / "tau({},{}).svg".format(td, tr), bbox_inches="tight")
+    plt.close(g.figure)
+
+
 # %% plot penalty results
 def sel_thres(resdf, th_idx, label, met_cols):
     res = resdf.iloc[th_idx, :]
@@ -65,6 +118,7 @@ for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):
             facet_kws={"height": 3.5},
         )
         g.tick_params(rotation=45)
+        g.set(yscale="log")
         g.figure.savefig(
             fig_path / "tau({},{})-{}.svg".format(td, tr, met), bbox_inches="tight"
         )
