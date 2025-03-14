@@ -51,6 +51,7 @@ def agg_result(
 fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
 result = pd.read_feather(IN_RES_PATH / "test_demo_solve_penal.feat")
+result = result[result["param_y_scaling_param"]]
 grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "param_rand_seed_param"]
 res_agg = result.groupby(grp_dim).apply(agg_result).reset_index()
 for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):

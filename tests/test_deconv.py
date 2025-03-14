@@ -65,6 +65,11 @@ def param_upsamp(request):
 
 
 @pytest.fixture(params=[True, False])
+def param_y_scaling(request):
+    return request.param
+
+
+@pytest.fixture(params=[True, False])
 def param_thres_scaling(request):
     return request.param
 
@@ -87,7 +92,14 @@ def fixt_c(param_y_len, param_taus, param_tmp_P, param_rand_seed):
 
 
 @pytest.fixture()
-def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand_seed):
+def fixt_y(
+    param_y_len,
+    param_taus,
+    param_tmp_upsamp,
+    param_ns_level,
+    param_y_scaling,
+    param_rand_seed,
+):
     upsamp, tmp_P = param_tmp_upsamp
     c_org, s_org = ar_trace(
         param_y_len * upsamp,
@@ -101,13 +113,17 @@ def fixt_y(param_y_len, param_taus, param_tmp_upsamp, param_ns_level, param_rand
         s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
     else:
         c, s = c_org, s_org
-    y = c + np.random.normal(0, param_ns_level, c.shape)
-    return y, c, c_org, s, s_org, param_taus, param_ns_level, upsamp
+    if param_y_scaling:
+        scl = np.random.uniform(0.5, 2)
+    else:
+        scl = 1
+    y = scl * (c + np.random.normal(0, param_ns_level, c.shape))
+    return y, c, c_org, s, s_org, param_taus, param_ns_level, upsamp, scl
 
 
 @pytest.fixture()
 def fixt_deconv(fixt_y, param_backend, param_norm):
-    y, c, c_org, s, s_org, taus, ns_lev, upsamp = fixt_y
+    y, c, c_org, s, s_org, taus, ns_lev, upsamp, scl = fixt_y
     deconv = DeconvBin(
         y=y,
         tau=np.array(taus) * upsamp,
@@ -128,6 +144,7 @@ def fixt_deconv(fixt_y, param_backend, param_norm):
         taus,
         ns_lev,
         upsamp,
+        scl,
     )
 
 
@@ -160,10 +177,12 @@ class TestDeconvBin:
         runtime_xfail,
     ):
         # book-keeping
+        y, c, c_org, s, s_org, taus, ns_lev, upsamp_y, scl = fixt_y
         if param_backend == "cvxpy":
             pytest.skip("Skipping cvxpy backend for test_solve_thres")
+        if scl != 1:
+            pytest.skip("Skipping scaling for test_solve_thres")
         # act
-        y, c, c_org, s, s_org, taus, ns_lev, upsamp_y = fixt_y
         upsamp_ratio = upsamp_y / param_upsamp
         deconv = DeconvBin(
             y=y,
@@ -249,6 +268,7 @@ class TestDemoDeconv:
             taus,
             ns_lev,
             upsamp,
+            scl,
         ) = fixt_deconv
         if param_backend == "cvxpy":
             pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
@@ -283,12 +303,16 @@ class TestDemoDeconv:
             taus,
             ns_lev,
             upsamp,
+            scl,
         ) = fixt_deconv
         if param_backend == "cvxpy":
             pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
         if upsamp > 2:
             pytest.skip("Skipping highly upsampled signal for solve_penal demo")
         # act
+        s_free, _ = deconv.solve(amp_constraint=False)
+        scl_init = np.ptp(s_free)
+        deconv.update(scale=scl_init)
         _, _, _, _, opt_penal = deconv.solve_penal(scaling=False)
         deconv._reset_cache()
         deconv._reset_mask()
@@ -337,6 +361,7 @@ class TestDemoDeconv:
                 "tau_d": taus[0],
                 "tau_r": taus[1],
                 "ns_lev": ns_lev,
+                "y_scaling": scl,
                 "thres_scaling": param_thres_scaling,
                 "upsamp": upsamp,
                 "backend": param_backend,
