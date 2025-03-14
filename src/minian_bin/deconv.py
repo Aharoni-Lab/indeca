@@ -480,12 +480,22 @@ class DeconvBin:
             nz_only=True,
         )
         if not len(svals) > 0:
-            return (
-                np.full(len(self.nzidx_s), np.nan),
-                np.full(len(self.nzidx_c), np.nan),
-                0,
-                np.inf,
-            )
+            if return_intm:
+                svals, thres = max_thres(
+                    opt_s,
+                    self.nthres,
+                    th_min=self.th_min,
+                    th_max=self.th_max,
+                    reverse_thres=True,
+                    return_thres=True,
+                )
+            else:
+                return (
+                    np.full(len(self.nzidx_s), np.nan),
+                    np.full(len(self.nzidx_c), np.nan),
+                    0,
+                    np.inf,
+                )
         cvals = [self._compute_c(s) for s in svals]
         yfvals = [R @ c for c in cvals]
         if scaling:

@@ -52,9 +52,18 @@ def assignment_distance(
             tdists[idx_mask],
         )
     tp = len(idx_ref)
-    precision = tp / len(t_slv)
-    recall = tp / len(t_ref)
-    f1 = 2 * (precision * recall) / (precision + recall)
+    if len(t_slv) > 0:
+        precision = tp / len(t_slv)
+    else:
+        precision = 0
+    if len(t_ref) > 0:
+        recall = tp / len(t_ref)
+    else:
+        recall = 0
+    if precision + recall > 0:
+        f1 = 2 * (precision * recall) / (precision + recall)
+    else:
+        f1 = 0
     if tdist_agg == "median":
         mdist = np.median(tdists)
     elif tdist_agg == "mean":
