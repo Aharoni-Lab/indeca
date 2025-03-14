@@ -89,7 +89,7 @@ def fixt_y(
             s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
         else:
             c, s = c_org, s_org
-        y = c + np.random.normal(0, param_ns_level, c.shape)
+        y = c + np.random.normal(0, param_ns_level, c.shape) * upsamp
         Y.append(y)
         C_org.append(c_org)
         S_org.append(s_org)
