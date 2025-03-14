@@ -130,7 +130,7 @@ class TestDemoSolveFit:
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
             Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp
         )
-        tau_fit = -1 / lams
+        tau_fit = -1 / lams / upsamp
         dhm_fit, _ = find_dhm(True, tau_fit, ps)
         res_df.append(
             pd.DataFrame(
@@ -152,7 +152,7 @@ class TestDemoSolveFit:
         for icell, (y, s) in enumerate(zip(Y, S_org)):
             for mthd, smth in {"cnmf_raw": False, "cnmf_smth": True}.items():
                 theta, _ = estimate_coefs(
-                    y, p=2, noise_freq=0.05, use_smooth=smth, add_lag=20
+                    y, p=2, noise_freq=0.1, use_smooth=smth, add_lag=20
                 )
                 is_biexp, cur_taus, cur_ps = AR2exp(*theta)
                 cur_dhm, _ = find_dhm(is_biexp, cur_taus, cur_ps)
@@ -174,7 +174,7 @@ class TestDemoSolveFit:
                     )
                 )
             lams, ps, _, _, _ = solve_fit_h_num(y, s, np.ones(1), up_factor=upsamp)
-            tau_fit = -1 / lams
+            tau_fit = -1 / lams / upsamp
             dhm_fit, _ = find_dhm(True, tau_fit, ps)
             res_df.append(
                 pd.DataFrame(
