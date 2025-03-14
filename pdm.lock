@@ -2,10 +2,10 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default", "test"]
+groups = ["default", "pytest-xdist[psutil]", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:0d8ff2c4b8d099e5e30d02737cc36762a050c1e9a973528a7261f6606acd774a"
+content_hash = "sha256:d3b3778c272ebddebfc33a257957ba5dd7a2a11cbbb0f2eb94f0acea2d1f95b6"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
