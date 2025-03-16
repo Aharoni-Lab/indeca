@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from pytest_harvest import get_session_results_df, get_xdist_worker_id, is_main_process
+
+AGG_RES_DIR = "tests/output/data/agg_results"
 
 
 @pytest.fixture
@@ -42,7 +45,7 @@ def func_figs_dir(request, output_figs_dir):
 @pytest.fixture
 def func_data_dir(request, output_data_dir):
     test_func = request.function.__name__
-    dat_dir = os.path.join(output_data_dir, test_func)
+    dat_dir = os.path.join(output_data_dir, "debug_results", test_func)
     os.makedirs(dat_dir, exist_ok=True)
     return dat_dir
 
@@ -127,3 +130,29 @@ def simulation_params():
         "framerate": 30,
         "noise_level": 0.1,
     }
+
+
+def pytest_sessionfinish(session):
+    """Gather all results and save them to a csv.
+    Works both on worker and master nodes, and also with xdist disabled"""
+    session_results_df = get_session_results_df(session)
+    if not len(session_results_df) > 0:
+        return
+    session_results_df["func_name"] = session_results_df["pytest_obj"].apply(
+        lambda o: o.__name__
+    )
+    for fname, fdf in session_results_df.groupby("func_name"):
+        fdf = fdf[fdf["data"].notnull()].reset_index()
+        if len(fdf) > 0:
+            param_cols = list(set(fdf.columns) - set(["data", "pytest_obj"]))
+            result = []
+            for _, frow in fdf.iterrows():
+                dat = frow["data"]
+                dat = dat.assign(**{p: [frow[p]] * len(dat) for p in param_cols})
+                result.append(dat)
+            result = pd.concat(result, ignore_index=True)
+            suffix = "all" if is_main_process(session) else get_xdist_worker_id(session)
+            dat_dir = os.path.join(AGG_RES_DIR, fname)
+            os.makedirs(dat_dir, exist_ok=True)
+            result.to_feather(os.path.join(dat_dir, "{}.feat".format(suffix)))
+            # result.to_csv(os.path.join(AGG_RES_DIR, "{}-{}.csv".format(fname, suffix)))

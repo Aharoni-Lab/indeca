@@ -249,21 +249,3 @@ def test_fit_sumexp_gd(sample_timeseries):
     assert len(ps) == 2
     assert isinstance(float(scal), float)  # Convert any numeric type to float
     assert y_fit.shape == y.shape
-
-
-class TestResults:
-    def test_results(self, module_results_df, func_data_dir):
-        module_results_df["func_name"] = module_results_df["pytest_obj"].apply(
-            lambda o: o.__name__
-        )
-        for fname, fdf in module_results_df.groupby("func_name"):
-            fdf = fdf[fdf["data"].notnull()].reset_index()
-            if len(fdf) > 0:
-                param_cols = list(set(fdf.columns) - set(["data", "pytest_obj"]))
-                result = []
-                for _, frow in fdf.iterrows():
-                    dat = frow["data"]
-                    dat = dat.assign(**{p: [frow[p]] * len(dat) for p in param_cols})
-                    result.append(dat)
-                result = pd.concat(result, ignore_index=True)
-                result.to_feather(os.path.join(func_data_dir, "{}.feat".format(fname)))

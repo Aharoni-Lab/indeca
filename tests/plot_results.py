@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from testing_utils.misc import load_agg_result
 from testing_utils.plotting import plot_agg_boxswarm
 
-IN_RES_PATH = Path(__file__).parent / "output" / "data" / "test_results"
-FIG_PATH = Path(__file__).parent / "output" / "figs" / "test_results"
+IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg_results"
+FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
 
 
 # %% plot AR results
@@ -36,7 +37,7 @@ def AR_scatter(data, color, x, y, palette, zorder, **kwargs):
 
 fig_path = FIG_PATH / "demo_solve_fit_h"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = pd.read_feather(IN_RES_PATH / "test_demo_solve_fit_h_num.feat")
+result = load_agg_result(IN_RES_PATH / "test_demo_solve_fit_h_num")
 result = result.rename(columns=lambda c: c.removesuffix("_param"))
 result["param_taus"] = result["param_taus"].map(lambda t: tuple(t.tolist()))
 cmap = plt.get_cmap("tab10").colors
@@ -103,7 +104,7 @@ def agg_result(
 
 fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = pd.read_feather(IN_RES_PATH / "test_demo_solve_penal.feat")
+result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal")
 result = result[result["param_y_scaling_param"]]
 grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "param_rand_seed_param"]
 res_agg = result.groupby(grp_dim).apply(agg_result).reset_index()
@@ -128,7 +129,7 @@ for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):
 # %% plot thresholds
 fig_path = FIG_PATH / "solve_thres"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = pd.read_feather(IN_RES_PATH / "test_solve_thres.feat")
+result = load_agg_result(IN_RES_PATH / "test_solve_thres")
 for (td, tr), res_sub in result.groupby(["tau_d", "tau_r"]):
     for met in ["mdist", "f1", "precs", "recall"]:
         g = plot_agg_boxswarm(res_sub, row="upsamp", col="upsamp_y", x="ns_lev", y=met)
