@@ -11,9 +11,9 @@ from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT
 from scipy.special import huber
 
+from minian_bin.logging_config import get_module_logger
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.utils import scal_lstsq
-from minian_bin.logging_config import get_module_logger
 
 # Initialize logger for this module
 logger = get_module_logger("deconv")
@@ -22,7 +22,7 @@ logger.info("Deconv module initialized")
 try:
     import cuosqp
 except ImportError:
-    warnings.warn("No GPU solver support")
+    logger.warning("No GPU solver support")
 
 
 def construct_R(T: int, up_factor: int):
@@ -288,150 +288,93 @@ class DeconvBin:
         w: np.ndarray = None,
         update_weighting: bool = False,
     ) -> None:
-        logger.debug("Starting deconvolution update")
         logger.debug(
-            f"Update parameters - tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
+            f"Updating parameters - backend: {self.backend}, tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
         )
-        logger.debug(f"Current backend: {self.backend}")
-
         if self.backend == "cvxpy":
-            logger.debug("Updating cvxpy parameters")
             if y is not None:
-                logger.debug("Updating y value")
                 self.y.value = y
             if tau is not None:
-                logger.debug(f"Computing new theta from tau: {tau}")
-                try:
-                    theta_new = np.array(tau2AR(tau[0], tau[1]))
-                    logger.debug(f"New theta computed: {theta_new}")
-                    _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
-                    logger.debug(f"AR2tau parameters: p={p}")
-                    coef, _, _ = exp_pulse(
-                        tau[0],
-                        tau[1],
-                        p_d=p,
-                        p_r=-p,
-                        nsamp=self.coef_len,
-                        kn_len=self.coef_len,
-                    )
-                    logger.debug(f"New coef shape: {coef.shape}")
-                    self.coef.value = coef
-                    self.theta.value = theta_new
-                    logger.debug("Updating HG matrices")
-                    self._update_HG()
-                except Exception as e:
-                    logger.error(f"Failed to update tau parameters: {str(e)}")
-                    raise
+                theta_new = np.array(tau2AR(tau[0], tau[1]))
+                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                coef, _, _ = exp_pulse(
+                    tau[0],
+                    tau[1],
+                    p_d=p,
+                    p_r=-p,
+                    nsamp=self.coef_len,
+                    kn_len=self.coef_len,
+                )
+                self.coef.value = coef
+                self.theta.value = theta_new
+                self._update_HG()
             if coef is not None:
-                logger.debug("Updating coef value and HG matrices")
-                try:
-                    self.coef.value = coef
-                    self._update_HG()
-                except Exception as e:
-                    logger.error(f"Failed to update coef: {str(e)}")
-                    raise
+                self.coef.value = coef
+                self._update_HG()
             if scale is not None:
-                logger.debug(f"Setting scale to {scale}")
                 self.scale.value = scale
             if scale_mul is not None:
-                logger.debug(f"Multiplying scale by {scale_mul}")
                 self.scale.value = scale_mul * self.scale.value
-                logger.debug(f"New scale value: {self.scale.value}")
             if l1_penal is not None:
-                logger.debug(f"Updating l1_penal to {l1_penal}")
                 self.l1_penal.value = l1_penal
             if l0_penal is not None:
-                logger.debug(f"Updating l0_penal to {l0_penal}")
                 self.l0_penal = l0_penal
             if w is not None:
-                logger.debug("Updating weight vector")
                 self._update_w(w)
             if l0_penal is not None or w is not None:
-                logger.debug("Updating l0_w parameter")
                 self.l0_w.value = self.l0_penal * self.w
 
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-            logger.debug(f"Updating {self.backend} parameters")
             # update input params
             if y is not None:
-                logger.debug("Updating y value")
                 self.y = y
             if tau is not None:
-                logger.debug(f"Computing new theta from tau: {tau}")
-                try:
-                    theta_new = np.array(tau2AR(tau[0], tau[1]))
-                    logger.debug(f"New theta computed: {theta_new}")
-                    _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
-                    logger.debug(f"AR2tau parameters: p={p}")
-                    coef, _, _ = exp_pulse(
-                        tau[0],
-                        tau[1],
-                        p_d=p,
-                        p_r=-p,
-                        nsamp=self.coef_len,
-                        kn_len=self.coef_len,
-                    )
-                    logger.debug(f"New coef shape: {coef.shape}")
-                    self.theta = theta_new
-                except Exception as e:
-                    logger.error(f"Failed to update tau parameters: {str(e)}")
-                    raise
+                theta_new = np.array(tau2AR(tau[0], tau[1]))
+                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                coef, _, _ = exp_pulse(
+                    tau[0],
+                    tau[1],
+                    p_d=p,
+                    p_r=-p,
+                    nsamp=self.coef_len,
+                    kn_len=self.coef_len,
+                )
+                self.theta = theta_new
             if coef is not None:
-                logger.debug("Updating coef value")
                 self.coef = coef
             if scale is not None:
-                logger.debug(f"Setting scale to {scale}")
                 self.scale = scale
             if scale_mul is not None:
-                logger.debug(f"Multiplying scale by {scale_mul}")
                 self.scale = scale_mul * self.scale
-                logger.debug(f"New scale value: {self.scale}")
             if l1_penal is not None:
-                logger.debug(f"Updating l1_penal to {l1_penal}")
                 self.l1_penal = l1_penal
             if l0_penal is not None:
-                logger.debug(f"Updating l0_penal to {l0_penal}")
                 self.l0_penal = l0_penal
             if w is not None:
-                logger.debug("Updating weight vector")
                 self._update_w(w)
 
             # update internal variables
-            logger.debug("Checking which internal variables need updates")
             updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds = [False] * 6
             if coef is not None:
-                logger.debug("Updating HG matrices due to coef change")
-                try:
-                    self._update_HG()
-                    updt_HG = True
-                    if self.err_weighting and update_weighting:
-                        logger.debug("Updating error weighting")
-                        self._update_Wt()
-                        updt_q0 = True
-                except Exception as e:
-                    logger.error(f"Failed to update HG matrices: {str(e)}")
-                    raise
-
+                self._update_HG()
+                updt_HG = True
+                if self.err_weighting and update_weighting:
+                    self._update_Wt()
+                    updt_q0 = True
             if self.norm == "huber":
-                logger.debug("Processing Huber norm updates")
                 if any((scale is not None, scale_mul is not None, updt_HG)):
-                    logger.debug("Updating A matrix")
                     self._update_A()
                     updt_A = True
                 if any(
                     (w is not None, l0_penal is not None, l1_penal is not None, updt_HG)
                 ):
-                    logger.debug("Updating q vector")
                     self._update_q()
                     updt_q = True
                 if y is not None:
-                    logger.debug("Updating bounds")
                     self._update_bounds()
                     updt_bounds = True
             else:
-                logger.debug("Processing non-Huber norm updates")
                 if updt_HG:
-                    logger.debug("Updating A matrix")
                     A_before = self.A.copy()
                     self._update_A()
                     assert self.A.shape == A_before.shape
@@ -439,7 +382,6 @@ class DeconvBin:
                     assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
                     updt_A = True
                 if any((scale is not None, scale_mul is not None, updt_HG)):
-                    logger.debug("Updating P matrix")
                     P_before = self.P.copy()
                     self._update_P()
                     assert self.P.shape == P_before.shape
@@ -449,7 +391,6 @@ class DeconvBin:
                 if any(
                     (scale is not None, scale_mul is not None, y is not None, updt_HG)
                 ):
-                    logger.debug("Updating q0 vector")
                     q0_before = self.q0.copy()
                     self._update_q0()
                     assert self.q0.shape == q0_before.shape
@@ -457,114 +398,35 @@ class DeconvBin:
                 if any(
                     (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
                 ):
-                    logger.debug("Updating q vector")
                     q_before = self.q.copy()
                     self._update_q()
                     assert self.q.shape == q_before.shape
                     updt_q = True
-
             # update prob
-            logger.debug("Updating optimization problem")
-            try:
-                if self.backend == "emosqp":
-                    logger.debug("Updating emosqp problem")
-                    if updt_P:
-                        logger.debug("Updating P matrix in problem")
-                        self.prob_free.update_P(self.P.data, None, 0)
-                        self.prob.update_P(self.P.data, None, 0)
-                    if updt_q:
-                        logger.debug("Updating q vector in problem")
-                        self.prob_free.update_lin_cost(self.q)
-                        self.prob.update_lin_cost(self.q)
-                elif self.backend in ["osqp", "cuosqp"]:
-                    logger.debug(f"Updating {self.backend} problem")
-                    # Log details about matrices before update
-                    if updt_P:
-                        logger.debug(
-                            f"P matrix update - shape: {self.P.shape}, nnz: {self.P.nnz}"
-                        )
-                        logger.debug(
-                            f"P data stats - min: {self.P.data.min():.6f}, max: {self.P.data.max():.6f}, mean: {self.P.data.mean():.6f}"
-                        )
-                    if updt_q:
-                        logger.debug(
-                            f"q vector update - shape: {self.q.shape}, values: min={self.q.min():.6f}, max={self.q.max():.6f}, mean={self.q.mean():.6f}"
-                        )
-                    if updt_A:
-                        logger.debug(
-                            f"A matrix update - shape: {self.A.shape}, nnz: {self.A.nnz}"
-                        )
-                        logger.debug(
-                            f"A data stats - min: {self.A.data.min():.6f}, max: {self.A.data.max():.6f}, mean: {self.A.data.mean():.6f}"
-                        )
-                    if updt_bounds:
-                        logger.debug(
-                            f"Bounds update - lb shape: {self.lb.shape}, ub shape: {self.ub.shape}"
-                        )
-                        logger.debug(
-                            f"lb stats - min: {self.lb.min():.6f}, max: {self.lb.max():.6f}, mean: {self.lb.mean():.6f}"
-                        )
-                        logger.debug(
-                            f"ub stats - min: {self.ub.min():.6f}, max: {self.ub.max():.6f}, mean: {self.ub.mean():.6f}"
-                        )
-                        logger.debug(
-                            f"ub_inf stats - min: {self.ub_inf.min():.6f}, max: {self.ub_inf.max():.6f}, mean: {self.ub_inf.mean():.6f}"
-                        )
-
-                    logger.debug("Attempting prob_free update")
-                    try:
-                        self.prob_free.update(
-                            Px=self.P.copy().data if updt_P else None,
-                            q=self.q.copy() if updt_q else None,
-                            Ax=self.A.copy().data if updt_A else None,
-                            l=self.lb.copy() if updt_bounds else None,
-                            u=self.ub_inf.copy() if updt_bounds else None,
-                        )
-                        logger.debug("prob_free update successful")
-                    except Exception as e:
-                        logger.error(f"prob_free update failed: {str(e)}")
-                        logger.error("Update parameters:")
-                        if updt_P:
-                            logger.error(f"Px shape: {self.P.data.shape}")
-                        if updt_q:
-                            logger.error(f"q shape: {self.q.shape}")
-                        if updt_A:
-                            logger.error(f"Ax shape: {self.A.data.shape}")
-                        if updt_bounds:
-                            logger.error(
-                                f"l shape: {self.lb.shape}, u shape: {self.ub_inf.shape}"
-                            )
-                        raise
-
-                    logger.debug("Attempting prob update")
-                    try:
-                        self.prob.update(
-                            Px=self.P.copy().data if updt_P else None,
-                            q=self.q.copy() if updt_q else None,
-                            Ax=self.A.copy().data if updt_A else None,
-                            l=self.lb.copy() if updt_bounds else None,
-                            u=self.ub.copy() if updt_bounds else None,
-                        )
-                        logger.debug("prob update successful")
-                    except Exception as e:
-                        logger.error(f"prob update failed: {str(e)}")
-                        logger.error("Update parameters:")
-                        if updt_P:
-                            logger.error(f"Px shape: {self.P.data.shape}")
-                        if updt_q:
-                            logger.error(f"q shape: {self.q.shape}")
-                        if updt_A:
-                            logger.error(f"Ax shape: {self.A.data.shape}")
-                        if updt_bounds:
-                            logger.error(
-                                f"l shape: {self.lb.shape}, u shape: {self.ub.shape}"
-                            )
-                        raise
-            except Exception as e:
-                logger.error(f"Failed to update optimization problem: {str(e)}")
-                raise
-
-        logger.debug("Deconvolution update completed successfully")
+            logger.debug(f"Updating optimization problem with {self.backend}")
+            if self.backend == "emosqp":
+                if updt_P:
+                    self.prob_free.update_P(self.P.data, None, 0)
+                    self.prob.update_P(self.P.data, None, 0)
+                if updt_q:
+                    self.prob_free.update_lin_cost(self.q)
+                    self.prob.update_lin_cost(self.q)
+            elif self.backend in ["osqp", "cuosqp"]:
+                self.prob_free.update(
+                    Px=self.P.copy().data if updt_P else None,
+                    q=self.q.copy() if updt_q else None,
+                    Ax=self.A.copy().data if updt_A else None,
+                    l=self.lb.copy() if updt_bounds else None,
+                    u=self.ub_inf.copy() if updt_bounds else None,
+                )
+                self.prob.update(
+                    Px=self.P.copy().data if updt_P else None,
+                    q=self.q.copy() if updt_q else None,
+                    Ax=self.A.copy().data if updt_A else None,
+                    l=self.lb.copy() if updt_bounds else None,
+                    u=self.ub.copy() if updt_bounds else None,
+                )
+            logger.debug("Optimization problem updated")
 
     def solve(
         self, amp_constraint: bool = True, update_cache: bool = False
@@ -817,152 +679,79 @@ class DeconvBin:
         return opt_s, opt_c, cur_scl, cur_obj, cur_penal
 
     def _setup_prob_osqp(self) -> None:
-        logger.debug("Starting _setup_prob_osqp")
+        logger.debug("Setting up OSQP problem")
         self._update_HG()
         self._update_P()
         self._update_q0()
         self._update_q()
         self._update_A()
         self._update_bounds()
-
-        # Log detailed information about matrices and vectors before setup
-        logger.debug("Matrix/Vector shapes and properties before OSQP setup:")
-        logger.debug(f"P matrix - shape: {self.P.shape}, nnz: {self.P.nnz}")
-        logger.debug(
-            f"P data stats - min: {self.P.data.min():.6f}, max: {self.P.data.max():.6f}, mean: {self.P.data.mean():.6f}"
-        )
-        logger.debug(
-            f"q vector - shape: {self.q.shape}, values: min={self.q.min():.6f}, max={self.q.max():.6f}, mean={self.q.mean():.6f}"
-        )
-        logger.debug(f"A matrix - shape: {self.A.shape}, nnz: {self.A.nnz}")
-        logger.debug(
-            f"A data stats - min: {self.A.data.min():.6f}, max: {self.A.data.max():.6f}, mean: {self.A.data.mean():.6f}"
-        )
-        logger.debug(
-            f"lb vector - shape: {self.lb.shape}, values: min={self.lb.min():.6f}, max={self.lb.max():.6f}, mean={self.lb.mean():.6f}"
-        )
-        logger.debug(
-            f"ub vector - shape: {self.ub.shape}, values: min={self.ub.min():.6f}, max={self.ub.max():.6f}, mean={self.ub.mean():.6f}"
-        )
-        logger.debug(
-            f"ub_inf vector - shape: {self.ub_inf.shape}, values: min={self.ub_inf.min():.6f}, max={self.ub_inf.max():.6f}, mean={self.ub_inf.mean():.6f}"
-        )
-
         if self.backend == "emosqp":
-            logger.debug("Setting up emosqp solver")
-            try:
-                m = osqp.OSQP()
-                m.setup(
-                    P=self.P,
-                    q=self.q,
-                    A=self.A,
-                    l=self.lb,
-                    u=self.ub_inf,
-                    check_termination=25,
-                    eps_abs=self.atol * 1e-4,
-                    eps_rel=1e-8,
-                )
-                logger.debug("emosqp setup successful")
+            m = osqp.OSQP()
+            m.setup(
+                P=self.P,
+                q=self.q,
+                A=self.A,
+                l=self.lb,
+                u=self.ub_inf,
+                check_termination=25,
+                eps_abs=self.atol * 1e-4,
+                eps_rel=1e-8,
+            )
+            m.codegen(
+                "osqp-codegen-prob_free",
+                parameters="matrices",
+                python_ext_name="emosqp_free",
+                force_rewrite=True,
+            )
+            m.update(u=self.ub)
+            m.codegen(
+                "osqp-codegen-prob",
+                parameters="matrices",
+                python_ext_name="emosqp",
+                force_rewrite=True,
+            )
 
-                logger.debug("Generating code for prob_free")
-                m.codegen(
-                    "osqp-codegen-prob_free",
-                    parameters="matrices",
-                    python_ext_name="emosqp_free",
-                    force_rewrite=True,
-                )
+            import emosqp
+            import emosqp_free
 
-                logger.debug("Updating bounds for constrained problem")
-                m.update(u=self.ub)
-
-                logger.debug("Generating code for prob")
-                m.codegen(
-                    "osqp-codegen-prob",
-                    parameters="matrices",
-                    python_ext_name="emosqp",
-                    force_rewrite=True,
-                )
-
-                import emosqp
-                import emosqp_free
-
-                self.prob_free = emosqp_free
-                self.prob = emosqp
-                logger.debug("emosqp setup completed successfully")
-            except Exception as e:
-                logger.error(f"Failed to setup emosqp solver: {str(e)}")
-                raise
+            self.prob_free = emosqp_free
+            self.prob = emosqp
 
         elif self.backend in ["osqp", "cuosqp"]:
-            logger.debug(f"Setting up {self.backend} solver")
-            try:
-                if self.backend == "osqp":
-                    self.prob_free = osqp.OSQP()
-                    self.prob = osqp.OSQP()
-                elif self.backend == "cuosqp":
-                    self.prob_free = cuosqp.OSQP()
-                    self.prob = cuosqp.OSQP()
-
-                logger.debug("Setting up prob_free")
-                logger.debug("Copying matrices/vectors for prob_free setup")
-                P_copy = self.P.copy()
-                q_copy = self.q.copy()
-                A_copy = self.A.copy()
-                lb_copy = self.lb.copy()
-                ub_inf_copy = self.ub_inf.copy()
-
-                logger.debug("Verifying copy shapes match originals:")
-                logger.debug(f"P: original {self.P.shape} vs copy {P_copy.shape}")
-                logger.debug(f"q: original {self.q.shape} vs copy {q_copy.shape}")
-                logger.debug(f"A: original {self.A.shape} vs copy {A_copy.shape}")
-                logger.debug(f"lb: original {self.lb.shape} vs copy {lb_copy.shape}")
-                logger.debug(
-                    f"ub_inf: original {self.ub_inf.shape} vs copy {ub_inf_copy.shape}"
-                )
-
-                self.prob_free.setup(
-                    P=P_copy,
-                    q=q_copy,
-                    A=A_copy,
-                    l=lb_copy,
-                    u=ub_inf_copy,
-                    verbose=False,
-                )
-                logger.debug("prob_free setup successful")
-
-                logger.debug("Setting up prob")
-                logger.debug("Copying matrices/vectors for prob setup")
-                P_copy = self.P.copy()
-                q_copy = self.q.copy()
-                A_copy = self.A.copy()
-                lb_copy = self.lb.copy()
-                ub_copy = self.ub.copy()
-
-                logger.debug("Verifying copy shapes match originals:")
-                logger.debug(f"P: original {self.P.shape} vs copy {P_copy.shape}")
-                logger.debug(f"q: original {self.q.shape} vs copy {q_copy.shape}")
-                logger.debug(f"A: original {self.A.shape} vs copy {A_copy.shape}")
-                logger.debug(f"lb: original {self.lb.shape} vs copy {lb_copy.shape}")
-                logger.debug(f"ub: original {self.ub.shape} vs copy {ub_copy.shape}")
-
-                self.prob.setup(
-                    P=P_copy,
-                    q=q_copy,
-                    A=A_copy,
-                    l=lb_copy,
-                    u=ub_copy,
-                    verbose=False,
-                )
-                logger.debug("prob setup successful")
-                logger.debug(f"{self.backend} setup completed successfully")
-            except Exception as e:
-                logger.error(f"Failed to setup {self.backend} solver: {str(e)}")
-                logger.error("Last known matrix/vector shapes:")
-                logger.error(f"P: {self.P.shape}, q: {self.q.shape}, A: {self.A.shape}")
-                logger.error(
-                    f"lb: {self.lb.shape}, ub: {self.ub.shape}, ub_inf: {self.ub_inf.shape}"
-                )
-                raise
+            if self.backend == "osqp":
+                self.prob_free = osqp.OSQP()
+                self.prob = osqp.OSQP()
+            elif self.backend == "cuosqp":
+                self.prob_free = cuosqp.OSQP()
+                self.prob = cuosqp.OSQP()
+            P_copy = self.P.copy()
+            q_copy = self.q.copy()
+            A_copy = self.A.copy()
+            lb_copy = self.lb.copy()
+            ub_inf_copy = self.ub_inf.copy()
+            self.prob_free.setup(
+                P=P_copy,
+                q=q_copy,
+                A=A_copy,
+                l=lb_copy,
+                u=ub_inf_copy,
+                verbose=False,
+            )
+            P_copy = self.P.copy()
+            q_copy = self.q.copy()
+            A_copy = self.A.copy()
+            lb_copy = self.lb.copy()
+            ub_copy = self.ub.copy()
+            self.prob.setup(
+                P=P_copy,
+                q=q_copy,
+                A=A_copy,
+                l=lb_copy,
+                u=ub_copy,
+                verbose=False,
+            )
+        logger.debug(f"{self.backend} setup completed successfully")
 
     def _solve(
         self,
@@ -1105,8 +894,10 @@ class DeconvBin:
     def _update_Wt(self, clear=False) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
         if clear:
+            logger.debug("Clearing error weighting")
             self.err_wt = np.ones(self.y_len)
         elif self.err_weighting == "fft":
+            logger.debug("Updating error weighting with fft")
             hspec = self._get_stft_spec(coef)[:, int(self.coef_len / 2)]
             self.err_wt = (
                 (hspec.reshape(-1, 1) * self.yspec).sum(axis=0)
@@ -1114,6 +905,7 @@ class DeconvBin:
                 / np.linalg.norm(self.yspec, axis=0)
             )
         elif self.err_weighting == "corr":
+            logger.debug("Updating error weighting with corr")
             for i in range(self.y_len):
                 yseg = self.y[i : i + self.coef_len]
                 if len(yseg) <= 1:
@@ -1131,7 +923,11 @@ class DeconvBin:
             offsets=-np.arange(len(coef)),
             format="csc",
         )
+        H_shape, H_nnz = self.H.shape, self.H.nnz
         self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
+        logger.debug(
+            f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
+        )
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
@@ -1143,7 +939,11 @@ class DeconvBin:
             self.G_org = sps.bmat(
                 [[None, G_diag], [np.zeros((1, 1)), None]], format="csc"
             )
+            G_shape, G_nnz = self.G.shape, self.G.nnz
             self.G = self.G_org[:, self.nzidx_c][self.nzidx_s, :]
+            logger.debug(
+                f"Updating G matrix - shape before: {G_shape}, shape new: {self.G.shape}, nnz before: {G_nnz}, nnz new: {self.G.nnz}"
+            )
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
@@ -1195,6 +995,9 @@ class DeconvBin:
                         [None, None, sps.eye(ly, format="csc")],
                     ]
                 )
+        logger.debug(
+            f"Updating P matrix - shape before: {self.P.shape}, shape new: {P.shape}, nnz before: {self.P.nnz}, nnz new: {P.nnz}"
+        )
         self.P = sps.triu(P).tocsc()
 
     def _update_q0(self) -> None:
@@ -1255,6 +1058,7 @@ class DeconvBin:
         else:
             Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
             Ar = self.scale * self.R
+        A_shape, A_nnz = self.A.shape, self.A.nnz
         if self.norm == "huber":
             e = sps.eye(self.y_len, format="csc")
             self.A = sps.bmat(
@@ -1268,6 +1072,9 @@ class DeconvBin:
             )
         else:
             self.A = sps.bmat([[np.ones((1, 1)), None], [None, Ax]], format="csc")
+        logger.debug(
+            f"Updating A matrix - shape before: {A_shape}, shape new: {self.A.shape}, nnz before: {A_nnz}, nnz new: {self.A.nnz}"
+        )
 
     def _update_bounds(self) -> None:
         if self.norm == "huber":
