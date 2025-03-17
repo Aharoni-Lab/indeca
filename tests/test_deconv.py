@@ -47,7 +47,7 @@ def param_ns_level(request):
     return request.param
 
 
-@pytest.fixture(params=[1, 2, 3, 4, 5])
+@pytest.fixture(params=np.arange(5))
 def param_rand_seed(request):
     sd = request.param
     np.random.seed(sd)
