@@ -431,11 +431,17 @@ def computeY(A, C, A_bg, C_bg, shifts, sig_scale, noise_scale, post_offset, post
 
 def tau2AR(tau_d, tau_r, p=1, return_scl=False):
     z1, z2 = np.exp(-1 / tau_d), np.exp(-1 / tau_r)
+    theta0, theta1 = np.real(z1 + z2), np.real(-z1 * z2)
+    if theta1 == 0:
+        warnings.warn(
+            "Zero AR coefficient detect. Adding a small eps to keep sparsity pattern"
+        )
+        theta1 = np.finfo(float).eps
     if return_scl:
         scl = p * (z1 - z2)
-        return np.real(z1 + z2), np.real(-z1 * z2), scl
+        return theta0, theta1, scl
     else:
-        return np.real(z1 + z2), np.real(-z1 * z2)
+        return theta0, theta1
 
 
 def AR2tau(theta1, theta2, solve_amp: bool = False):

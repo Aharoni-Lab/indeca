@@ -11,13 +11,18 @@ from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT
 from scipy.special import huber
 
+from minian_bin.logging_config import get_module_logger
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.utils import scal_lstsq
+
+# Initialize logger for this module
+logger = get_module_logger("deconv")
+logger.info("Deconv module initialized")
 
 try:
     import cuosqp
 except ImportError:
-    warnings.warn("No GPU solver support")
+    logger.warning("No GPU solver support")
 
 
 def construct_R(T: int, up_factor: int):
@@ -283,7 +288,11 @@ class DeconvBin:
         l0_penal: float = None,
         l1_penal: float = None,
         w: np.ndarray = None,
+        update_weighting: bool = False,
     ) -> None:
+        logger.debug(
+            f"Updating parameters - backend: {self.backend}, tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
+        )
         if self.backend == "cvxpy":
             if y is not None:
                 self.y.value = y
@@ -349,7 +358,7 @@ class DeconvBin:
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
-                if self.err_weighting:
+                if self.err_weighting and update_weighting:
                     self._update_Wt()
                     updt_q0 = True
             if self.norm == "huber":
@@ -366,22 +375,35 @@ class DeconvBin:
                     updt_bounds = True
             else:
                 if updt_HG:
+                    A_before = self.A.copy()
                     self._update_A()
+                    assert self.A.shape == A_before.shape
+                    assert (self.A.nonzero()[0] == A_before.nonzero()[0]).all()
+                    assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
                     updt_A = True
                 if any((scale is not None, scale_mul is not None, updt_HG)):
+                    P_before = self.P.copy()
                     self._update_P()
+                    assert self.P.shape == P_before.shape
+                    assert (self.P.nonzero()[0] == P_before.nonzero()[0]).all()
+                    assert (self.P.nonzero()[1] == P_before.nonzero()[1]).all()
                     updt_P = True
                 if any(
                     (scale is not None, scale_mul is not None, y is not None, updt_HG)
                 ):
+                    q0_before = self.q0.copy()
                     self._update_q0()
+                    assert self.q0.shape == q0_before.shape
                     updt_q0 = True
                 if any(
                     (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
                 ):
+                    q_before = self.q.copy()
                     self._update_q()
+                    assert self.q.shape == q_before.shape
                     updt_q = True
             # update prob
+            logger.debug(f"Updating optimization problem with {self.backend}")
             if self.backend == "emosqp":
                 if updt_P:
                     self.prob_free.update_P(self.P.data, None, 0)
@@ -404,6 +426,7 @@ class DeconvBin:
                     l=self.lb.copy() if updt_bounds else None,
                     u=self.ub.copy() if updt_bounds else None,
                 )
+            logger.debug("Optimization problem updated")
 
     def solve(
         self, amp_constraint: bool = True, update_cache: bool = False
@@ -669,9 +692,12 @@ class DeconvBin:
                 s=self.R_org @ opt_s,
                 scale=cur_scl,
             )
+        self._reset_cache()
+        self._reset_mask()
         return opt_s, opt_c, cur_scl, cur_obj, cur_penal
 
     def _setup_prob_osqp(self) -> None:
+        logger.debug("Setting up OSQP problem")
         self._update_HG()
         self._update_P()
         self._update_q0()
@@ -715,36 +741,41 @@ class DeconvBin:
             elif self.backend == "cuosqp":
                 self.prob_free = cuosqp.OSQP()
                 self.prob = cuosqp.OSQP()
+            P_copy = self.P.copy()
+            q_copy = self.q.copy()
+            A_copy = self.A.copy()
+            lb_copy = self.lb.copy()
+            ub_inf_copy = self.ub_inf.copy()
             self.prob_free.setup(
-                P=self.P.copy(),
-                q=self.q.copy(),
-                A=self.A.copy(),
-                l=self.lb.copy(),
-                u=self.ub_inf.copy(),
-                # check_termination=25,
-                # eps_abs=1e-5 if self.backend == "osqp" else self.atol * 1e-4,
-                # eps_rel=1e-5 if self.backend == "osqp" else 1e-8,
+                P=P_copy,
+                q=q_copy,
+                A=A_copy,
+                l=lb_copy,
+                u=ub_inf_copy,
                 verbose=False,
                 polish=True,
                 # warm_start=True if self.backend == "osqp" else False,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
+            P_copy = self.P.copy()
+            q_copy = self.q.copy()
+            A_copy = self.A.copy()
+            lb_copy = self.lb.copy()
+            ub_copy = self.ub.copy()
             self.prob.setup(
-                P=self.P.copy(),
-                q=self.q.copy(),
-                A=self.A.copy(),
-                l=self.lb.copy(),
-                u=self.ub.copy(),
-                # check_termination=25,
-                # eps_abs=1e-5 if self.backend == "osqp" else self.atol * 1e-4,
-                # eps_rel=1e-5 if self.backend == "osqp" else 1e-8,
+                P=P_copy,
+                q=q_copy,
+                A=A_copy,
+                l=lb_copy,
+                u=ub_copy,
                 verbose=False,
                 polish=True,
                 # warm_start=True if self.backend == "osqp" else False,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
+        logger.debug(f"{self.backend} setup completed successfully")
 
     def _solve(
         self,
@@ -888,8 +919,10 @@ class DeconvBin:
     def _update_Wt(self, clear=False) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
         if clear:
+            logger.debug("Clearing error weighting")
             self.err_wt = np.ones(self.y_len)
         elif self.err_weighting == "fft":
+            logger.debug("Updating error weighting with fft")
             hspec = self._get_stft_spec(coef)[:, int(self.coef_len / 2)]
             self.err_wt = (
                 (hspec.reshape(-1, 1) * self.yspec).sum(axis=0)
@@ -897,6 +930,7 @@ class DeconvBin:
                 / np.linalg.norm(self.yspec, axis=0)
             )
         elif self.err_weighting == "corr":
+            logger.debug("Updating error weighting with corr")
             for i in range(self.y_len):
                 yseg = self.y[i : i + self.coef_len]
                 if len(yseg) <= 1:
@@ -914,7 +948,11 @@ class DeconvBin:
             offsets=-np.arange(len(coef)),
             format="csc",
         )
+        H_shape, H_nnz = self.H.shape, self.H.nnz
         self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
+        logger.debug(
+            f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
+        )
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
@@ -926,7 +964,11 @@ class DeconvBin:
             self.G_org = sps.bmat(
                 [[None, G_diag], [np.zeros((1, 1)), None]], format="csc"
             )
+            G_shape, G_nnz = self.G.shape, self.G.nnz
             self.G = self.G_org[:, self.nzidx_c][self.nzidx_s, :]
+            logger.debug(
+                f"Updating G matrix - shape before: {G_shape}, shape new: {self.G.shape}, nnz before: {G_nnz}, nnz new: {self.G.nnz}"
+            )
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
@@ -978,6 +1020,9 @@ class DeconvBin:
                         [None, None, sps.eye(ly, format="csc")],
                     ]
                 )
+        logger.debug(
+            f"Updating P matrix - shape before: {self.P.shape}, shape new: {P.shape}, nnz before: {self.P.nnz}, nnz new: {P.nnz}"
+        )
         self.P = sps.triu(P).tocsc()
 
     def _update_q0(self) -> None:
@@ -1038,6 +1083,7 @@ class DeconvBin:
         else:
             Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
             Ar = self.scale * self.R
+        A_shape, A_nnz = self.A.shape, self.A.nnz
         if self.norm == "huber":
             e = sps.eye(self.y_len, format="csc")
             self.A = sps.bmat(
@@ -1051,6 +1097,9 @@ class DeconvBin:
             )
         else:
             self.A = sps.bmat([[np.ones((1, 1)), None], [None, Ax]], format="csc")
+        logger.debug(
+            f"Updating A matrix - shape before: {A_shape}, shape new: {self.A.shape}, nnz before: {A_nnz}, nnz new: {self.A.nnz}"
+        )
 
     def _update_bounds(self) -> None:
         if self.norm == "huber":
