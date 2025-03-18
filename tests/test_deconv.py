@@ -251,6 +251,7 @@ class TestDeconvBin:
             assert precs >= 0.95
 
 
+@pytest.mark.slow
 class TestDemoDeconv:
     def test_demo_solve_thres(
         self, fixt_deconv, param_thres_scaling, test_fig_path_svg
@@ -287,7 +288,6 @@ class TestDemoDeconv:
         fig = plot_met_ROC(metdf)
         fig.savefig(test_fig_path_svg)
 
-    @pytest.mark.slow
     def test_demo_solve_penal(
         self, fixt_deconv, param_thres_scaling, test_fig_path_svg, results_bag
     ):
