@@ -90,7 +90,6 @@ def pipeline_bin(
             )
             tau_d, tau_r, cur_p = AR2tau(*cur_theta, solve_amp=True)
             cur_tau = np.array([tau_d, tau_r])
-
             if (np.imag(cur_tau) != 0).any():
                 tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
                 lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp="scale")

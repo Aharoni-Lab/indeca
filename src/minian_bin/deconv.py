@@ -323,7 +323,6 @@ class DeconvBin:
                 self._update_w(w)
             if l0_penal is not None or w is not None:
                 self.l0_w.value = self.l0_penal * self.w
-
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             # update input params
             if y is not None:
@@ -352,7 +351,6 @@ class DeconvBin:
                 self.l0_penal = l0_penal
             if w is not None:
                 self._update_w(w)
-
             # update internal variables
             updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds = [False] * 6
             if coef is not None:
@@ -711,13 +709,11 @@ class DeconvBin:
                 python_ext_name="emosqp",
                 force_rewrite=True,
             )
-
             import emosqp
             import emosqp_free
 
             self.prob_free = emosqp_free
             self.prob = emosqp
-
         elif self.backend in ["osqp", "cuosqp"]:
             if self.backend == "osqp":
                 self.prob_free = osqp.OSQP()
