@@ -152,10 +152,11 @@ if __name__ == "__main__":
         dashboard_address="0.0.0.0:12345",
     )
     client = Client(cluster)
-    subset = {
-        "frame": slice(0, 6000),
-        "unit_id": slice(0, 20),
-    }  # set to None for no subset
+    subset = None
+    # subset = {
+    #     "frame": slice(0, 8000),
+    #     "unit_id": slice(0, 5),
+    # }  # set to None for no subset
     logger.debug(f"Data subsetting: {subset}")
     for dsname in DS_LS:
         if not os.path.exists(os.path.join(LOCAL_DS_PATH, dsname)) or not os.listdir(
@@ -166,8 +167,12 @@ if __name__ == "__main__":
         logger.info(f"Processing dataset: {dsname}")
         Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         logger.debug(f"Loaded dataset shape - Y: {Y.shape}, S_true: {S_true.shape}")
-        Y, S_true = Y.dropna("frame").sel(subset), S_true.dropna("frame").sel(subset)
-        logger.debug(f"After frame subsetting - Y: {Y.shape}, S_true: {S_true.shape}")
+        Y = Y.dropna("frame")
+        S_true = S_true.dropna("frame")
+        if subset is not None:
+            Y = Y.sel(subset)
+            S_true = S_true.sel(subset)
+            logger.debug(f"After subsetting - Y: {Y.shape}, S_true: {S_true.shape}")
         # Get active units
         act_uid = S_true.max("frame") > 0
         Y, S_true = Y.sel(unit_id=act_uid), S_true.sel(unit_id=act_uid)
