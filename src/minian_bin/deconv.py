@@ -544,7 +544,9 @@ class DeconvBin:
         else:
             return bin_s, cvals[opt_idx], scals[opt_idx], err
 
-    def solve_penal(self, masking=True, scaling=True) -> Tuple[np.ndarray]:
+    def solve_penal(
+        self, masking=True, scaling=True, return_intm=False
+    ) -> Tuple[np.ndarray]:
         if self.penal is None:
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
             opt_penal = 0
@@ -600,10 +602,20 @@ class DeconvBin:
                 )
             opt_penal = res.x.item()
             self.update(**{pn: opt_penal})
-            opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(scaling=scaling)
+            if return_intm:
+                opt_s, opt_c, opt_scl, opt_obj, intm = self.solve_thres(
+                    scaling=scaling, return_intm=return_intm
+                )
+            else:
+                opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(
+                    scaling=scaling, return_intm=return_intm
+                )
             if opt_scl == 0:
                 warnings.warn("could not find non-zero solution")
-        return opt_s, opt_c, opt_scl, opt_obj, opt_penal
+        if return_intm:
+            return opt_s, opt_c, opt_scl, opt_obj, opt_penal, intm
+        else:
+            return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(
         self, reset_scale: bool = True, concur_penal: bool = False
