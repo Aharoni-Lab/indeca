@@ -595,12 +595,14 @@ class DeconvBin:
                 vol_tol=1e-3,
             )
             if not res.success:
-                warnings.warn(
+                logger.warning(
                     "could not find optimal penalty within {} iterations".format(
                         res.nfev
                     )
                 )
-            opt_penal = res.x.item()
+                opt_penal = 0
+            else:
+                opt_penal = res.x.item()
             self.update(**{pn: opt_penal})
             if return_intm:
                 opt_s, opt_c, opt_scl, opt_obj, intm = self.solve_thres(
@@ -611,7 +613,7 @@ class DeconvBin:
                     scaling=scaling, return_intm=return_intm
                 )
             if opt_scl == 0:
-                warnings.warn("could not find non-zero solution")
+                logger.warning("could not find non-zero solution")
         if return_intm:
             return opt_s, opt_c, opt_scl, opt_obj, opt_penal, intm
         else:
