@@ -142,7 +142,10 @@ def pytest_sessionfinish(session):
         lambda o: o.__name__
     )
     for fname, fdf in session_results_df.groupby("func_name"):
-        fdf = fdf[fdf["data"].notnull()].reset_index()
+        try:
+            fdf = fdf[fdf["data"].notnull()].reset_index()
+        except KeyError:
+            continue
         if len(fdf) > 0:
             param_cols = list(set(fdf.columns) - set(["data", "pytest_obj"]))
             result = []
@@ -155,4 +158,3 @@ def pytest_sessionfinish(session):
             dat_dir = os.path.join(AGG_RES_DIR, fname)
             os.makedirs(dat_dir, exist_ok=True)
             result.to_feather(os.path.join(dat_dir, "{}.feat".format(suffix)))
-            # result.to_csv(os.path.join(AGG_RES_DIR, "{}-{}.csv".format(fname, suffix)))

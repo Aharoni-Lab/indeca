@@ -948,7 +948,10 @@ class DeconvBin:
             offsets=-np.arange(len(coef)),
             format="csc",
         )
-        H_shape, H_nnz = self.H.shape, self.H.nnz
+        try:
+            H_shape, H_nnz = self.H.shape, self.H.nnz
+        except AttributeError:
+            H_shape, H_nnz = None, None
         self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
         logger.debug(
             f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
@@ -964,7 +967,10 @@ class DeconvBin:
             self.G_org = sps.bmat(
                 [[None, G_diag], [np.zeros((1, 1)), None]], format="csc"
             )
-            G_shape, G_nnz = self.G.shape, self.G.nnz
+            try:
+                G_shape, G_nnz = self.G.shape, self.G.nnz
+            except AttributeError:
+                G_shape, G_nnz = None, None
             self.G = self.G_org[:, self.nzidx_c][self.nzidx_s, :]
             logger.debug(
                 f"Updating G matrix - shape before: {G_shape}, shape new: {self.G.shape}, nnz before: {G_nnz}, nnz new: {self.G.nnz}"
@@ -1020,8 +1026,12 @@ class DeconvBin:
                         [None, None, sps.eye(ly, format="csc")],
                     ]
                 )
+        try:
+            P_shape, P_nnz = self.P.shape, self.P.nnz
+        except AttributeError:
+            P_shape, P_nnz = None, None
         logger.debug(
-            f"Updating P matrix - shape before: {self.P.shape}, shape new: {P.shape}, nnz before: {self.P.nnz}, nnz new: {P.nnz}"
+            f"Updating P matrix - shape before: {P_shape}, shape new: {P.shape}, nnz before: {P_nnz}, nnz new: {P.nnz}"
         )
         self.P = sps.triu(P).tocsc()
 
@@ -1083,7 +1093,10 @@ class DeconvBin:
         else:
             Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
             Ar = self.scale * self.R
-        A_shape, A_nnz = self.A.shape, self.A.nnz
+        try:
+            A_shape, A_nnz = self.A.shape, self.A.nnz
+        except AttributeError:
+            A_shape, A_nnz = None, None
         if self.norm == "huber":
             e = sps.eye(self.y_len, format="csc")
             self.A = sps.bmat(
