@@ -250,6 +250,74 @@ class TestDeconvBin:
             assert mdist <= 1
             assert precs >= 0.95
 
+    @pytest.mark.parametrize("param_penal_scaling", [True, False])
+    def test_solve_penal(
+        self,
+        fixt_deconv,
+        param_backend,
+        param_upsamp,
+        param_norm,
+        param_penal_scaling,
+        test_fig_path_html,
+        results_bag,
+        runtime_xfail,
+    ):
+        # book-keeping
+        (
+            deconv,
+            param_backend,
+            param_norm,
+            y,
+            c,
+            c_org,
+            s,
+            s_org,
+            taus,
+            ns_lev,
+            upsamp,
+            scl,
+        ) = fixt_deconv
+        if param_backend == "cvxpy":
+            pytest.skip("Skipping cvxpy backend for test_solve_penal")
+        if scl != 1:
+            pytest.skip("Skipping scaling for test_solve_penal")
+        if upsamp > 1:
+            pytest.skip("Skipping upsampling for test_solve_penal")
+        # act
+        opt_s, opt_c, scl_slv, obj, pn_slv, intm = deconv.solve_penal(
+            scaling=param_penal_scaling, return_intm=True
+        )
+        s_slv_ma = intm[0]
+        s_bin, c_bin, s_slv = np.zeros(deconv.T), np.zeros(deconv.T), np.zeros(deconv.T)
+        s_bin[deconv.nzidx_s] = opt_s
+        c_bin[deconv.nzidx_c] = opt_c
+        s_slv[deconv.nzidx_s] = s_slv_ma
+        deconv._reset_cache()
+        deconv._reset_mask()
+        s_bin = s_bin.astype(float)
+        # plotting
+        fig = go.Figure()
+        fig.add_traces(
+            plot_traces(
+                {
+                    "y": y,
+                    "c": c,
+                    "s": s,
+                    "s_solve": deconv.R @ s_bin,
+                    "c_solve": deconv.R @ c_bin,
+                    "c_org": c_org,
+                    "s_org": s_org,
+                    "c_bin": c_bin,
+                    "s_bin": s_bin,
+                    "s_direct": s_slv,
+                }
+            )
+        )
+        fig.write_html(test_fig_path_html)
+        # assert
+        if ns_lev == 0:
+            assert (s_bin == s).all()
+
 
 @pytest.mark.slow
 class TestDemoDeconv:
