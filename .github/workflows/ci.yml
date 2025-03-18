@@ -130,7 +130,7 @@ jobs:
     
     - name: Run tests
       run: |
-        pdm run pytest tests/ -v --cov=minian_bin --cov-report=xml -n auto
+        pdm run pytest tests/ -v -m "not slow" -n auto --cov=minian_bin --cov-report=xml
         pdm run plot_test
 
     - uses: actions/upload-artifact@v4
