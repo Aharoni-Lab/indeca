@@ -279,11 +279,14 @@ class TestDeconvBin:
         ) = fixt_deconv
         if param_backend == "cvxpy":
             pytest.skip("Skipping cvxpy backend for test_solve_penal")
-        if scl != 1:
-            pytest.skip("Skipping scaling for test_solve_penal")
         if upsamp > 1:
             pytest.skip("Skipping upsampling for test_solve_penal")
+        if ns_lev > 0:
+            pytest.skip("Skipping noise level for test_solve_penal")
         # act
+        s_free, _ = deconv.solve(amp_constraint=False)
+        scl_init = np.ptp(s_free)
+        deconv.update(scale=scl_init)
         opt_s, opt_c, scl_slv, obj, pn_slv, intm = deconv.solve_penal(
             scaling=param_penal_scaling, return_intm=True
         )
@@ -315,8 +318,7 @@ class TestDeconvBin:
         )
         fig.write_html(test_fig_path_html)
         # assert
-        if ns_lev == 0:
-            assert (s_bin == s).all()
+        assert (s_bin == s).all()
 
 
 @pytest.mark.slow
