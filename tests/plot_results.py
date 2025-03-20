@@ -76,7 +76,7 @@ def sel_thres(resdf, th_idx, label, met_cols):
 
 def agg_result(
     resdf,
-    samp_thres=[0.2, 0.4, 0.6, 0.8],
+    samp_thres=[0.25, 0.5, 0.75],
     met_cols=["mdist", "f1", "prec", "recall", "scals", "objs"],
 ):
     res_agg = []
@@ -87,7 +87,7 @@ def agg_result(
     # raw threshold results
     for th in samp_thres:
         th_idx = np.argmin((res_raw["thres"] - th).abs())
-        res_agg.append(sel_thres(res_raw, th_idx, "thres{:.1f}".format(th), met_cols))
+        res_agg.append(sel_thres(res_raw, th_idx, "thres{:.2f}".format(th), met_cols))
     # opt threshold results
     opt_idx_raw = res_raw["opt_idx"].unique().item()
     res_agg.append(sel_thres(res_raw, opt_idx_raw, "optimal thres", met_cols))
