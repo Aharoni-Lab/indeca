@@ -81,9 +81,9 @@ def agg_result(
 ):
     res_agg = []
     res_scl, res_noscl = resdf[resdf["thres_scaling"]], resdf[~resdf["thres_scaling"]]
-    res_raw = res_noscl[res_noscl["penal"] == 0]
-    res_scl_nopn = res_scl[res_scl["penal"] == 0]
-    res_scl_pn = res_scl[res_scl["penal"] != 0]
+    res_raw = res_noscl[res_noscl["group"] == "No Penalty"]
+    res_scl_nopn = res_scl[res_scl["group"] == "No Penalty"]
+    res_scl_pn = res_scl[res_scl["group"] == "Penalty"]
     # raw threshold results
     for th in samp_thres:
         th_idx = np.argmin((res_raw["thres"] - th).abs())

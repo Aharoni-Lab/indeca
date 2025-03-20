@@ -381,20 +381,23 @@ class TestDemoDeconv:
         if upsamp > 2:
             pytest.skip("Skipping highly upsampled signal for solve_penal demo")
         # act
-        s_free, _ = deconv.solve(amp_constraint=False)
-        scl_init = np.ptp(s_free)
-        deconv.update(scale=scl_init)
-        _, _, _, _, opt_penal = deconv.solve_penal(scaling=False)
-        deconv._reset_cache()
-        deconv._reset_mask()
-        deconv.update(l1_penal=opt_penal)
-        _, _, _, _, intm_pn = deconv.solve_thres(
-            scaling=param_thres_scaling, return_intm=True
-        )
-        deconv.update(l1_penal=0)
         _, _, _, _, intm_nopn = deconv.solve_thres(
             scaling=param_thres_scaling, return_intm=True
         )
+        s_free, _ = deconv.solve(amp_constraint=False)
+        scl_init = np.ptp(s_free)
+        deconv.update(scale=scl_init)
+        ss, _, _, _, opt_penal, intm_pn = deconv.solve_penal(
+            scaling=param_thres_scaling, return_intm=True
+        )
+        svals_pn = []
+        oidx = intm_pn[7]
+        for sv in intm_pn[2]:
+            s_pad = np.zeros(deconv.T)
+            s_pad[deconv.nzidx_s] = sv
+            svals_pn.append(s_pad)
+        if ns_lev == 0 and upsamp == 1:
+            assert (svals_pn[oidx] == s).all()
         # plotting
         metdf_nopn = compute_metrics(
             s_org,
@@ -411,7 +414,7 @@ class TestDemoDeconv:
         )
         metdf_pn = compute_metrics(
             s_org,
-            intm_pn[2],
+            svals_pn,
             {
                 "thres": intm_pn[1],
                 "scals": intm_pn[5],
