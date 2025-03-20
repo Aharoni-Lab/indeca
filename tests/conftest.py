@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -130,6 +131,12 @@ def simulation_params():
         "framerate": 30,
         "noise_level": 0.1,
     }
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    if not hasattr(config, "workerinput"):
+        shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
 
 
 def pytest_sessionfinish(session):
