@@ -592,7 +592,7 @@ class DeconvBin:
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
                 locally_biased=False,
-                vol_tol=1e-3,
+                vol_tol=1e-2,
             )
             if not res.success:
                 logger.warning(
