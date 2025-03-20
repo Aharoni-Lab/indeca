@@ -128,7 +128,7 @@ class TestDemoSolveFit:
         )
         # act
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-            Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp
+            Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, s_len=60 * upsamp
         )
         tau_fit = -1 / lams / upsamp
         dhm_fit, _ = find_dhm(True, tau_fit, ps)
@@ -149,6 +149,8 @@ class TestDemoSolveFit:
                 ]
             )
         )
+        if ns_level == 0:
+            assert np.abs(np.array(dhm_fit) - np.array(dhm_true)).max() < 1
         for icell, (y, s) in enumerate(zip(Y, S_org)):
             for mthd, smth in {"cnmf_raw": False, "cnmf_smth": True}.items():
                 theta, _ = estimate_coefs(
@@ -173,7 +175,9 @@ class TestDemoSolveFit:
                         ]
                     )
                 )
-            lams, ps, _, _, _ = solve_fit_h_num(y, s, np.ones(1), up_factor=upsamp)
+            lams, ps, _, _, _ = solve_fit_h_num(
+                y, s, np.ones(1), up_factor=upsamp, s_len=60 * upsamp
+            )
             tau_fit = -1 / lams / upsamp
             dhm_fit, _ = find_dhm(True, tau_fit, ps)
             res_df.append(
