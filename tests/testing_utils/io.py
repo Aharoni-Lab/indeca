@@ -7,7 +7,11 @@ from scipy.io import loadmat
 
 def download_realds(target_path, target_dataset, remote_path="Ground_truth/"):
     fs = fsspec.filesystem("github", org="HelmchenLabSoftware", repo="Cascade")
-    fs.get(remote_path + target_dataset, target_path, recursive=True)
+    fs.get(
+        remote_path + target_dataset,
+        os.path.join(target_path, target_dataset),
+        recursive=True,
+    )
 
 
 def load_gt_mat(matfile, varname="CAttached"):
@@ -35,15 +39,26 @@ def load_gt_mat(matfile, varname="CAttached"):
     return fluo_df, ap_df
 
 
-def load_gt_ds(ds_path):
+def load_gt_ds(ds_path, return_ap=False):
     fluo = []
+    ap = []
     for icell, matfile in enumerate(
         filter(lambda fn: fn.endswith(".mat"), os.listdir(ds_path))
     ):
-        fluo_df, _ = load_gt_mat(os.path.join(ds_path, matfile))
+        fluo_df, ap_df = load_gt_mat(os.path.join(ds_path, matfile))
         fluo_df["unit_id"] = icell
+        ap_df["unit_id"] = icell
         fluo.append(fluo_df)
-    fluo = pd.concat(fluo).set_index(["unit_id", "frame"])
-    Y = fluo["fluo_mean"].rename("Y").to_xarray()
-    S_true = fluo["ap_count"].rename("S_true").to_xarray()
-    return Y, S_true
+        ap.append(ap_df)
+    fluo = pd.concat(fluo, ignore_index=True)
+    ap = pd.concat(ap, ignore_index=True)
+    Y = fluo.set_index(["unit_id", "frame"])["fluo_mean"].rename("Y").to_xarray()
+    if return_ap:
+        return (Y, ap.set_index("unit_id"), fluo.set_index("unit_id"))
+    else:
+        S_true = (
+            fluo.set_index(["unit_id", "frame"])["ap_count"]
+            .rename("S_true")
+            .to_xarray()
+        )
+        return Y, S_true

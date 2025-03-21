@@ -4,7 +4,7 @@ import dask as da
 import numpy as np
 import xarray as xr
 from dask.distributed import Client, LocalCluster
-from routine.cnmf import pipeline_cnmf
+from tests.testing_utils.cnmf import pipeline_cnmf
 
 from minian_bin.pipeline import pipeline_bin
 
