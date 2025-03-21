@@ -160,7 +160,11 @@ def pytest_sessionfinish(session):
                 dat = frow["data"]
                 dat = dat.assign(**{p: [frow[p]] * len(dat) for p in param_cols})
                 result.append(dat)
-            result = pd.concat(result, ignore_index=True)
+            result = pd.concat(result, ignore_index=True).dropna(
+                axis="columns", how="all"
+            )
+            cvtcols = result.select_dtypes(include="object").columns
+            result[cvtcols] = result[cvtcols].fillna("").astype(str)
             suffix = "all" if is_main_process(session) else get_xdist_worker_id(session)
             dat_dir = os.path.join(AGG_RES_DIR, fname)
             os.makedirs(dat_dir, exist_ok=True)
