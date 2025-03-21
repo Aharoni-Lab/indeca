@@ -12,6 +12,29 @@ IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg_results"
 FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
 
 
+# %% plot pipeline results
+fig_path = FIG_PATH / "demo_pipeline"
+fig_path.mkdir(parents=True, exist_ok=True)
+result = load_agg_result(IN_RES_PATH / "test_demo_pipeline")
+id_vars = ["method", "use_all", "unit_id", "iter", "param_upsamp_param"]
+val_vals = ["mdist", "f1"]
+resdf = pd.melt(
+    result,
+    id_vars=id_vars,
+    value_vars=val_vals,
+    var_name="metric",
+    value_name="value",
+)
+resdf["row_lab"] = resdf["metric"]
+resdf["col_lab"] = (
+    resdf["use_all"].map(lambda u: "all_cell" if u else "individual")
+    + "-"
+    + resdf["param_upsamp_param"].astype(str)
+)
+g = sns.FacetGrid(resdf, row="row_lab", col="col_lab", sharey="row", margin_titles=True)
+g.map_dataframe(sns.lineplot, x="iter", y="value")
+
+
 # %% plot AR results
 def AR_scatter(data, color, x, y, palette, zorder, **kwargs):
     ax = plt.gca()
