@@ -39,6 +39,7 @@ def pipeline_bin(
     ar_kn_len=100,
     ar_norm="l1",
     da_client=None,
+    spawn_dashboard=True,
 ):
     """Binary pursuit pipeline for spike inference.
 
@@ -63,14 +64,17 @@ def pipeline_bin(
         f"ar_use_all={ar_use_all}, ar_kn_len={ar_kn_len}"
         f"{ncell} cells with {T} timepoints"
     )
-    if da_client is not None:
-        logger.debug("Using Dask client for distributed computation")
-        dashboard = da_client.submit(
-            Dashboard, Y=Y, kn_len=ar_kn_len, actor=True
-        ).result()
+    if spawn_dashboard:
+        if da_client is not None:
+            logger.debug("Using Dask client for distributed computation")
+            dashboard = da_client.submit(
+                Dashboard, Y=Y, kn_len=ar_kn_len, actor=True
+            ).result()
+        else:
+            logger.debug("Running in single-machine mode")
+            dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
     else:
-        logger.debug("Running in single-machine mode")
-        dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
+        dashboard = None
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         logger.debug(f"Using provided tau_init: {tau_init}")
@@ -194,13 +198,14 @@ def pipeline_bin(
                 "penal": penal,
             }
         )
-        dashboard.update(
-            tau_d=cur_metric["tau_d"].squeeze(),
-            tau_r=cur_metric["tau_r"].squeeze(),
-            err=cur_metric["err"].squeeze(),
-            scale=cur_metric["scale"].squeeze(),
-        )
-        dashboard.set_iter(min(i_iter + 1, max_iters - 1))
+        if dashboard is not None:
+            dashboard.update(
+                tau_d=cur_metric["tau_d"].squeeze(),
+                tau_r=cur_metric["tau_r"].squeeze(),
+                err=cur_metric["err"].squeeze(),
+                scale=cur_metric["scale"].squeeze(),
+            )
+            dashboard.set_iter(min(i_iter + 1, max_iters - 1))
         metric_df = pd.concat([metric_df, cur_metric], ignore_index=True)
         C_ls.append(C)
         S_ls.append(S)
@@ -241,9 +246,10 @@ def pipeline_bin(
                 norm=ar_norm,
                 up_factor=up_factor,
             )
-            dashboard.update(
-                h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
-            )
+            if dashboard is not None:
+                dashboard.update(
+                    h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
+                )
             cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))
             for idx, d in enumerate(dcv):
@@ -263,7 +269,8 @@ def pipeline_bin(
                 lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
                     y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
                 )
-                dashboard.update(uid=icell, h=h, h_fit=h_fit)
+                if dashboard is not None:
+                    dashboard.update(uid=icell, h=h, h_fit=h_fit)
                 cur_tau = -1 / lams
                 tau[icell, :] = cur_tau
                 if da_client is not None:
@@ -324,7 +331,8 @@ def pipeline_bin(
         ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
-    dashboard.stop()
+    if dashboard is not None:
+        dashboard.stop()
     logger.info("Pipeline completed successfully")
     if return_iter:
         return opt_C, opt_S, metric_df, C_ls, S_ls, h_ls, h_fit_ls
