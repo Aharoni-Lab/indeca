@@ -1,11 +1,9 @@
-import pytest
 import logging
 from pathlib import Path
-from minian_bin.logging_config import (
-    set_package_log_level,
-    get_module_logger,
-    log_dir,
-)
+
+import pytest
+
+from minian_bin.logging_config import get_module_logger, log_dir, set_package_log_level
 
 
 class TestLoggingConfig:
