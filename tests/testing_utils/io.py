@@ -54,7 +54,7 @@ def load_gt_ds(ds_path, return_ap=False):
     ap = pd.concat(ap, ignore_index=True)
     Y = fluo.set_index(["unit_id", "frame"])["fluo_mean"].rename("Y").to_xarray()
     if return_ap:
-        return (Y, ap.set_index("unit_id"), fluo.set_index("unit_id"))
+        return Y, ap, fluo
     else:
         S_true = (
             fluo.set_index(["unit_id", "frame"])["ap_count"]

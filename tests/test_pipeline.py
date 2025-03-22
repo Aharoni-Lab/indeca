@@ -23,6 +23,11 @@ def param_subset_cell(request):
     return request.param
 
 
+@pytest.fixture(params=[(0, 10000)])
+def param_subset_fm(request):
+    return request.param
+
+
 @pytest.fixture(params=[1, 2])
 def param_upsamp(request):
     return request.param
@@ -49,20 +54,32 @@ def param_max_iters(request):
 
 
 @pytest.fixture(params=["X-DS09-GCaMP6f-m-V1"])
-def fixt_realds(temp_data_dir, param_subset_cell, request):
+def fixt_realds(temp_data_dir, param_subset_cell, param_subset_fm, request):
     dsname = request.param
     if not os.path.exists(os.path.join(temp_data_dir, dsname)) or not os.listdir(
         os.path.join(temp_data_dir, dsname)
     ):
         download_realds(temp_data_dir, dsname)
     Y, ap_df, fluo_df = load_gt_ds(os.path.join(temp_data_dir, dsname), return_ap=True)
-    Y = Y.sel(unit_id=param_subset_cell).dropna("frame")
-    fmin, fmax = Y.coords["frame"].min().item(), Y.coords["frame"].max().item()
-    ap_df = ap_df.loc[param_subset_cell]
-    fluo_df = fluo_df.loc[param_subset_cell]
-    ap_df = ap_df[ap_df["frame"].between(fmin, fmax)].copy()
-    fluo_df = fluo_df[fluo_df["frame"].between(fmin, fmax)].copy()
-    return (Y, ap_df, fluo_df)
+    Y = Y.isel(frame=slice(*param_subset_fm)).dropna("frame")
+    ap_df = ap_df[ap_df["frame"].between(*param_subset_fm)]
+    fluo_df = fluo_df[fluo_df["frame"].between(*param_subset_fm)]
+    ap_ct = ap_df.groupby("unit_id")["ap_time"].count().reset_index()
+    act_uids = np.array(ap_ct.loc[ap_ct["ap_time"] > 1, "unit_id"])
+    Y = Y.sel(unit_id=act_uids)
+    try:
+        Y = Y.isel(unit_id=param_subset_cell)
+    except IndexError:
+        raise IndexError(
+            "Cannot select {} active cells with frame subset {}".format(
+                param_subset_cell, param_subset_fm
+            )
+        )
+    Y = Y * 100
+    uids = np.array(Y.coords["unit_id"])
+    ap_df = ap_df.set_index("unit_id").loc[uids]
+    fluo_df = fluo_df.set_index("unit_id").loc[uids]
+    return Y, ap_df, fluo_df
 
 
 @pytest.mark.slow
