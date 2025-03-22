@@ -2,8 +2,8 @@ import cvxpy as cp
 import numpy as np
 import scipy.sparse as sps
 
-from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 from minian_bin.AR_kernel import estimate_coefs
+from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 
 
 def pipeline_cnmf(
@@ -61,7 +61,7 @@ def pipeline_cnmf(
         c, s, _ = solve_deconv(y, prob, coef=cur_coef, l1_penal=sps_penal * tn[icell])
         C_cnmf[icell, :] = c.squeeze()
         S_cnmf[icell, :] = s.squeeze()
-    return C_cnmf, S_cnmf
+    return C_cnmf, S_cnmf, tau
 
 
 def construct_R(T: int, up_factor: int):
