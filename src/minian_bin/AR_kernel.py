@@ -314,7 +314,10 @@ def solve_fit_h(
 
 def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l1", up_factor=1):
     h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
-    pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
+    try:
+        pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
+    except IndexError:
+        pos_idx = 1
     lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
     h_fit_pad = np.zeros_like(h)
     h_fit_pad[: len(h_fit)] = h_fit
