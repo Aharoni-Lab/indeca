@@ -64,6 +64,11 @@ def param_upsamp(request):
     return request.param
 
 
+@pytest.fixture(params=[1, 2, 5])
+def param_upsamp_dcv(request):
+    return request.param
+
+
 @pytest.fixture(params=[True, False])
 def param_y_scaling(request):
     return request.param
@@ -170,7 +175,7 @@ class TestDeconvBin:
         self,
         fixt_y,
         param_backend,
-        param_upsamp,
+        param_upsamp_dcv,
         param_norm,
         test_fig_path_html,
         results_bag,
@@ -183,11 +188,10 @@ class TestDeconvBin:
         if scl != 1:
             pytest.skip("Skipping scaling for test_solve_thres")
         # act
-        upsamp_ratio = upsamp_y / param_upsamp
+        upsamp_ratio = upsamp_y / param_upsamp_dcv
         deconv = DeconvBin(
             y=y,
-            tau=np.array(taus) * param_upsamp,
-            upsamp=param_upsamp,
+            upsamp=param_upsamp_dcv,
             err_weighting=None,
             backend=param_backend,
             norm=param_norm,
@@ -226,7 +230,7 @@ class TestDeconvBin:
                     "tau_r": taus[1],
                     "ns_lev": ns_lev,
                     "upsamp_y": upsamp_y,
-                    "upsamp": param_upsamp,
+                    "upsamp": param_upsamp_dcv,
                     "backend": param_backend,
                     "mdist": mdist,
                     "f1": f1,
@@ -239,11 +243,11 @@ class TestDeconvBin:
         # assert
         if ns_lev >= 0.2:
             runtime_xfail("Accuracy degrade when noise level too high")
-        if param_upsamp == upsamp_y:  # upsample factor matches ground truth
+        if param_upsamp_dcv == upsamp_y:  # upsample factor matches ground truth
             assert mdist <= 1
             assert recall >= 0.8
             assert precs >= 0.95
-        elif param_upsamp < upsamp_y:  # upsample factor smaller than ground truth
+        elif param_upsamp_dcv < upsamp_y:  # upsample factor smaller than ground truth
             assert mdist <= upsamp_ratio
             assert recall >= 0.95
         else:  # upsample factor larger than ground truth
