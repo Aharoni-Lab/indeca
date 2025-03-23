@@ -84,6 +84,7 @@ def pipeline_bin(
         logger.debug("Computing initial tau values")
         theta = np.empty((ncell, p))
         tau = np.empty((ncell, p))
+        ps = np.empty((ncell, p))
         for icell, y in enumerate(Y):
             cur_theta, _ = estimate_coefs(
                 y,
@@ -94,14 +95,15 @@ def pipeline_bin(
             )
             tau_d, tau_r, cur_p = AR2tau(*cur_theta, solve_amp=True)
             cur_tau = np.array([tau_d, tau_r])
-            if (np.imag(cur_tau) != 0).any():
+            if (np.imag(cur_tau) != 0).any() or cur_p == np.inf:
                 tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
-                lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp="scale")
+                lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
                 cur_tau = (-1 / lams) * up_factor
                 logger.debug(f"Cell {icell}: Converted to real tau values: {cur_tau}")
             cur_theta = tau2AR(cur_tau[0], cur_tau[1], cur_p)
             tau[icell, :] = cur_tau
             theta[icell, :] = cur_theta
+            ps[icell, :] = cur_p
     scale = np.empty(ncell)
     # 2. iteration loop
     C_ls = []
@@ -125,9 +127,11 @@ def pipeline_bin(
     if da_client is not None:
         dcv = [
             da_client.submit(
-                lambda yy, tt: DeconvBin(
+                lambda yy, th, tau, ps: DeconvBin(
                     y=yy,
-                    theta=tt,
+                    theta=th,
+                    tau=tau,
+                    ps=ps,
                     coef_len=ar_kn_len,
                     upsamp=up_factor,
                     nthres=deconv_nthres,
@@ -140,6 +144,8 @@ def pipeline_bin(
                 ),
                 y,
                 theta[i],
+                tau[i],
+                ps[i],
             )
             for i, y in enumerate(Y)
         ]
@@ -148,6 +154,8 @@ def pipeline_bin(
             DeconvBin(
                 y=y,
                 theta=theta[i],
+                tau=tau[i],
+                ps=ps[i],
                 coef_len=ar_kn_len,
                 upsamp=up_factor,
                 nthres=deconv_nthres,
