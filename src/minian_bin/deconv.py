@@ -96,6 +96,7 @@ class DeconvBin:
         y_len: int = None,
         theta: np.array = None,
         tau: np.array = None,
+        ps: np.array = None,
         coef: np.array = None,
         coef_len: int = 100,
         scale: float = 1,
@@ -127,34 +128,38 @@ class DeconvBin:
             self.y_len = y_len
         if theta is not None:
             self.theta = np.array(theta)
-            tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
-            self.tau = np.array([tau_d, tau_r])
-            coef, _, _ = exp_pulse(
-                tau_d,
-                tau_r,
-                p_d=p,
-                p_r=-p,
-                nsamp=coef_len * upsamp,
-                kn_len=coef_len * upsamp,
-                trunc_thres=atol,
-            )
-        elif tau is not None:
-            self.theta = np.array(tau2AR(tau[0], tau[1]))
+            if tau is None:
+                tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
+                self.tau = np.array([tau_d, tau_r])
+                coef, _, _ = exp_pulse(
+                    tau_d,
+                    tau_r,
+                    p_d=p,
+                    p_r=-p,
+                    nsamp=coef_len * upsamp,
+                    kn_len=coef_len * upsamp,
+                    trunc_thres=atol,
+                )
+        if tau is not None:
+            assert (
+                ps is not None
+            ), "exp coefficients must be provided together with time constants."
+            if theta is None:
+                self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
-            _, _, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
             coef, _, _ = exp_pulse(
                 tau[0],
                 tau[1],
-                p_d=p,
-                p_r=-p,
+                p_d=ps[0],
+                p_r=ps[1],
                 nsamp=coef_len * upsamp,
                 kn_len=coef_len * upsamp,
                 trunc_thres=atol,
             )
-        else:
-            if coef is None:
-                assert coef_len is not None
-                coef = np.ones(coef_len * upsamp)
+        if coef is None:
+            assert coef_len is not None
+            coef = np.ones(coef_len * upsamp)
+        assert (~np.isnan(coef)).all()
         self.coef_len = len(coef)
         self.T = self.y_len * upsamp
         l0_penal = 0
