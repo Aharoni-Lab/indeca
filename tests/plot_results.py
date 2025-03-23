@@ -103,26 +103,22 @@ def agg_result(
     met_cols=["mdist", "f1", "prec", "recall", "scals", "objs"],
 ):
     res_agg = []
-    res_scl, res_noscl = resdf[resdf["thres_scaling"]], resdf[~resdf["thres_scaling"]]
-    res_raw = res_noscl[res_noscl["group"] == "No Penalty"]
-    res_scl_nopn = res_scl[res_scl["group"] == "No Penalty"]
-    res_scl_pn = res_scl[res_scl["group"] == "Penalty"]
+    res_raw = resdf[resdf["group"] == "CNMF"]
+    res_nopn = resdf[resdf["group"] == "No Penalty"]
+    res_pn = resdf[resdf["group"] == "Penalty"]
     # raw threshold results
     for th in samp_thres:
         th_idx = np.argmin((res_raw["thres"] - th).abs())
         res_agg.append(sel_thres(res_raw, th_idx, "thres{:.2f}".format(th), met_cols))
-    # opt threshold results
-    opt_idx_raw = res_raw["opt_idx"].unique().item()
-    res_agg.append(sel_thres(res_raw, opt_idx_raw, "optimal thres", met_cols))
     # opt threshold with scaling
-    opt_idx_scl = res_scl_nopn["opt_idx"].unique().item()
+    opt_idx_scl = res_nopn["opt_idx"].unique().item()
     res_agg.append(
-        sel_thres(res_scl_nopn, opt_idx_scl, "optimal thres\n/w scaling", met_cols)
+        sel_thres(res_nopn, opt_idx_scl, "optimal thres\n/w scaling", met_cols)
     )
     # opt penalty
-    opt_idx_pn = res_scl_pn["opt_idx"].unique().item()
+    opt_idx_pn = res_pn["opt_idx"].unique().item()
     res_agg.append(
-        sel_thres(res_scl_pn, opt_idx_pn, "optimal /w\nscaling & penalty", met_cols)
+        sel_thres(res_pn, opt_idx_pn, "optimal /w\nscaling & penalty", met_cols)
     )
     res_agg = pd.concat(res_agg, ignore_index=True)
     return res_agg.set_index("label")

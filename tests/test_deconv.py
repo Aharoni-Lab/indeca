@@ -375,9 +375,7 @@ class TestDemoDeconv:
         fig = plot_met_ROC(metdf)
         fig.savefig(test_fig_path_svg)
 
-    def test_demo_solve_penal(
-        self, fixt_deconv, param_thres_scaling, test_fig_path_svg, results_bag
-    ):
+    def test_demo_solve_penal(self, fixt_deconv, test_fig_path_svg, results_bag):
         # book-keeping
         (
             deconv,
@@ -398,54 +396,43 @@ class TestDemoDeconv:
         if upsamp > 2:
             pytest.skip("Skipping highly upsampled signal for solve_penal demo")
         # act
-        _, _, _, _, intm_nopn = deconv.solve_thres(
-            scaling=param_thres_scaling, return_intm=True
+        _, _, _, _, intm_free = deconv.solve_thres(
+            scaling=False, amp_constraint=False, return_intm=True
         )
         s_free, _ = deconv.solve(amp_constraint=False)
         scl_init = np.ptp(s_free)
         deconv.update(scale=scl_init)
-        ss, _, _, _, opt_penal, intm_pn = deconv.solve_penal(
-            scaling=param_thres_scaling, return_intm=True
+        _, _, _, _, intm_nopn = deconv.solve_thres(scaling=True, return_intm=True)
+        _, _, _, _, opt_penal, intm_pn = deconv.solve_penal(
+            scaling=True, return_intm=True
         )
-        svals_pn = []
-        oidx = intm_pn[7]
-        for sv in intm_pn[2]:
-            s_pad = np.zeros(deconv.T)
-            s_pad[deconv.nzidx_s] = sv
-            svals_pn.append(s_pad)
-        if ns_lev == 0 and upsamp == 1:
-            assert (svals_pn[oidx] == s).all()
-        # plotting
-        metdf_nopn = compute_metrics(
-            s_org,
-            intm_nopn[2],
-            {
-                "thres": intm_nopn[1],
-                "scals": intm_nopn[5],
-                "objs": intm_nopn[6],
-                "penal": 0,
-                "opt_idx": intm_nopn[7],
-                "group": "No Penalty",
-            },
-            tdist_thres=3,
-        )
-        metdf_pn = compute_metrics(
-            s_org,
-            svals_pn,
-            {
-                "thres": intm_pn[1],
-                "scals": intm_pn[5],
-                "objs": intm_pn[6],
-                "penal": opt_penal,
-                "opt_idx": intm_pn[7],
-                "group": "Penalty",
-            },
-            tdist_thres=3,
-        )
-        metdf = pd.concat([metdf_nopn, metdf_pn], ignore_index=True)
-        fig = plot_met_ROC(metdf, grad_color=False)
-        fig.savefig(test_fig_path_svg)
         # save results
+        intms = {"CNMF": intm_free, "No Penalty": intm_nopn, "Penalty": intm_pn}
+        metdf = []
+        for grp, cur_intm in intms.items():
+            if grp == "Penalty":
+                cur_svals = []
+                oidx = intm_pn[7]
+                for sv in intm_pn[2]:
+                    s_pad = np.zeros(deconv.T)
+                    s_pad[deconv.nzidx_s] = sv
+                    cur_svals.append(s_pad)
+            else:
+                cur_svals = cur_intm[2]
+            cur_met = compute_metrics(
+                s_org,
+                cur_svals,
+                {
+                    "group": grp,
+                    "thres": cur_intm[1],
+                    "scals": cur_intm[5],
+                    "objs": cur_intm[6],
+                    "penal": opt_penal if grp == "Penalty" else 0,
+                    "opt_idx": cur_intm[7],
+                },
+            )
+            metdf.append(cur_met)
+        metdf = pd.concat(metdf, ignore_index=True)
         metdf = df_assign_metadata(
             metdf,
             {
@@ -459,6 +446,12 @@ class TestDemoDeconv:
             },
         )
         results_bag.data = metdf
+        # plotting
+        fig = plot_met_ROC(metdf, grad_color=False)
+        fig.savefig(test_fig_path_svg)
+        # assertion
+        if ns_lev == 0 and upsamp == 1:
+            assert (cur_svals[oidx] == s).all()
 
 
 def test_construct_R():
