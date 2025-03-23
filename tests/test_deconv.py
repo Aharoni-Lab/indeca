@@ -7,7 +7,7 @@ import pytest
 import seaborn as sns
 
 from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
-from minian_bin.simulation import ar_trace
+from minian_bin.simulation import AR2tau, ar_trace, tau2AR
 
 from .testing_utils.metrics import (
     assignment_distance,
@@ -129,9 +129,12 @@ def fixt_y(
 @pytest.fixture()
 def fixt_deconv(fixt_y, param_backend, param_norm):
     y, c, c_org, s, s_org, taus, ns_lev, upsamp, scl = fixt_y
+    taus_up = np.array(taus) * upsamp
+    _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
     deconv = DeconvBin(
         y=y,
-        tau=np.array(taus) * upsamp,
+        tau=taus_up,
+        ps=np.array([p, -p]),
         upsamp=upsamp,
         err_weighting=None,
         backend=param_backend,
@@ -159,8 +162,14 @@ class TestDeconvBin:
     ):
         # act
         c, s, taus = fixt_c
+        _, _, p = AR2tau(*tau2AR(*taus), solve_amp=True)
         deconv = DeconvBin(
-            y=c, tau=taus, err_weighting=None, backend=param_backend, norm=param_norm
+            y=c,
+            tau=taus,
+            ps=np.array([p, -p]),
+            err_weighting=None,
+            backend=param_backend,
+            norm=param_norm,
         )
         s_solve, b_solve = deconv.solve(amp_constraint=False)
         # plotting
@@ -189,8 +198,12 @@ class TestDeconvBin:
             pytest.skip("Skipping scaling for test_solve_thres")
         # act
         upsamp_ratio = upsamp_y / param_upsamp_dcv
+        taus_up = np.array(taus) * param_upsamp_dcv
+        _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
         deconv = DeconvBin(
             y=y,
+            tau=taus_up,
+            ps=np.array([p, -p]),
             upsamp=param_upsamp_dcv,
             err_weighting=None,
             backend=param_backend,
