@@ -486,13 +486,17 @@ class DeconvBin:
         return self.s, self.b
 
     def solve_thres(
-        self, scaling: bool = True, ignore_res: bool = False, return_intm: bool = False
+        self,
+        scaling: bool = True,
+        amp_constraint: bool = True,
+        ignore_res: bool = False,
+        return_intm: bool = False,
     ) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
-        opt_s, opt_b = self.solve()
+        opt_s, opt_b = self.solve(amp_constraint=amp_constraint)
         R = self.R.value if self.backend == "cvxpy" else self.R
         if ignore_res:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
