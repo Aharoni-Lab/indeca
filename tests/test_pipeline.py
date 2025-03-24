@@ -1,9 +1,11 @@
+import itertools as itt
 import os
 
 import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from plotly.subplots import make_subplots
 
 from minian_bin.deconv import construct_R
 from minian_bin.pipeline import pipeline_bin
@@ -12,6 +14,7 @@ from minian_bin.simulation import ar_trace, find_dhm
 from .testing_utils.cnmf import pipeline_cnmf
 from .testing_utils.io import download_realds, load_gt_ds
 from .testing_utils.metrics import assignment_distance, df_assign_metadata
+from .testing_utils.plotting import plot_traces
 
 
 @pytest.fixture()
@@ -177,6 +180,7 @@ class TestPipeline:
         param_noise_freq,
         param_add_lag,
         results_bag,
+        test_fig_path_html,
     ):
         # act
         Y, C, C_org, S, S_org, taus, ns_lev, upsamp_y = fixt_y
@@ -274,6 +278,35 @@ class TestPipeline:
                 )
         res_df = pd.concat(res_df, ignore_index=True)
         results_bag.data = res_df
+        # plotting
+        niter = len(S_bin_iter)
+        ncell = Y.shape[0]
+        fig = make_subplots(rows=niter, cols=ncell)
+        for uid, i_iter in itt.product(range(ncell), range(niter)):
+            sb = S_bin_iter[i_iter][uid, :]
+            cb = C_bin_iter[i_iter][uid, :]
+            tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+            fig.add_traces(
+                plot_traces(
+                    {
+                        "y": Y[uid, :],
+                        "c_true": C_org[uid, :],
+                        "s_true": S_org[uid, :],
+                        "c_bin": cb,
+                        "s_bin": sb,
+                    }
+                ),
+                rows=i_iter + 1,
+                cols=uid + 1,
+            )
+        fig.update_layout(height=350 * niter, width=1200 * ncell)
+        fig.write_html(test_fig_path_html)
+        # assertion
+        if ns_lev == 0 and param_upsamp == 1:
+            f1_last = res_df.set_index(["method", "iter"]).loc[
+                ("minian-bin", niter - 1), "f1"
+            ]
+            assert f1_last.min() == 1
 
 
 @pytest.mark.slow
