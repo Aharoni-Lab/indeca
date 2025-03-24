@@ -213,7 +213,14 @@ class TestPipeline:
         )
         # save results
         iter_df = iter_df.set_index(["iter", "cell"])
-        res_df = []
+        (dhm0, dhm1), _ = find_dhm(
+            True, np.array([taus[0], taus[1]]), np.array([1, -1])
+        )
+        res_df = [
+            pd.DataFrame(
+                [{"method": "gt", "use_all": True, "dhm0": dhm0, "dhm1": dhm1}]
+            )
+        ]
         for i_iter, sbin in enumerate(S_bin_iter):
             for uid in range(Y.shape[0]):
                 sb = sbin[uid, :]
