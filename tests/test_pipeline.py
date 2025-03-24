@@ -42,12 +42,12 @@ def param_ar_kn_len(request):
     return request.param
 
 
-@pytest.fixture(params=[0.1])
+@pytest.fixture(params=[None])
 def param_noise_freq(request):
     return request.param
 
 
-@pytest.fixture(params=[50])
+@pytest.fixture(params=[10])
 def param_add_lag(request):
     return request.param
 
@@ -205,7 +205,7 @@ class TestPipeline:
             ar_use_all=True,
             ar_kn_len=param_ar_kn_len,
             est_noise_freq=param_noise_freq,
-            est_use_smooth=True,
+            est_use_smooth=False,
             est_add_lag=param_add_lag,
             deconv_norm="l2",
             deconv_backend="osqp",
