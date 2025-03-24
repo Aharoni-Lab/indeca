@@ -12,7 +12,9 @@ from matplotlib.gridspec import GridSpec
 def plot_traces(tr_dict, **kwargs):
     trs = []
     for tr_name, tr_dat in tr_dict.items():
-        t = go.Scatter(y=tr_dat, name=tr_name, mode="lines", **kwargs)
+        t = go.Scatter(
+            y=tr_dat, name=tr_name, legendgroup=tr_name, mode="lines", **kwargs
+        )
         trs.append(t)
     return trs
 
