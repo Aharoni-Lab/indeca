@@ -368,7 +368,10 @@ def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
 def estimate_coefs(
     y: np.ndarray, p: int, noise_freq: tuple, use_smooth: bool, add_lag: int
 ):
-    tn = noise_fft(y, noise_range=(noise_freq, 1))
+    if noise_freq is None:
+        tn = 0
+    else:
+        tn = noise_fft(y, noise_range=(noise_freq, 1))
     if use_smooth:
         y_ar = filt_fft(y.squeeze(), noise_freq, "low")
         tn_ar = noise_fft(y_ar, noise_range=(noise_freq, 1))
