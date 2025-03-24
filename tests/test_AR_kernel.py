@@ -14,7 +14,7 @@ from minian_bin.AR_kernel import (
     solve_fit_h_num,
     solve_g,
 )
-from minian_bin.simulation import AR2exp, ar_trace, find_dhm
+from minian_bin.simulation import AR2exp, AR2tau, ar_trace, exp_pulse, find_dhm, tau2AR
 
 from .testing_utils.plotting import plot_traces
 
@@ -24,9 +24,9 @@ def param_y_len():
     return 1000
 
 
-@pytest.fixture()
-def param_ncell():
-    return 30
+@pytest.fixture(params=[1, 30])
+def param_ncell(request):
+    return request.param
 
 
 @pytest.fixture(params=[(6, 1), (10, 3)])
@@ -103,11 +103,31 @@ def fixt_y(
     return Y, C, C_org, S, S_org, param_taus, param_ns_level, upsamp
 
 
+@pytest.mark.xfail("yule walker estimation struggle to get accurate")
+def test_estimate_coef(fixt_y):
+    # book-kepping
+    Y, C, C_org, S, S_org, taus_true, ns_lev, upsamp = fixt_y
+    if ns_lev > 0 or upsamp > 1 or Y.shape[0] > 1:
+        pytest.skip("Skipping conditions for test_estimate_coef")
+    y = Y.squeeze()
+    # act
+    theta, _ = estimate_coefs(y, p=2, noise_freq=None, use_smooth=False, add_lag=0)
+    # assertion
+    t0_true, t1_true, p_true = AR2tau(*tau2AR(*taus_true), solve_amp=True)
+    t0_est, t1_est, p_est = AR2tau(*theta, solve_amp=True)
+    ps_true, _, _ = exp_pulse(t0_true, t1_true, nsamp=100, p_d=p_true, p_r=-p_true)
+    ps_est, _, _ = exp_pulse(t0_est, t1_est, nsamp=100, p_d=p_est, p_r=-p_est)
+    assert np.isclose(ps_true, ps_est).all()
+    assert (theta == tau2AR(*taus_true)).all()
+
+
 class TestDemoSolveFit:
     def test_demo_solve_fit_h_num(self, fixt_y, results_bag):
         # book-keeping
         res_df = []
         Y, C, C_org, S, S_org, taus_true, ns_level, upsamp = fixt_y
+        if Y.shape[0] == 1:
+            pytest.skip("Skipping single cell for test_demo_solve_fit_h_num")
         dhm_true, _ = find_dhm(True, taus_true, np.array([1, -1]))
         res_df.append(
             pd.DataFrame(
