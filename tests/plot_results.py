@@ -13,11 +13,29 @@ FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
 
 
 # %% plot pipeline results
-fig_path = FIG_PATH / "demo_pipeline"
+def iter_plot(data, color, **kwargs):
+    mthd = data["method"].unique().item()
+    ax = plt.gca()
+    if mthd == "minian-bin":
+        sns.boxplot(data, x="iter", y="value", ax=ax, **kwargs)
+    elif mthd == "cnmf":
+        sns.boxenplot(data, x="qthres", y="value", ax=ax, **kwargs)
+
+
+fig_path = FIG_PATH / "pipeline"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_demo_pipeline")
-id_vars = ["method", "use_all", "unit_id", "iter", "param_upsamp_param"]
-val_vals = ["mdist", "f1"]
+result = load_agg_result(IN_RES_PATH / "test_pipeline").drop_duplicates()
+id_vars = [
+    "method",
+    "use_all",
+    "unit_id",
+    "iter",
+    "qthres",
+    "param_upsamp_param",
+    "param_ns_level_param",
+    "param_taus_param",
+]
+val_vals = ["mdist", "f1", "prec", "rec", "dhm0", "dhm1"]
 resdf = pd.melt(
     result,
     id_vars=id_vars,
@@ -25,14 +43,30 @@ resdf = pd.melt(
     var_name="metric",
     value_name="value",
 )
-resdf["row_lab"] = resdf["metric"]
-resdf["col_lab"] = (
-    resdf["use_all"].map(lambda u: "all_cell" if u else "individual")
-    + "-"
-    + resdf["param_upsamp_param"].astype(str)
-)
-g = sns.FacetGrid(resdf, row="row_lab", col="col_lab", sharey="row", margin_titles=True)
-g.map_dataframe(sns.lineplot, x="iter", y="value")
+resdf["iter"] = resdf["iter"].fillna(-1)
+for (ns_lev, tau), res_sub in resdf.groupby(
+    ["param_ns_level_param", "param_taus_param"]
+):
+    res_sub["row_lab"] = res_sub["metric"]
+    res_sub["col_lab"] = (
+        res_sub["method"]
+        + "-"
+        + res_sub["use_all"].map(lambda u: "all_cell" if u else "individual")
+    )
+    g = sns.FacetGrid(
+        res_sub,
+        aspect=1.4,
+        row="row_lab",
+        col="col_lab",
+        sharey="row",
+        sharex="col",
+        margin_titles=True,
+    )
+    g.map_dataframe(iter_plot, hue="param_upsamp_param", dodge=True)
+    g.add_legend()
+    g.figure.savefig(fig_path / "{}-{}.svg".format(ns_lev, tau))
+    plt.close(g.figure)
+# g.map_dataframe(sns.swarmplot, x="iter", y="value", warn_thres=0.8)
 
 
 # %% plot AR results

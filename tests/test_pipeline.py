@@ -7,7 +7,7 @@ import xarray as xr
 
 from minian_bin.deconv import construct_R
 from minian_bin.pipeline import pipeline_bin
-from minian_bin.simulation import find_dhm
+from minian_bin.simulation import ar_trace, find_dhm
 
 from .testing_utils.cnmf import pipeline_cnmf
 from .testing_utils.io import download_realds, load_gt_ds
@@ -24,7 +24,7 @@ def param_subset_cell(request):
     return request.param
 
 
-@pytest.fixture(params=[(0, 10000)])
+@pytest.fixture(params=[(0, 20000)])
 def param_subset_fm(request):
     return request.param
 
@@ -39,7 +39,7 @@ def param_ar_kn_len(request):
     return request.param
 
 
-@pytest.fixture(params=[0.05])
+@pytest.fixture(params=[0.1])
 def param_noise_freq(request):
     return request.param
 
@@ -81,6 +81,199 @@ def fixt_realds(temp_data_dir, param_subset_cell, param_subset_fm, request):
     ap_df = ap_df.set_index("unit_id").loc[uids]
     fluo_df = fluo_df.set_index("unit_id").loc[uids]
     return Y, ap_df, fluo_df
+
+
+@pytest.fixture()
+def param_y_len():
+    return 1000
+
+
+@pytest.fixture(params=[10, 1])
+def param_ncell(request):
+    return request.param
+
+
+@pytest.fixture(params=[(6, 1), (10, 3)])
+def param_taus(request):
+    return request.param
+
+
+@pytest.fixture(params=[0, 0.1, 0.2, 0.5])
+def param_ns_level(request):
+    return request.param
+
+
+@pytest.fixture(params=[1, 2, 3, 4, 5])
+def param_rand_seed(request):
+    sd = request.param
+    np.random.seed(sd)
+    return sd
+
+
+@pytest.fixture()
+def param_tmp_P():
+    return np.array([[0.98, 0.02], [0.75, 0.25]])
+
+
+@pytest.fixture(params=[1, 2])
+def param_upsamp(request):
+    return request.param
+
+
+@pytest.fixture()
+def param_tmp_upsamp(param_upsamp):
+    if param_upsamp < 5:
+        tmp = np.array([[0.98, 0.02], [0.75, 0.25]])
+    else:
+        tmp = np.array([[0.998, 0.002], [0.75, 0.25]])
+    return param_upsamp, tmp
+
+
+@pytest.fixture()
+def fixt_y(
+    param_y_len,
+    param_ncell,
+    param_taus,
+    param_tmp_upsamp,
+    param_ns_level,
+    param_rand_seed,
+):
+    upsamp, tmp_P = param_tmp_upsamp
+    Y, C_org, S_org, C, S = [], [], [], [], []
+    for i in range(param_ncell):
+        c_org, s_org = ar_trace(
+            param_y_len * upsamp,
+            tmp_P,
+            tau_d=param_taus[0] * upsamp,
+            tau_r=param_taus[1] * upsamp,
+            shifted=True,
+        )
+        if upsamp > 1:
+            c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
+            s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
+        else:
+            c, s = c_org, s_org
+        y = c + np.random.normal(0, param_ns_level, c.shape) * upsamp
+        Y.append(y)
+        C_org.append(c_org)
+        S_org.append(s_org)
+        C.append(c)
+        S.append(s)
+    Y = np.stack(Y, axis=0)
+    C_org = np.stack(C_org, axis=0)
+    S_org = np.stack(S_org, axis=0)
+    C = np.stack(C, axis=0)
+    S = np.stack(S, axis=0)
+    return Y, C, C_org, S, S_org, param_taus, param_ns_level, upsamp
+
+
+class TestPipeline:
+    def test_pipeline(
+        self,
+        fixt_y,
+        param_upsamp,
+        param_max_iters,
+        param_ar_kn_len,
+        param_noise_freq,
+        param_add_lag,
+        results_bag,
+    ):
+        # act
+        Y, C, C_org, S, S_org, taus, ns_lev, upsamp_y = fixt_y
+        if upsamp_y != param_upsamp:
+            pytest.skip("Skipping unmatched upsampling")
+        C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
+            Y, up_factor=1, est_noise_freq=0.06, sps_penal=0
+        )
+        (
+            C_bin,
+            S_bin,
+            iter_df,
+            C_bin_iter,
+            S_bin_iter,
+            h_iter,
+            h_fit_iter,
+        ) = pipeline_bin(
+            Y,
+            param_upsamp,
+            max_iters=param_max_iters,
+            return_iter=True,
+            ar_use_all=True,
+            ar_kn_len=param_ar_kn_len,
+            est_noise_freq=param_noise_freq,
+            est_use_smooth=True,
+            est_add_lag=param_add_lag,
+            deconv_norm="l2",
+            deconv_backend="osqp",
+            spawn_dashboard=False,
+        )
+        # save results
+        iter_df = iter_df.set_index(["iter", "cell"])
+        res_df = []
+        for i_iter, sbin in enumerate(S_bin_iter):
+            for uid in range(Y.shape[0]):
+                sb = sbin[uid, :]
+                tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+                try:
+                    (dhm0, dhm1), _ = find_dhm(
+                        True, np.array([tau_d, tau_r]), np.array([1, -1])
+                    )
+                except AssertionError:
+                    dhm0, dhm1 = 0, 0
+                mdist, f1, prec, rec = assignment_distance(
+                    s_ref=S_org[uid, :], s_slv=sb, tdist_thres=3
+                )
+                res_df.append(
+                    pd.DataFrame(
+                        [
+                            {
+                                "method": "minian-bin",
+                                "use_all": Y.shape[0] > 1,
+                                "unit_id": uid,
+                                "iter": i_iter,
+                                "mdist": mdist,
+                                "f1": f1,
+                                "prec": prec,
+                                "rec": rec,
+                                "dhm0": dhm0,
+                                "dhm1": dhm1,
+                            }
+                        ]
+                    )
+                )
+        for uid in range(Y.shape[0]):
+            for qthres in [0.25, 0.5, 0.75]:
+                sb = S_cnmf[uid, :] > qthres
+                tau_d, tau_r = tau_cnmf[uid, :]
+                try:
+                    (dhm0, dhm1), _ = find_dhm(
+                        True, np.array([tau_d, tau_r]), np.array([1, -1])
+                    )
+                except AssertionError:
+                    dhm0, dhm1 = 0, 0
+                mdist, f1, prec, rec = assignment_distance(
+                    s_ref=S_org[uid, :], s_slv=sb, tdist_thres=3
+                )
+                res_df.append(
+                    pd.DataFrame(
+                        [
+                            {
+                                "method": "cnmf",
+                                "use_all": False,
+                                "unit_id": uid,
+                                "qthres": qthres,
+                                "mdist": mdist,
+                                "f1": f1,
+                                "prec": prec,
+                                "rec": rec,
+                                "dhm0": dhm0,
+                                "dhm1": dhm1,
+                            }
+                        ]
+                    )
+                )
+        res_df = pd.concat(res_df, ignore_index=True)
+        results_bag.data = res_df
 
 
 @pytest.mark.slow
@@ -194,7 +387,7 @@ class TestDemoPipeline:
                         [
                             {
                                 "method": "cnmf",
-                                "use_all": "unit_id" in Y.dims,
+                                "use_all": False,
                                 "unit_id": uid,
                                 "qthres": qthres,
                                 "mdist": mdist,
