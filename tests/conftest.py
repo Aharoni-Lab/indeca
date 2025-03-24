@@ -168,4 +168,6 @@ def pytest_sessionfinish(session):
             suffix = "all" if is_main_process(session) else get_xdist_worker_id(session)
             dat_dir = os.path.join(AGG_RES_DIR, fname)
             os.makedirs(dat_dir, exist_ok=True)
-            result.to_feather(os.path.join(dat_dir, "{}.feat".format(suffix)))
+            result.drop_duplicates().to_feather(
+                os.path.join(dat_dir, "{}.feat".format(suffix))
+            )
