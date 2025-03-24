@@ -133,10 +133,10 @@ def simulation_params():
     }
 
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_configure(config):
-    if not hasattr(config, "workerinput"):
-        shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
+# @pytest.hookimpl(tryfirst=True)
+# def pytest_configure(config):
+#     if not hasattr(config, "workerinput"):
+#         shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
 
 
 def pytest_sessionfinish(session):
