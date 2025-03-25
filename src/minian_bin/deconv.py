@@ -603,6 +603,7 @@ class DeconvBin:
                 locally_biased=False,
                 vol_tol=1e-2,
             )
+            direct_pn = res.x
             if not res.success:
                 logger.warning(
                     "could not find optimal penalty within {} iterations".format(
@@ -610,8 +611,11 @@ class DeconvBin:
                     )
                 )
                 opt_penal = 0
+            elif err_min <= opt_fn(direct_pn):
+                # DIRECT seem to mistakenly report high penalty when 0 penalty attains better error
+                opt_penal = 0
             else:
-                opt_penal = res.x.item()
+                opt_penal = direct_pn.item()
             self.update(**{pn: opt_penal})
             if return_intm:
                 opt_s, opt_c, opt_scl, opt_obj, intm = self.solve_thres(
