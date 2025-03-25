@@ -430,6 +430,7 @@ class TestDemoDeconv:
                     "penal": opt_penal if grp == "Penalty" else 0,
                     "opt_idx": cur_intm[7],
                 },
+                tdist_thres=2,
             )
             metdf.append(cur_met)
         metdf = pd.concat(metdf, ignore_index=True)
