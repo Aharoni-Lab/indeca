@@ -93,9 +93,10 @@ def pipeline_bin(
                 use_smooth=est_use_smooth,
                 add_lag=est_add_lag,
             )
-            tau_d, tau_r, cur_p = AR2tau(*cur_theta, solve_amp=True)
+            tau_d, tau_r, pp = AR2tau(*cur_theta, solve_amp=True)
+            cur_p = np.array([pp, -pp])
             cur_tau = np.array([tau_d, tau_r])
-            if (np.imag(cur_tau) != 0).any() or cur_p == np.inf:
+            if (np.imag(cur_tau) != 0).any() or pp == np.inf:
                 tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
                 lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
                 cur_tau = (-1 / lams) * up_factor
