@@ -777,7 +777,7 @@ class DeconvBin:
                 u=ub_inf_copy,
                 verbose=False,
                 polish=True,
-                # warm_start=True if self.backend == "osqp" else False,
+                warm_start=False,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
@@ -794,7 +794,7 @@ class DeconvBin:
                 u=ub_copy,
                 verbose=False,
                 polish=True,
-                # warm_start=True if self.backend == "osqp" else False,
+                warm_start=False,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
@@ -810,8 +810,8 @@ class DeconvBin:
             prob = self.prob
         else:
             prob = self.prob_free
-        if self.backend in ["osqp", "emosqp", "cuosqp"] and self.x_cache is not None:
-            prob.warm_start(x=self.x_cache)
+        # if self.backend in ["osqp", "emosqp", "cuosqp"] and self.x_cache is not None:
+        #     prob.warm_start(x=self.x_cache)
         res = prob.solve()
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
@@ -829,9 +829,9 @@ class DeconvBin:
                     x = np.zeros_like(x, dtype=float)
                 else:
                     x = x.astype(float)
-            if update_cache:
-                self.x_cache = x
-                prob.warm_start(x=x)
+            # if update_cache:
+            #     self.x_cache = x
+            #     prob.warm_start(x=x)
             if self.norm == "huber":
                 xlen = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
                 sol = x[:xlen]
