@@ -64,7 +64,7 @@ def max_thres(
     ds=None,
     return_thres=False,
     th_amplitude=False,
-    delta=1e-8,
+    delta=1e-6,
     reverse_thres=False,
     nz_only: bool = False,
 ):
