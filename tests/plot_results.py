@@ -189,13 +189,11 @@ def agg_result(
         res_agg.append(sel_thres(res_raw, th_idx, "thres{:.2f}".format(th), met_cols))
     # opt threshold with scaling
     opt_idx_scl = res_nopn["opt_idx"].unique().item()
-    res_agg.append(
-        sel_thres(res_nopn, opt_idx_scl, "optimal thres\n/w scaling", met_cols)
-    )
+    res_agg.append(sel_thres(res_nopn, opt_idx_scl, "optimal thres", met_cols))
     # opt penalty
     opt_idx_pn = res_pn["opt_idx"].unique().item()
     res_agg.append(
-        sel_thres(res_pn, opt_idx_pn, "optimal /w\nscaling & penalty", met_cols)
+        sel_thres(res_pn, opt_idx_pn, "optimal thres\n /w penalty", met_cols)
     )
     res_agg = pd.concat(res_agg, ignore_index=True)
     return res_agg.set_index("label")
@@ -203,11 +201,11 @@ def agg_result(
 
 fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal")
+result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal").drop_duplicates()
 if result is not None:
     result = result[result["param_y_scaling_param"]]
     grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "param_rand_seed_param"]
-    res_agg = result.groupby(grp_dim).apply(agg_result).reset_index()
+    res_agg = result.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
     for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):
         for met in ["mdist", "f1", "prec", "recall"]:
             g = plot_agg_boxswarm(
@@ -219,7 +217,8 @@ if result is not None:
                 facet_kws={"height": 3.5},
             )
             g.tick_params(rotation=45)
-            g.set(yscale="log")
+            if met != "mdist":
+                g.set(yscale="log")
             g.figure.savefig(
                 fig_path / "tau({},{})-{}.svg".format(td, tr, met), bbox_inches="tight"
             )
