@@ -187,7 +187,12 @@ class TestPipeline:
         if upsamp_y != param_upsamp:
             pytest.skip("Skipping unmatched upsampling")
         C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
-            Y, up_factor=1, est_noise_freq=0.06, sps_penal=0
+            Y,
+            up_factor=1,
+            est_noise_freq=param_noise_freq,
+            est_add_lag=param_add_lag,
+            est_use_smooth=False,
+            sps_penal=0,
         )
         (
             C_bin,
@@ -221,8 +226,8 @@ class TestPipeline:
                 [{"method": "gt", "use_all": True, "dhm0": dhm0, "dhm1": dhm1}]
             )
         ]
-        for i_iter, sbin in enumerate(S_bin_iter):
-            for uid in range(Y.shape[0]):
+        for uid in range(Y.shape[0]):
+            for i_iter, sbin in enumerate(S_bin_iter):
                 sb = sbin[uid, :]
                 tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
                 try:
@@ -271,6 +276,7 @@ class TestPipeline:
                             {
                                 "method": "cnmf",
                                 "use_all": False,
+                                "iter": "final",
                                 "unit_id": uid,
                                 "qthres": qthres,
                                 "mdist": mdist,
