@@ -13,13 +13,49 @@ FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
 
 
 # %% plot pipeline results
-def iter_plot(data, color, **kwargs):
-    mthd = data["method"].unique().item()
+def iter_plot(data, color, dhm0, dhm1, **kwargs):
     ax = plt.gca()
+    mthd = data["method"].unique().item()
+    met = data["metric"].unique().item()
+    use_all = data["use_all"].unique().item()
+    if met == "dhm0":
+        ax.axhline(dhm0, color="grey", ls=":")
+    elif met == "dhm1":
+        ax.axhline(dhm1, color="grey", ls=":")
+    elif met == "f1":
+        ax.set_yscale("log")
+    if use_all:
+        data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
+    if mthd == "cnmf":
+        data = data.groupby(["qthres", "test_id"])["value"].median().reset_index()
     if mthd == "minian-bin":
-        sns.boxplot(data, x="iter", y="value", ax=ax, **kwargs)
+        sns.swarmplot(
+            data,
+            x="iter",
+            y="value",
+            ax=ax,
+            color=color,
+            edgecolor="auto",
+            warn_thresh=0.8,
+            linewidth=1,
+            **kwargs,
+        )
+        sns.lineplot(data, x="iter", y="value", ax=ax, color=color, **kwargs)
     elif mthd == "cnmf":
-        sns.boxenplot(data, x="qthres", y="value", ax=ax, **kwargs)
+        sns.swarmplot(
+            data,
+            x="qthres",
+            y="value",
+            ax=ax,
+            color=color,
+            edgecolor="auto",
+            warn_thresh=0.8,
+            linewidth=1,
+            **kwargs,
+        )
+        sns.boxplot(
+            data, x="qthres", y="value", color=color, saturation=0.5, ax=ax, **kwargs
+        )
 
 
 fig_path = FIG_PATH / "pipeline"
@@ -31,42 +67,49 @@ id_vars = [
     "unit_id",
     "iter",
     "qthres",
+    "test_id",
     "param_upsamp_param",
     "param_ns_level_param",
     "param_taus_param",
 ]
-val_vals = ["mdist", "f1", "prec", "rec", "dhm0", "dhm1"]
+val_vals = ["f1", "dhm0", "dhm1"]
 resdf = pd.melt(
     result,
     id_vars=id_vars,
     value_vars=val_vals,
     var_name="metric",
     value_name="value",
-)
-resdf["iter"] = resdf["iter"].fillna(-1)
-for (ns_lev, tau), res_sub in resdf.groupby(
-    ["param_ns_level_param", "param_taus_param"]
+).drop_duplicates()
+for (ns_lev, tau, upsamp), res_sub in resdf.groupby(
+    ["param_ns_level_param", "param_taus_param", "param_upsamp_param"]
 ):
+    res_gt = res_sub[res_sub["method"] == "gt"].copy()
+    dhm0 = res_gt.query("metric == 'dhm0'")["value"].unique().item()
+    dhm1 = res_gt.query("metric == 'dhm1'")["value"].unique().item()
+    res_sub = res_sub[res_sub["method"] != "gt"].copy()
     res_sub["row_lab"] = res_sub["metric"]
     res_sub["col_lab"] = (
         res_sub["method"]
-        + "-"
+        + "|"
         + res_sub["use_all"].map(lambda u: "all_cell" if u else "individual")
     )
     g = sns.FacetGrid(
         res_sub,
+        height=2.5,
         aspect=1.4,
         row="row_lab",
         col="col_lab",
         sharey="row",
         sharex="col",
+        hue="col_lab",
+        col_order=["minian-bin|individual", "minian-bin|all_cell", "cnmf|individual"],
+        hue_order=["minian-bin|individual", "minian-bin|all_cell", "cnmf|individual"],
         margin_titles=True,
     )
-    g.map_dataframe(iter_plot, hue="param_upsamp_param", dodge=True)
+    g.map_dataframe(iter_plot, dhm0=dhm0, dhm1=dhm1)
     g.add_legend()
-    g.figure.savefig(fig_path / "{}-{}.svg".format(ns_lev, tau))
+    g.figure.savefig(fig_path / "{}-{}-{}.svg".format(ns_lev, tau, upsamp))
     plt.close(g.figure)
-# g.map_dataframe(sns.swarmplot, x="iter", y="value", warn_thres=0.8)
 
 
 # %% plot AR results
