@@ -228,12 +228,17 @@ if result is not None:
 # %% plot thresholds
 fig_path = FIG_PATH / "solve_thres"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_solve_thres")
+result = load_agg_result(IN_RES_PATH / "test_solve_thres").drop_duplicates()
 if result is not None:
     for (td, tr), res_sub in result.groupby(["tau_d", "tau_r"]):
         for met in ["mdist", "f1", "precs", "recall"]:
             g = plot_agg_boxswarm(
-                res_sub, row="upsamp", col="upsamp_y", x="ns_lev", y=met
+                res_sub,
+                row="upsamp",
+                col="upsamp_y",
+                x="ns_lev",
+                y=met,
+                facet_kws={"margin_titles": True},
             )
             g.figure.savefig(
                 fig_path / "tau({},{})-{}.svg".format(td, tr, met), bbox_inches="tight"
