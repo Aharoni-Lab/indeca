@@ -441,7 +441,6 @@ class TestDemoDeconv:
                 "tau_r": taus[1],
                 "ns_lev": ns_lev,
                 "y_scaling": scl,
-                "thres_scaling": param_thres_scaling,
                 "upsamp": upsamp,
                 "backend": param_backend,
             },
