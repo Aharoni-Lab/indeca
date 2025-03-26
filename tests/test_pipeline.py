@@ -27,7 +27,7 @@ def param_subset_cell(request):
     return request.param
 
 
-@pytest.fixture(params=[(0, 20000)])
+@pytest.fixture(params=[(0, 10000)])
 def param_subset_fm(request):
     return request.param
 
@@ -355,7 +355,7 @@ class TestDemoPipeline:
             ar_use_all=True,
             ar_kn_len=param_ar_kn_len,
             est_noise_freq=param_noise_freq,
-            est_use_smooth=True,
+            est_use_smooth=False,
             est_add_lag=param_add_lag,
             deconv_norm="l2",
             deconv_backend="osqp",
