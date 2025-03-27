@@ -17,7 +17,6 @@ from .testing_utils.plotting import plot_traces
 
 
 class TestPipeline:
-
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("upsamp", [1, pytest.param(2, marks=pytest.mark.slow)])
