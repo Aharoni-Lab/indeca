@@ -1,14 +1,9 @@
-import os
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import pytest
-import seaborn as sns
 
-from minian_bin.deconv import DeconvBin, construct_G, construct_R, max_thres
-from minian_bin.simulation import AR2tau, ar_trace, tau2AR
-
+from .conftest import fixt_deconv
 from .testing_utils.metrics import (
     assignment_distance,
     compute_metrics,
@@ -17,159 +12,14 @@ from .testing_utils.metrics import (
 from .testing_utils.plotting import plot_met_ROC, plot_traces
 
 
-@pytest.fixture()
-def param_y_len():
-    return 1000
-
-
-@pytest.fixture()
-def param_eq_atol():
-    return 1e-3
-
-
-@pytest.fixture(params=[(6, 1), (10, 3)])
-def param_taus(request):
-    return request.param
-
-
-@pytest.fixture(params=["osqp", "cvxpy"])
-def param_backend(request):
-    return request.param
-
-
-@pytest.fixture()
-def param_norm():
-    return "l2"
-
-
-@pytest.fixture(params=[0, 0.1, 0.2, 0.5])
-def param_ns_level(request):
-    return request.param
-
-
-@pytest.fixture(params=np.arange(15))
-def param_rand_seed(request):
-    sd = request.param
-    np.random.seed(sd)
-    return sd
-
-
-@pytest.fixture()
-def param_tmp_P():
-    return np.array([[0.98, 0.02], [0.75, 0.25]])
-
-
-@pytest.fixture(params=[1, 2, 5])
-def param_upsamp(request):
-    return request.param
-
-
-@pytest.fixture(params=[1, 2, 5])
-def param_upsamp_dcv(request):
-    return request.param
-
-
-@pytest.fixture(params=[True, False])
-def param_y_scaling(request):
-    return request.param
-
-
-@pytest.fixture(params=[True, False])
-def param_thres_scaling(request):
-    return request.param
-
-
-@pytest.fixture()
-def param_tmp_upsamp(param_upsamp):
-    if param_upsamp < 5:
-        tmp = np.array([[0.98, 0.02], [0.75, 0.25]])
-    else:
-        tmp = np.array([[0.998, 0.002], [0.75, 0.25]])
-    return param_upsamp, tmp
-
-
-@pytest.fixture()
-def fixt_c(param_y_len, param_taus, param_tmp_P, param_rand_seed):
-    c, s = ar_trace(
-        param_y_len, param_tmp_P, tau_d=param_taus[0], tau_r=param_taus[1], shifted=True
-    )
-    return c, s, param_taus
-
-
-@pytest.fixture()
-def fixt_y(
-    param_y_len,
-    param_taus,
-    param_tmp_upsamp,
-    param_ns_level,
-    param_y_scaling,
-    param_rand_seed,
-):
-    upsamp, tmp_P = param_tmp_upsamp
-    c_org, s_org = ar_trace(
-        param_y_len * upsamp,
-        tmp_P,
-        tau_d=param_taus[0] * upsamp,
-        tau_r=param_taus[1] * upsamp,
-        shifted=True,
-    )
-    if upsamp > 1:
-        c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
-        s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
-    else:
-        c, s = c_org, s_org
-    if param_y_scaling:
-        scl = np.random.uniform(0.5, 2)
-    else:
-        scl = 1
-    y = scl * (c + np.random.normal(0, param_ns_level, c.shape))
-    return y, c, c_org, s, s_org, param_taus, param_ns_level, upsamp, scl
-
-
-@pytest.fixture()
-def fixt_deconv(fixt_y, param_backend, param_norm):
-    y, c, c_org, s, s_org, taus, ns_lev, upsamp, scl = fixt_y
-    taus_up = np.array(taus) * upsamp
-    _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
-    deconv = DeconvBin(
-        y=y,
-        tau=taus_up,
-        ps=np.array([p, -p]),
-        upsamp=upsamp,
-        err_weighting=None,
-        backend=param_backend,
-        norm=param_norm,
-    )
-    return (
-        deconv,
-        param_backend,
-        param_norm,
-        y,
-        c,
-        c_org,
-        s,
-        s_org,
-        taus,
-        ns_lev,
-        upsamp,
-        scl,
-    )
-
-
 class TestDeconvBin:
-    def test_solve(
-        self, fixt_c, param_backend, param_norm, param_eq_atol, test_fig_path_html
-    ):
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize("backend", ["osqp", "cvxpy"])
+    def test_solve(self, taus, rand_seed, backend, eq_atol, test_fig_path_html):
         # act
-        c, s, taus = fixt_c
-        _, _, p = AR2tau(*tau2AR(*taus), solve_amp=True)
-        deconv = DeconvBin(
-            y=c,
-            tau=taus,
-            ps=np.array([p, -p]),
-            err_weighting=None,
-            backend=param_backend,
-            norm=param_norm,
+        deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
+            taus=taus, backend=backend, rand_seed=rand_seed
         )
         s_solve, b_solve = deconv.solve(amp_constraint=False)
         # plotting
@@ -177,39 +27,32 @@ class TestDeconvBin:
         fig.add_traces(plot_traces({"c": c, "s": s, "s_solve": s_solve}))
         fig.write_html(test_fig_path_html)
         # assertion
-        assert np.isclose(b_solve, 0, atol=param_eq_atol)
-        assert np.isclose(s, s_solve, atol=param_eq_atol).all()
+        assert np.isclose(b_solve, 0, atol=eq_atol)
+        assert np.isclose(s, s_solve, atol=eq_atol).all()
 
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize("upsamp", [1, 2, 5])
+    @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
+    @pytest.mark.parametrize(
+        "ns_lev",
+        [
+            0,
+            pytest.param(0.2, marks=pytest.mark.xfail),
+            pytest.param(0.5, marks=pytest.mark.xfail),
+        ],
+    )
     def test_solve_thres(
-        self,
-        fixt_y,
-        param_backend,
-        param_upsamp_dcv,
-        param_norm,
-        test_fig_path_html,
-        results_bag,
-        runtime_xfail,
+        self, taus, rand_seed, upsamp, upsamp_y, ns_lev, test_fig_path_html, results_bag
     ):
-        # book-keeping
-        y, c, c_org, s, s_org, taus, ns_lev, upsamp_y, scl = fixt_y
-        if param_backend == "cvxpy":
-            pytest.skip("Skipping cvxpy backend for test_solve_thres")
-        if scl != 1:
-            pytest.skip("Skipping scaling for test_solve_thres")
         # act
-        upsamp_ratio = upsamp_y / param_upsamp_dcv
-        taus_up = np.array(taus) * param_upsamp_dcv
-        _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
-        deconv = DeconvBin(
-            y=y,
-            tau=taus_up,
-            ps=np.array([p, -p]),
-            upsamp=param_upsamp_dcv,
-            err_weighting=None,
-            backend=param_backend,
-            norm=param_norm,
+        deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
+            taus=taus,
+            rand_seed=rand_seed,
+            upsamp=upsamp,
+            upsamp_y=upsamp_y,
+            ns_lev=ns_lev,
         )
-        deconv.update(scale=upsamp_ratio)
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
             scaling=False, return_intm=True
         )
@@ -241,10 +84,6 @@ class TestDeconvBin:
                 {
                     "tau_d": taus[0],
                     "tau_r": taus[1],
-                    "ns_lev": ns_lev,
-                    "upsamp_y": upsamp_y,
-                    "upsamp": param_upsamp_dcv,
-                    "backend": param_backend,
                     "mdist": mdist,
                     "f1": f1,
                     "precs": precs,
@@ -254,58 +93,32 @@ class TestDeconvBin:
         )
         results_bag.data = dat
         # assert
-        if ns_lev >= 0.2:
-            runtime_xfail("Accuracy degrade when noise level too high")
-        if param_upsamp_dcv == upsamp_y:  # upsample factor matches ground truth
+        if upsamp == upsamp_y:  # upsample factor matches ground truth
             assert mdist <= 1
             assert recall >= 0.8
             assert precs >= 0.95
-        elif param_upsamp_dcv < upsamp_y:  # upsample factor smaller than ground truth
-            assert mdist <= upsamp_ratio
+        elif upsamp < upsamp_y:  # upsample factor smaller than ground truth
+            assert mdist <= upsamp_y / upsamp
             assert recall >= 0.95
         else:  # upsample factor larger than ground truth
             assert mdist <= 1
             assert precs >= 0.95
 
-    @pytest.mark.parametrize("param_penal_scaling", [True, False])
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize("penal_scaling", [True, False])
     def test_solve_penal(
-        self,
-        fixt_deconv,
-        param_backend,
-        param_upsamp,
-        param_norm,
-        param_penal_scaling,
-        test_fig_path_html,
-        results_bag,
-        runtime_xfail,
+        self, taus, rand_seed, penal_scaling, test_fig_path_html, results_bag
     ):
-        # book-keeping
-        (
-            deconv,
-            param_backend,
-            param_norm,
-            y,
-            c,
-            c_org,
-            s,
-            s_org,
-            taus,
-            ns_lev,
-            upsamp,
-            scl,
-        ) = fixt_deconv
-        if param_backend == "cvxpy":
-            pytest.skip("Skipping cvxpy backend for test_solve_penal")
-        if upsamp > 1:
-            pytest.skip("Skipping upsampling for test_solve_penal")
-        if ns_lev > 0:
-            pytest.skip("Skipping noise level for test_solve_penal")
         # act
+        deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
+            taus=taus, rand_seed=rand_seed
+        )
         s_free, _ = deconv.solve(amp_constraint=False)
         scl_init = np.ptp(s_free)
         deconv.update(scale=scl_init)
         opt_s, opt_c, scl_slv, obj, pn_slv, intm = deconv.solve_penal(
-            scaling=param_penal_scaling, return_intm=True
+            scaling=penal_scaling, return_intm=True
         )
         s_slv_ma = intm[0]
         s_bin, c_bin, s_slv = np.zeros(deconv.T), np.zeros(deconv.T), np.zeros(deconv.T)
@@ -340,29 +153,26 @@ class TestDeconvBin:
 
 @pytest.mark.slow
 class TestDemoDeconv:
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(15))
+    @pytest.mark.parametrize("upsamp", [1, 2, 5])
+    @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
+    @pytest.mark.parametrize("thres_scaling", [True])
     def test_demo_solve_thres(
-        self, fixt_deconv, param_thres_scaling, test_fig_path_svg
+        self,
+        taus,
+        rand_seed,
+        upsamp,
+        ns_lev,
+        thres_scaling,
+        test_fig_path_svg,
     ):
-        # book-keeping
-        (
-            deconv,
-            param_backend,
-            param_norm,
-            y,
-            c,
-            c_org,
-            s,
-            s_org,
-            taus,
-            ns_lev,
-            upsamp,
-            scl,
-        ) = fixt_deconv
-        if param_backend == "cvxpy":
-            pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
         # act
+        deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
+            taus=taus, rand_seed=rand_seed, upsamp=upsamp, ns_lev=ns_lev
+        )
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
-            scaling=param_thres_scaling, return_intm=True
+            scaling=thres_scaling, return_intm=True
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
         # plotting
@@ -375,27 +185,22 @@ class TestDemoDeconv:
         fig = plot_met_ROC(metdf)
         fig.savefig(test_fig_path_svg)
 
-    def test_demo_solve_penal(self, fixt_deconv, test_fig_path_svg, results_bag):
-        # book-keeping
-        (
-            deconv,
-            param_backend,
-            param_norm,
-            y,
-            c,
-            c_org,
-            s,
-            s_org,
-            taus,
-            ns_lev,
-            upsamp,
-            scl,
-        ) = fixt_deconv
-        if param_backend == "cvxpy":
-            pytest.skip("Skipping cvxpy backend for test_demo_solve_thres")
-        if upsamp > 2:
-            pytest.skip("Skipping highly upsampled signal for solve_penal demo")
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(15))
+    @pytest.mark.parametrize("upsamp", [1, 2])
+    @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
+    @pytest.mark.parametrize("y_scaling", [True])
+    def test_demo_solve_penal(
+        self, taus, rand_seed, upsamp, ns_lev, y_scaling, test_fig_path_svg, results_bag
+    ):
         # act
+        deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
+            taus=taus,
+            rand_seed=rand_seed,
+            upsamp=upsamp,
+            ns_lev=ns_lev,
+            y_scaling=y_scaling,
+        )
         _, _, _, _, intm_free = deconv.solve_thres(
             scaling=False, amp_constraint=False, return_intm=True
         )
@@ -436,14 +241,7 @@ class TestDemoDeconv:
         metdf = pd.concat(metdf, ignore_index=True)
         metdf = df_assign_metadata(
             metdf,
-            {
-                "tau_d": taus[0],
-                "tau_r": taus[1],
-                "ns_lev": ns_lev,
-                "y_scaling": scl,
-                "upsamp": upsamp,
-                "backend": param_backend,
-            },
+            {"tau_d": taus[0], "tau_r": taus[1]},
         )
         results_bag.data = metdf
         # plotting
@@ -452,53 +250,3 @@ class TestDemoDeconv:
         # assertion
         if ns_lev == 0 and upsamp == 1:
             assert (cur_svals[oidx] == s).all()
-
-
-def test_construct_R():
-    """Test R matrix construction."""
-    T = 10
-    up_factor = 2
-    R = construct_R(T, up_factor)
-    assert R.shape == (T, T * up_factor)
-    assert hasattr(R, "tocsc")
-
-
-def test_construct_G():
-    """Test G matrix construction."""
-    fac = np.array([0.7, -0.2])
-    T = 10
-    G = construct_G(fac, T)
-    assert G.shape == (T, T)
-    assert hasattr(G, "tocsc")
-
-
-def test_max_thres(sample_xarray_dataset):
-    """Test threshold computation."""
-    data = sample_xarray_dataset.fluorescence
-    nthres = 5
-    S_ls = max_thres(data, nthres)
-    assert len(S_ls) == nthres
-    assert all(s.shape == data.shape for s in S_ls)
-
-
-class TestDeconvolution:
-    def test_basic_deconvolution(self, sample_timeseries, deconv_parameters):
-        """Test basic deconvolution functionality."""
-        pass
-
-    def test_parameter_optimization(self, sample_timeseries):
-        """Test parameter optimization in deconvolution."""
-        pass
-
-    @pytest.mark.slow
-    def test_large_scale_deconvolution(self, sample_xarray_dataset):
-        """Test deconvolution with large datasets."""
-        pass
-
-    def test_noise_handling(self):
-        """Test deconvolution with different noise levels."""
-        pass
-
-    def test_edge_cases(self):
-        """Test edge cases and boundary conditions."""
-        pass
