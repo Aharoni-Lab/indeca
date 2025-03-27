@@ -107,7 +107,7 @@ class DeconvBin:
         mixin: bool = False,
         backend: str = "osqp",
         nthres: int = 1000,
-        err_weighting: str = "corr",
+        err_weighting: str = None,
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
