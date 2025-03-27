@@ -87,6 +87,7 @@ def fixt_y(
     ns_lev=0,
     y_scaling=False,
     ncell=1,
+    squeeze=True,
 ):
     if P_fire is None:
         if upsamp < 5:
@@ -125,14 +126,16 @@ def fixt_y(
     C = np.stack(C, axis=0)
     S = np.stack(S, axis=0)
     scales = np.stack(scales, axis=0)
-    return (
-        Y.squeeze(),
-        C.squeeze(),
-        C_org.squeeze(),
-        S.squeeze(),
-        S_org.squeeze(),
-        scales.squeeze(),
-    )
+    if squeeze:
+        Y, C, C_org, S, S_org, scales = (
+            Y.squeeze(),
+            C.squeeze(),
+            C_org.squeeze(),
+            S.squeeze(),
+            S_org.squeeze(),
+            scales.squeeze(),
+        )
+    return Y, C, C_org, S, S_org, scales
 
 
 def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwargs):
