@@ -16,10 +16,17 @@ AGG_RES_DIR = "tests/output/data/agg_results"
 
 
 @pytest.fixture
-def test_data_dir():
+def temp_data_dir():
     """Fixture to provide a temporary directory for test data."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
+
+
+@pytest.fixture()
+def test_data_dir(request):
+    test_path = os.path.dirname(request.path)
+    dat_dir = os.path.abspath(os.path.join(test_path, "data"))
+    return dat_dir
 
 
 @pytest.fixture
