@@ -12,6 +12,8 @@ from pytest_harvest import get_session_results_df, get_xdist_worker_id, is_main_
 from minian_bin.deconv import DeconvBin
 from minian_bin.simulation import AR2tau, ar_trace, tau2AR
 
+from .testing_utils.io import download_realds, load_gt_ds
+
 AGG_RES_DIR = "tests/output/data/agg_results"
 
 
@@ -163,6 +165,37 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
 # def pytest_configure(config):
 #     if not hasattr(config, "workerinput"):
 #         shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
+
+
+@pytest.fixture()
+def fixt_realds(test_data_dir, request):
+    dsname = request.param.get("dsname", "X-DS09-GCaMP6f-m-V1")
+    subset_cell = request.param.get("subset_cell", (0, 10))
+    subset_fm = request.param.get("subset_fm", (0, 5000))
+    if not os.path.exists(os.path.join(test_data_dir, dsname)) or not os.listdir(
+        os.path.join(test_data_dir, dsname)
+    ):
+        download_realds(test_data_dir, dsname)
+    Y, ap_df, fluo_df = load_gt_ds(os.path.join(test_data_dir, dsname), return_ap=True)
+    Y = Y.isel(frame=slice(*subset_fm)).dropna("frame")
+    ap_df = ap_df[ap_df["frame"].between(*subset_fm)]
+    fluo_df = fluo_df[fluo_df["frame"].between(*subset_fm)]
+    ap_ct = ap_df.groupby("unit_id")["ap_time"].count().reset_index()
+    act_uids = np.array(ap_ct.loc[ap_ct["ap_time"] > 1, "unit_id"])
+    Y = Y.sel(unit_id=act_uids)
+    try:
+        Y = Y.isel(unit_id=slice(*subset_cell))
+    except IndexError:
+        raise IndexError(
+            "Cannot select {} active cells with frame subset {}".format(
+                subset_cell, subset_fm
+            )
+        )
+    Y = Y * 100
+    uids = np.array(Y.coords["unit_id"])
+    ap_df = ap_df.set_index("unit_id").loc[uids]
+    fluo_df = fluo_df.set_index("unit_id").loc[uids]
+    return Y, ap_df, fluo_df
 
 
 def pytest_sessionfinish(session):
