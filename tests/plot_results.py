@@ -1,4 +1,5 @@
 # %% imports and definition
+from ast import literal_eval
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -68,9 +69,9 @@ id_vars = [
     "iter",
     "qthres",
     "test_id",
-    "param_upsamp_param",
-    "param_ns_level_param",
-    "param_taus_param",
+    "upsamp",
+    "ns_lev",
+    "taus",
 ]
 val_vals = ["f1", "dhm0", "dhm1"]
 resdf = pd.melt(
@@ -80,9 +81,7 @@ resdf = pd.melt(
     var_name="metric",
     value_name="value",
 ).drop_duplicates()
-for (ns_lev, tau, upsamp), res_sub in resdf.groupby(
-    ["param_ns_level_param", "param_taus_param", "param_upsamp_param"]
-):
+for (ns_lev, tau, upsamp), res_sub in resdf.groupby(["ns_lev", "taus", "upsamp"]):
     res_gt = res_sub[res_sub["method"] == "gt"].copy()
     dhm0 = res_gt.query("metric == 'dhm0'")["value"].unique().item()
     dhm1 = res_gt.query("metric == 'dhm1'")["value"].unique().item()
@@ -140,7 +139,7 @@ fig_path.mkdir(parents=True, exist_ok=True)
 result = load_agg_result(IN_RES_PATH / "test_demo_solve_fit_h_num")
 if result is not None:
     result = result.rename(columns=lambda c: c.removesuffix("_param"))
-    result["param_taus"] = result["param_taus"].map(lambda t: tuple(t.tolist()))
+    result["taus"] = result["taus"].map(literal_eval)
     cmap = plt.get_cmap("tab10").colors
     palette = {
         "cnmf_smth": cmap[0],
@@ -148,10 +147,8 @@ if result is not None:
         "solve_fit": cmap[2],
         "solve_fit-all": cmap[3],
     }
-    for (td, tr), res_sub in result.groupby("param_taus"):
-        g = sns.FacetGrid(
-            res_sub, row="param_upsamp", col="param_ns_level", margin_titles=True
-        )
+    for (td, tr), res_sub in result.groupby("taus"):
+        g = sns.FacetGrid(res_sub, row="upsamp", col="ns_lev", margin_titles=True)
         g.map_dataframe(
             AR_scatter,
             x="dhm0",
@@ -203,8 +200,8 @@ fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
 result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal").drop_duplicates()
 if result is not None:
-    result = result[result["param_y_scaling_param"]]
-    grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "param_rand_seed_param"]
+    result = result[result["y_scaling"]]
+    grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
     res_agg = result.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
     for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):
         for met in ["mdist", "f1", "prec", "recall"]:
