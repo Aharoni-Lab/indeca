@@ -9,6 +9,9 @@ import pytest
 import xarray as xr
 from pytest_harvest import get_session_results_df, get_xdist_worker_id, is_main_process
 
+from minian_bin.deconv import DeconvBin
+from minian_bin.simulation import AR2tau, ar_trace, tau2AR
+
 AGG_RES_DIR = "tests/output/data/agg_results"
 
 
@@ -63,74 +66,87 @@ def test_fig_path_svg(request, func_figs_dir):
     return os.path.join(func_figs_dir, "{}.svg".format(test_id))
 
 
-@pytest.fixture
-def sample_timeseries():
-    """Fixture to provide a sample time series data."""
-    np.random.seed(42)
-    return np.random.normal(0, 1, (100, 10))  # 100 timepoints, 10 neurons
+@pytest.fixture()
+def eq_atol():
+    return 1e-3
 
 
-@pytest.fixture
-def sample_movie():
-    """Fixture to provide a sample movie data."""
-    np.random.seed(42)
-    return np.random.normal(0, 1, (100, 32, 32))  # 100 frames, 32x32 pixels
-
-
-@pytest.fixture
-def sample_xarray_dataset():
-    """Create a sample xarray dataset with typical dimensions."""
-    np.random.seed(42)
-    times = pd.date_range("2024-01-01", periods=100, freq="s")
-    data = np.random.normal(0, 1, (100, 32, 32))
-    return xr.Dataset(
-        {
-            "fluorescence": (["time", "height", "width"], data),
-        },
-        coords={
-            "time": times,
-            "height": range(32),
-            "width": range(32),
-        },
+def fixt_y(
+    taus,
+    rand_seed=0,
+    y_len=1000,
+    P_fire=None,
+    upsamp=1,
+    ns_lev=0,
+    y_scaling=False,
+    ncell=1,
+):
+    if P_fire is None:
+        if upsamp < 5:
+            P_fire = np.array([[0.98, 0.02], [0.75, 0.25]])
+        else:
+            P_fire = np.array([[0.998, 0.002], [0.75, 0.25]])
+    np.random.seed(rand_seed)
+    Y, C_org, S_org, C, S, scales = [], [], [], [], [], []
+    for i in range(ncell):
+        c_org, s_org = ar_trace(
+            y_len * upsamp,
+            P_fire,
+            tau_d=taus[0] * upsamp,
+            tau_r=taus[1] * upsamp,
+            shifted=True,
+        )
+        if upsamp > 1:
+            c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
+            s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
+        else:
+            c, s = c_org, s_org
+        if y_scaling:
+            scl = np.random.uniform(0.5, 2)
+        else:
+            scl = 1
+        y = scl * (c + np.random.normal(0, ns_lev, c.shape) * upsamp)
+        Y.append(y)
+        C_org.append(c_org)
+        S_org.append(s_org)
+        C.append(c)
+        S.append(s)
+        scales.append(scl)
+    Y = np.stack(Y, axis=0)
+    C_org = np.stack(C_org, axis=0)
+    S_org = np.stack(S_org, axis=0)
+    C = np.stack(C, axis=0)
+    S = np.stack(S, axis=0)
+    scales = np.stack(scales, axis=0)
+    return (
+        Y.squeeze(),
+        C.squeeze(),
+        C_org.squeeze(),
+        S.squeeze(),
+        S_org.squeeze(),
+        scales.squeeze(),
     )
 
 
-@pytest.fixture
-def ar_parameters():
-    """Sample AR model parameters."""
-    return {"order": 2, "coefficients": np.array([0.7, -0.2]), "noise_std": 0.1}
-
-
-@pytest.fixture
-def deconv_parameters():
-    """Sample deconvolution parameters."""
-    return {
-        "lambda_": 1.0,
-        "optimize_g": True,
-        "g_constraints": {"lb": 0.5, "ub": 0.98},
-    }
-
-
-@pytest.fixture
-def pipeline_config():
-    """Sample pipeline configuration."""
-    return {
-        "motion_correction": {"max_shift": 10},
-        "spatial_filter": {"sigma": 1.0},
-        "temporal_filter": {"window": 5},
-    }
-
-
-@pytest.fixture
-def simulation_params():
-    """Parameters for simulating calcium imaging data."""
-    return {
-        "n_neurons": 10,
-        "dimensions": (32, 32),
-        "duration": 100,
-        "framerate": 30,
-        "noise_level": 0.1,
-    }
+def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwargs):
+    if upsamp_y is None:
+        upsamp_y = upsamp
+    y, c, c_org, s, s_org, scale = fixt_y(taus=taus, upsamp=upsamp_y, **kwargs)
+    assert y.ndim == 1, "fixt_deconv only support single cell mode"
+    upsamp_ratio = upsamp_y / upsamp
+    taus_up = np.array(taus) * upsamp
+    _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
+    deconv = DeconvBin(
+        y=y,
+        tau=taus_up,
+        ps=np.array([p, -p]),
+        upsamp=upsamp,
+        err_weighting=None,
+        backend=backend,
+        norm=norm,
+    )
+    deconv.update(scale=upsamp_ratio)
+    return deconv, y, c, c_org, s, s_org, scale
 
 
 # @pytest.hookimpl(tryfirst=True)
