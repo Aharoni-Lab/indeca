@@ -163,35 +163,3 @@ def test_random_walk():
 def test_simulate_traces():
     """Test trace simulation."""
     pass
-
-
-class TestSimulation:
-    def test_basic_simulation(self, simulation_params):
-        """Test basic simulation functionality."""
-        pass
-
-    def test_output_dimensions(self, simulation_params):
-        """Test output dimensions match specifications."""
-        pass
-
-    def test_noise_injection(self, simulation_params):
-        """Test noise injection in simulations."""
-        pass
-
-    @pytest.mark.slow
-    def test_large_scale_simulation(self):
-        """Test simulation with large parameters."""
-        pass
-
-    def test_parameter_validation(self):
-        """Test parameter validation."""
-        pass
-
-    @pytest.mark.parametrize("framerate", [10, 30, 60])
-    def test_different_framerates(self, framerate, simulation_params):
-        """Test simulation with different framerates."""
-        pass
-
-    def test_reproducibility(self, simulation_params):
-        """Test simulation reproducibility with same seed."""
-        pass
