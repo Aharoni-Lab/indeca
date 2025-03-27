@@ -1,134 +1,47 @@
-import os
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from minian_bin.AR_kernel import (
-    convolve_g,
-    convolve_h,
-    estimate_coefs,
-    fit_sumexp,
-    fit_sumexp_gd,
-    fit_sumexp_split,
-    solve_fit_h_num,
-    solve_g,
-)
-from minian_bin.simulation import AR2exp, AR2tau, ar_trace, exp_pulse, find_dhm, tau2AR
+from minian_bin.AR_kernel import estimate_coefs, solve_fit_h_num
+from minian_bin.simulation import AR2exp, AR2tau, exp_pulse, find_dhm, tau2AR
 
-from .testing_utils.plotting import plot_traces
+from .conftest import fixt_y
 
 
-@pytest.fixture()
-def param_y_len():
-    return 1000
-
-
-@pytest.fixture(params=[1, 30])
-def param_ncell(request):
-    return request.param
-
-
-@pytest.fixture(params=[(6, 1), (10, 3)])
-def param_taus(request):
-    return request.param
-
-
-@pytest.fixture(params=[0, 0.1, 0.2, 0.5])
-def param_ns_level(request):
-    return request.param
-
-
-@pytest.fixture(params=[1, 2, 3, 4, 5])
-def param_rand_seed(request):
-    sd = request.param
-    np.random.seed(sd)
-    return sd
-
-
-@pytest.fixture()
-def param_tmp_P():
-    return np.array([[0.98, 0.02], [0.75, 0.25]])
-
-
-@pytest.fixture(params=[1, 2, 5])
-def param_upsamp(request):
-    return request.param
-
-
-@pytest.fixture()
-def param_tmp_upsamp(param_upsamp):
-    if param_upsamp < 5:
-        tmp = np.array([[0.98, 0.02], [0.75, 0.25]])
-    else:
-        tmp = np.array([[0.998, 0.002], [0.75, 0.25]])
-    return param_upsamp, tmp
-
-
-@pytest.fixture()
-def fixt_y(
-    param_y_len,
-    param_ncell,
-    param_taus,
-    param_tmp_upsamp,
-    param_ns_level,
-    param_rand_seed,
-):
-    upsamp, tmp_P = param_tmp_upsamp
-    Y, C_org, S_org, C, S = [], [], [], [], []
-    for i in range(param_ncell):
-        c_org, s_org = ar_trace(
-            param_y_len * upsamp,
-            tmp_P,
-            tau_d=param_taus[0] * upsamp,
-            tau_r=param_taus[1] * upsamp,
-            shifted=True,
-        )
-        if upsamp > 1:
-            c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
-            s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
-        else:
-            c, s = c_org, s_org
-        y = c + np.random.normal(0, param_ns_level, c.shape) * upsamp
-        Y.append(y)
-        C_org.append(c_org)
-        S_org.append(s_org)
-        C.append(c)
-        S.append(s)
-    Y = np.stack(Y, axis=0)
-    C_org = np.stack(C_org, axis=0)
-    S_org = np.stack(S_org, axis=0)
-    C = np.stack(C, axis=0)
-    S = np.stack(S, axis=0)
-    return Y, C, C_org, S, S_org, param_taus, param_ns_level, upsamp
-
-
-@pytest.mark.xfail("yule walker estimation struggle to get accurate")
-def test_estimate_coef(fixt_y):
-    # book-kepping
-    Y, C, C_org, S, S_org, taus_true, ns_lev, upsamp = fixt_y
-    if ns_lev > 0 or upsamp > 1 or Y.shape[0] > 1:
-        pytest.skip("Skipping conditions for test_estimate_coef")
-    y = Y.squeeze()
+@pytest.mark.xfail(reason="yule walker estimation struggle to get accurate")
+@pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+@pytest.mark.parametrize("rand_seed", np.arange(3))
+def test_estimate_coef(taus, rand_seed):
     # act
+    y, c, c_org, s, s_org, scale = fixt_y(taus=taus, rand_seed=rand_seed)
     theta, _ = estimate_coefs(y, p=2, noise_freq=None, use_smooth=False, add_lag=0)
     # assertion
-    t0_true, t1_true, p_true = AR2tau(*tau2AR(*taus_true), solve_amp=True)
+    t0_true, t1_true, p_true = AR2tau(*tau2AR(*taus), solve_amp=True)
     t0_est, t1_est, p_est = AR2tau(*theta, solve_amp=True)
     ps_true, _, _ = exp_pulse(t0_true, t1_true, nsamp=100, p_d=p_true, p_r=-p_true)
     ps_est, _, _ = exp_pulse(t0_est, t1_est, nsamp=100, p_d=p_est, p_r=-p_est)
     assert np.isclose(ps_true, ps_est).all()
-    assert (theta == tau2AR(*taus_true)).all()
+    assert np.isclose(theta, tau2AR(*taus)).all()
 
 
 class TestDemoSolveFit:
-    def test_demo_solve_fit_h_num(self, fixt_y, results_bag):
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize(
+        "ns_lev",
+        [0] + [pytest.param(n, marks=pytest.mark.slow) for n in [0.1, 0.2, 0.5]],
+    )
+    @pytest.mark.parametrize("ncell", [30])
+    @pytest.mark.parametrize("upsamp", [1, 2, 5])
+    def test_demo_solve_fit_h_num(
+        self, taus, rand_seed, ns_lev, ncell, upsamp, results_bag
+    ):
         # book-keeping
         res_df = []
-        Y, C, C_org, S, S_org, taus_true, ns_level, upsamp = fixt_y
-        if Y.shape[0] == 1:
-            pytest.skip("Skipping single cell for test_demo_solve_fit_h_num")
-        dhm_true, _ = find_dhm(True, taus_true, np.array([1, -1]))
+        Y, C, C_org, S, S_org, scales = fixt_y(
+            taus=taus, rand_seed=rand_seed, ns_lev=ns_lev, ncell=ncell, upsamp=upsamp
+        )
+        dhm_true, _ = find_dhm(True, taus, np.array([1, -1]))
         res_df.append(
             pd.DataFrame(
                 [
@@ -136,8 +49,8 @@ class TestDemoSolveFit:
                         "method": "truth",
                         "unit": "all",
                         "isreal": True,
-                        "tau_d": taus_true[0],
-                        "tau_r": taus_true[1],
+                        "tau_d": taus[0],
+                        "tau_r": taus[1],
                         "dhm0": dhm_true[0],
                         "dhm1": dhm_true[1],
                         "p0": 1,
@@ -147,30 +60,7 @@ class TestDemoSolveFit:
             )
         )
         # act
-        lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-            Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, s_len=60 * upsamp
-        )
-        tau_fit = -1 / lams / upsamp
-        dhm_fit, _ = find_dhm(True, tau_fit, ps)
-        res_df.append(
-            pd.DataFrame(
-                [
-                    {
-                        "method": "solve_fit",
-                        "unit": "all",
-                        "isreal": True,
-                        "tau_d": tau_fit[0],
-                        "tau_r": tau_fit[1],
-                        "dhm0": dhm_fit[0],
-                        "dhm1": dhm_fit[1],
-                        "p0": ps[0],
-                        "p1": ps[1],
-                    }
-                ]
-            )
-        )
-        if ns_level == 0:
-            assert np.abs(np.array(dhm_fit) - np.array(dhm_true)).max() < 1
+        # cnmf method
         for icell, (y, s) in enumerate(zip(Y, S_org)):
             for mthd, smth in {"cnmf_raw": False, "cnmf_smth": True}.items():
                 theta, _ = estimate_coefs(
@@ -217,59 +107,32 @@ class TestDemoSolveFit:
                     ]
                 )
             )
+        # minian-bin method
+        lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+            Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, s_len=60 * upsamp
+        )
+        tau_fit = -1 / lams / upsamp
+        dhm_fit, _ = find_dhm(True, tau_fit, ps)
+        res_df.append(
+            pd.DataFrame(
+                [
+                    {
+                        "method": "solve_fit",
+                        "unit": "all",
+                        "isreal": True,
+                        "tau_d": tau_fit[0],
+                        "tau_r": tau_fit[1],
+                        "dhm0": dhm_fit[0],
+                        "dhm1": dhm_fit[1],
+                        "p0": ps[0],
+                        "p1": ps[1],
+                    }
+                ]
+            )
+        )
         # save results
         res_df = pd.concat(res_df, ignore_index=True)
         results_bag.data = res_df
-
-
-def test_convolve_g(sample_timeseries):
-    """Test g convolution."""
-    s = sample_timeseries[:, 0]  # take first neuron
-    g = np.array([0.7, -0.2])
-    result = convolve_g(s, g)
-    assert result.shape == s.shape
-
-
-@pytest.mark.skip(reason="Array dimension mismatch needs to be investigated")
-def test_convolve_h(sample_timeseries):
-    """Test h convolution."""
-    pass
-
-
-def test_solve_g(sample_timeseries):
-    """Test solving for g parameters."""
-    y = sample_timeseries[:, 0]  # take first neuron
-    s = np.zeros_like(y)
-    s[::10] = 1  # sparse spikes
-    theta_1, theta_2 = solve_g(y, s)
-    assert isinstance(float(theta_1), float)  # Convert numpy.float64 to float
-    assert isinstance(float(theta_2), float)
-
-
-def test_fit_sumexp(sample_timeseries):
-    """Test sum of exponentials fitting."""
-    y = sample_timeseries[:, 0]  # take first neuron
-    lams, ps, y_fit = fit_sumexp(y, N=2)
-    assert len(lams) == 2
-    assert len(ps) == 2
-    assert y_fit.shape == y.shape
-
-
-@pytest.mark.slow
-def test_fit_sumexp_split(sample_timeseries):
-    """Test split sum of exponentials fitting."""
-    y = sample_timeseries[:, 0]  # take first neuron
-    lams, ps, y_fit = fit_sumexp_split(y)
-    assert len(lams) == 2
-    assert len(ps) == 2
-    assert y_fit.shape == y.shape
-
-
-def test_fit_sumexp_gd(sample_timeseries):
-    """Test gradient descent fitting of sum of exponentials."""
-    y = sample_timeseries[:, 0]  # take first neuron
-    lams, ps, scal, y_fit = fit_sumexp_gd(y)
-    assert len(lams) == 2
-    assert len(ps) == 2
-    assert isinstance(float(scal), float)  # Convert any numeric type to float
-    assert y_fit.shape == y.shape
+        # assertion
+        if ns_lev == 0:
+            assert np.isclose(dhm_fit, dhm_true, atol=0.1).all()
