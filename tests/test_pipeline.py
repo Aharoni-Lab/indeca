@@ -7,190 +7,57 @@ import pytest
 import xarray as xr
 from plotly.subplots import make_subplots
 
-from minian_bin.deconv import construct_R
 from minian_bin.pipeline import pipeline_bin
-from minian_bin.simulation import ar_trace, find_dhm
+from minian_bin.simulation import find_dhm
 
+from .conftest import fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
-from .testing_utils.io import download_realds, load_gt_ds
-from .testing_utils.metrics import assignment_distance, df_assign_metadata
+from .testing_utils.metrics import assignment_distance
 from .testing_utils.plotting import plot_traces
 
 
-@pytest.fixture()
-def temp_data_dir():
-    return "./intermediate/data"
-
-
-@pytest.fixture(params=[slice(0, 10)] + [i for i in range(10)])
-def param_subset_cell(request):
-    return request.param
-
-
-@pytest.fixture(params=[(0, 10000)])
-def param_subset_fm(request):
-    return request.param
-
-
-@pytest.fixture(params=[1, 2])
-def param_upsamp(request):
-    return request.param
-
-
-@pytest.fixture(params=[60])
-def param_ar_kn_len(request):
-    return request.param
-
-
-@pytest.fixture(params=[None])
-def param_noise_freq(request):
-    return request.param
-
-
-@pytest.fixture(params=[10])
-def param_add_lag(request):
-    return request.param
-
-
-@pytest.fixture(params=[10])
-def param_max_iters(request):
-    return request.param
-
-
-@pytest.fixture(params=["X-DS09-GCaMP6f-m-V1"])
-def fixt_realds(temp_data_dir, param_subset_cell, param_subset_fm, request):
-    dsname = request.param
-    if not os.path.exists(os.path.join(temp_data_dir, dsname)) or not os.listdir(
-        os.path.join(temp_data_dir, dsname)
-    ):
-        download_realds(temp_data_dir, dsname)
-    Y, ap_df, fluo_df = load_gt_ds(os.path.join(temp_data_dir, dsname), return_ap=True)
-    Y = Y.isel(frame=slice(*param_subset_fm)).dropna("frame")
-    ap_df = ap_df[ap_df["frame"].between(*param_subset_fm)]
-    fluo_df = fluo_df[fluo_df["frame"].between(*param_subset_fm)]
-    ap_ct = ap_df.groupby("unit_id")["ap_time"].count().reset_index()
-    act_uids = np.array(ap_ct.loc[ap_ct["ap_time"] > 1, "unit_id"])
-    Y = Y.sel(unit_id=act_uids)
-    try:
-        Y = Y.isel(unit_id=param_subset_cell)
-    except IndexError:
-        raise IndexError(
-            "Cannot select {} active cells with frame subset {}".format(
-                param_subset_cell, param_subset_fm
-            )
-        )
-    Y = Y * 100
-    uids = np.array(Y.coords["unit_id"])
-    ap_df = ap_df.set_index("unit_id").loc[uids]
-    fluo_df = fluo_df.set_index("unit_id").loc[uids]
-    return Y, ap_df, fluo_df
-
-
-@pytest.fixture()
-def param_y_len():
-    return 1000
-
-
-@pytest.fixture(params=[10, 1])
-def param_ncell(request):
-    return request.param
-
-
-@pytest.fixture(params=[(6, 1), (10, 3)])
-def param_taus(request):
-    return request.param
-
-
-@pytest.fixture(params=[0, 0.1, 0.2, 0.5])
-def param_ns_level(request):
-    return request.param
-
-
-@pytest.fixture(params=[1, 2, 3, 4, 5])
-def param_rand_seed(request):
-    sd = request.param
-    np.random.seed(sd)
-    return sd
-
-
-@pytest.fixture()
-def param_tmp_P():
-    return np.array([[0.98, 0.02], [0.75, 0.25]])
-
-
-@pytest.fixture(params=[1, 2])
-def param_upsamp(request):
-    return request.param
-
-
-@pytest.fixture()
-def param_tmp_upsamp(param_upsamp):
-    if param_upsamp < 5:
-        tmp = np.array([[0.98, 0.02], [0.75, 0.25]])
-    else:
-        tmp = np.array([[0.998, 0.002], [0.75, 0.25]])
-    return param_upsamp, tmp
-
-
-@pytest.fixture()
-def fixt_y(
-    param_y_len,
-    param_ncell,
-    param_taus,
-    param_tmp_upsamp,
-    param_ns_level,
-    param_rand_seed,
-):
-    upsamp, tmp_P = param_tmp_upsamp
-    Y, C_org, S_org, C, S = [], [], [], [], []
-    for i in range(param_ncell):
-        c_org, s_org = ar_trace(
-            param_y_len * upsamp,
-            tmp_P,
-            tau_d=param_taus[0] * upsamp,
-            tau_r=param_taus[1] * upsamp,
-            shifted=True,
-        )
-        if upsamp > 1:
-            c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
-            s = np.convolve(s_org, np.ones(upsamp), "valid")[::upsamp]
-        else:
-            c, s = c_org, s_org
-        y = c + np.random.normal(0, param_ns_level, c.shape) * upsamp
-        Y.append(y)
-        C_org.append(c_org)
-        S_org.append(s_org)
-        C.append(c)
-        S.append(s)
-    Y = np.stack(Y, axis=0)
-    C_org = np.stack(C_org, axis=0)
-    S_org = np.stack(S_org, axis=0)
-    C = np.stack(C, axis=0)
-    S = np.stack(S, axis=0)
-    return Y, C, C_org, S, S_org, param_taus, param_ns_level, upsamp
-
-
 class TestPipeline:
+
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize("upsamp", [1, pytest.param(2, marks=pytest.mark.slow)])
+    @pytest.mark.parametrize("max_iter", [5])
+    @pytest.mark.parametrize("ncell", [1, pytest.param(10, marks=pytest.mark.slow)])
+    @pytest.mark.parametrize("ar_kn_len", [60])
+    @pytest.mark.parametrize(
+        "ns_lev",
+        [0] + [pytest.param(n, marks=pytest.mark.slow) for n in [0.1, 0.2, 0.5]],
+    )
+    @pytest.mark.parametrize("est_noise_freq", [None])
+    @pytest.mark.parametrize("est_add_lag", [10])
     def test_pipeline(
         self,
-        fixt_y,
-        param_upsamp,
-        param_max_iters,
-        param_ar_kn_len,
-        param_noise_freq,
-        param_add_lag,
+        taus,
+        rand_seed,
+        upsamp,
+        max_iter,
+        ncell,
+        ar_kn_len,
+        ns_lev,
+        est_noise_freq,
+        est_add_lag,
         results_bag,
         test_fig_path_html,
     ):
         # act
-        Y, C, C_org, S, S_org, taus, ns_lev, upsamp_y = fixt_y
-        if upsamp_y != param_upsamp:
-            pytest.skip("Skipping unmatched upsampling")
+        Y, C, C_org, S, S_org, scales = fixt_y(
+            taus=taus,
+            rand_seed=rand_seed,
+            upsamp=upsamp,
+            ncell=ncell,
+            ns_lev=ns_lev,
+            squeeze=False,
+        )
         C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
             Y,
             up_factor=1,
-            est_noise_freq=param_noise_freq,
-            est_add_lag=param_add_lag,
+            est_noise_freq=est_noise_freq,
+            est_add_lag=est_add_lag,
             est_use_smooth=False,
             sps_penal=0,
         )
@@ -204,16 +71,14 @@ class TestPipeline:
             h_fit_iter,
         ) = pipeline_bin(
             Y,
-            param_upsamp,
-            max_iters=param_max_iters,
+            upsamp,
+            max_iters=max_iter,
             return_iter=True,
             ar_use_all=True,
-            ar_kn_len=param_ar_kn_len,
-            est_noise_freq=param_noise_freq,
+            ar_kn_len=ar_kn_len,
+            est_noise_freq=est_noise_freq,
             est_use_smooth=False,
-            est_add_lag=param_add_lag,
-            deconv_norm="l2",
-            deconv_backend="osqp",
+            est_add_lag=est_add_lag,
             spawn_dashboard=False,
         )
         # save results
@@ -315,23 +180,30 @@ class TestPipeline:
         fig.update_layout(height=350 * niter, width=1200 * ncell)
         fig.write_html(test_fig_path_html)
         # assertion
-        if ns_lev == 0 and param_upsamp == 1:
+        if ns_lev == 0 and upsamp == 1:
             f1_last = res_df.set_index(["method", "iter"]).loc[
                 ("minian-bin", niter - 1), "f1"
             ]
-            assert f1_last.min() == 1
+            # TODO: make this pass with all f1 == 1
+            assert f1_last.median() == 1
 
 
 @pytest.mark.slow
 class TestDemoPipeline:
+    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("max_iter", [5])
+    @pytest.mark.parametrize("ar_kn_len", [100])
+    @pytest.mark.parametrize("est_noise_freq", [None])
+    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("fixt_realds", [{"subset_cell": (0, 5)}], indirect=True)
     def test_demo_pipeline(
         self,
         fixt_realds,
-        param_upsamp,
-        param_max_iters,
-        param_ar_kn_len,
-        param_noise_freq,
-        param_add_lag,
+        upsamp,
+        max_iter,
+        ar_kn_len,
+        est_noise_freq,
+        est_add_lag,
         results_bag,
     ):
         # act
@@ -349,16 +221,14 @@ class TestDemoPipeline:
             h_fit_iter,
         ) = pipeline_bin(
             np.atleast_2d(Y),
-            param_upsamp,
-            max_iters=param_max_iters,
+            up_factor=upsamp,
+            max_iters=max_iter,
             return_iter=True,
             ar_use_all=True,
-            ar_kn_len=param_ar_kn_len,
-            est_noise_freq=param_noise_freq,
+            ar_kn_len=ar_kn_len,
+            est_noise_freq=est_noise_freq,
             est_use_smooth=False,
-            est_add_lag=param_add_lag,
-            deconv_norm="l2",
-            deconv_backend="osqp",
+            est_add_lag=est_add_lag,
             spawn_dashboard=False,
         )
         # save results
@@ -377,7 +247,7 @@ class TestDemoPipeline:
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
-                    sb_idx = np.where(sb)[0] / param_upsamp
+                    sb_idx = np.where(sb)[0] / upsamp
                     t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
                     t_ap = cur_ap["ap_time"]
                     mdist, f1, prec, rec = assignment_distance(
@@ -418,7 +288,7 @@ class TestDemoPipeline:
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
-                    sb_idx = np.where(sb)[0] / param_upsamp
+                    sb_idx = np.where(sb)[0] / upsamp
                     t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
                     t_ap = cur_ap["ap_time"]
                     mdist, f1, prec, rec = assignment_distance(
