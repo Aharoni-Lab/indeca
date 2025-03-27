@@ -19,6 +19,10 @@ def assignment_distance(
     tdist_thres: float = None,
     tdist_agg: str = "median",
 ):
+    if s_ref is not None:
+        s_ref = np.nan_to_num(s_ref)
+    if s_slv is not None:
+        s_slv = np.nan_to_num(s_slv)
     if t_ref is None:
         assert s_ref is not None
         s_ref = s_ref.astype(float)
