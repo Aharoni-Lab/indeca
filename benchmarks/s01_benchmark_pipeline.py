@@ -20,7 +20,7 @@ import plotly.graph_objects as go
 import xarray as xr
 from dask.distributed import Client, LocalCluster
 from plotly.subplots import make_subplots
-from routine.cnmf import pipeline_cnmf
+from tests.testing_utils.cnmf import pipeline_cnmf
 from routine.utils import compute_ROC
 
 from minian_bin.pipeline import pipeline_bin
