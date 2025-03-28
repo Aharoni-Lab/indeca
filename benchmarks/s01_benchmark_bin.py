@@ -7,7 +7,7 @@ import plotly.express as px
 import seaborn as sns
 import xarray as xr
 from distributed import LocalCluster
-from routine.cnmf import solve_deconv
+from tests.testing_utils.cnmf import solve_deconv
 from routine.utils import (
     compute_ROC,
     norm_per_cell,

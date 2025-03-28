@@ -64,8 +64,9 @@ def max_thres(
     ds=None,
     return_thres=False,
     th_amplitude=False,
-    delta=1e-8,
+    delta=1e-6,
     reverse_thres=False,
+    nz_only: bool = False,
 ):
     amax = a.max()
     if reverse_thres:
@@ -78,6 +79,10 @@ def max_thres(
         S_ls = [(a > (amax * th).clip(delta, None)) for th in thres]
     if ds is not None:
         S_ls = [sum_downsample(s, ds) for s in S_ls]
+    if nz_only:
+        Snz = [ss.sum() > 0 for ss in S_ls]
+        S_ls = [ss for ss, nz in zip(S_ls, Snz) if nz]
+        thres = [th for th, nz in zip(thres, Snz) if nz]
     if return_thres:
         return S_ls, thres
     else:
@@ -91,17 +96,18 @@ class DeconvBin:
         y_len: int = None,
         theta: np.array = None,
         tau: np.array = None,
+        ps: np.array = None,
         coef: np.array = None,
         coef_len: int = 100,
         scale: float = 1,
         penal: str = "l1",
         use_base: bool = False,
         upsamp: int = 1,
-        norm: str = "l1",
+        norm: str = "l2",
         mixin: bool = False,
-        backend: str = "cvxpy",
+        backend: str = "osqp",
         nthres: int = 1000,
-        err_weighting: str = "corr",
+        err_weighting: str = None,
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
@@ -122,40 +128,45 @@ class DeconvBin:
             self.y_len = y_len
         if theta is not None:
             self.theta = np.array(theta)
-            tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
-            self.tau = np.array([tau_d, tau_r])
-            coef, _, _ = exp_pulse(
-                tau_d,
-                tau_r,
-                p_d=p,
-                p_r=-p,
-                nsamp=coef_len * upsamp,
-                kn_len=coef_len * upsamp,
-                trunc_thres=atol,
-            )
-        elif tau is not None:
-            self.theta = np.array(tau2AR(tau[0], tau[1]))
+            if tau is None:
+                tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
+                self.tau = np.array([tau_d, tau_r])
+                coef, _, _ = exp_pulse(
+                    tau_d,
+                    tau_r,
+                    p_d=p,
+                    p_r=-p,
+                    nsamp=coef_len * upsamp,
+                    kn_len=coef_len * upsamp,
+                    trunc_thres=atol,
+                )
+        if tau is not None:
+            assert (
+                ps is not None
+            ), "exp coefficients must be provided together with time constants."
+            if theta is None:
+                self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
-            _, _, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
             coef, _, _ = exp_pulse(
                 tau[0],
                 tau[1],
-                p_d=p,
-                p_r=-p,
+                p_d=ps[0],
+                p_r=ps[1],
                 nsamp=coef_len * upsamp,
                 kn_len=coef_len * upsamp,
                 trunc_thres=atol,
             )
-        else:
-            if coef is None:
-                assert coef_len is not None
-                coef = np.ones(coef_len * upsamp)
+        if coef is None:
+            assert coef_len is not None
+            coef = np.ones(coef_len * upsamp)
+        assert (~np.isnan(coef)).all()
         self.coef_len = len(coef)
         self.T = self.y_len * upsamp
         l0_penal = 0
         l1_penal = 0
         self.free_kernel = False
         self.penal = penal
+        self.use_base = use_base
         self.l0_penal = l0_penal
         self.w_org = np.ones(self.T)
         self.w = np.ones(self.T)
@@ -264,17 +275,13 @@ class DeconvBin:
             self.s = np.zeros(self.T * upsamp)
             self.l1_penal = l1_penal
             self.scale = scale
-            if use_base:
-                # TODO: add support
-                raise NotImplementedError(
-                    "Baseline term not yet supported with backend {}".format(backend)
-                )
             self._update_Wt()
             self._setup_prob_osqp()
-        self.dashboard.update(
-            h=self.coef.value if backend == "cvxpy" else self.coef,
-            uid=self.dashboard_uid,
-        )
+        if self.dashboard is not None:
+            self.dashboard.update(
+                h=self.coef.value if backend == "cvxpy" else self.coef,
+                uid=self.dashboard_uid,
+            )
 
     def update(
         self,
@@ -474,41 +481,53 @@ class DeconvBin:
                         self.max_iter_l0
                     )
                 )
-        if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            self.s = np.abs(opt_s)
-            self.b = opt_b
-            return self.s, self.b
-        else:
-            return np.abs(opt_s)
+        self.s = np.abs(opt_s)
+        self.b = opt_b
+        return self.s, self.b
 
     def solve_thres(
-        self, scaling: bool = True, ignore_res: bool = False
+        self,
+        scaling: bool = True,
+        amp_constraint: bool = True,
+        ignore_res: bool = False,
+        return_intm: bool = False,
     ) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
-        opt_s, opt_b = self.solve()
+        opt_s, opt_b = self.solve(amp_constraint=amp_constraint)
         R = self.R.value if self.backend == "cvxpy" else self.R
         if ignore_res:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
         else:
             res = np.zeros_like(y)
-        svals = max_thres(
+        svals, thres = max_thres(
             opt_s,
             self.nthres,
             th_min=self.th_min,
             th_max=self.th_max,
             reverse_thres=True,
+            return_thres=True,
+            nz_only=True,
         )
-        svals = [ss for ss in svals if ss.sum() > 0]
         if not len(svals) > 0:
-            return (
-                np.full(len(self.nzidx_s), np.nan),
-                np.full(len(self.nzidx_c), np.nan),
-                0,
-                np.inf,
-            )
+            if return_intm:
+                svals, thres = max_thres(
+                    opt_s,
+                    self.nthres,
+                    th_min=self.th_min,
+                    th_max=self.th_max,
+                    reverse_thres=True,
+                    return_thres=True,
+                )
+            else:
+                return (
+                    np.full(len(self.nzidx_s), np.nan),
+                    np.full(len(self.nzidx_c), np.nan),
+                    0,
+                    np.inf,
+                )
         cvals = [self._compute_c(s) for s in svals]
         yfvals = [R @ c for c in cvals]
         if scaling:
@@ -523,9 +542,20 @@ class DeconvBin:
         opt_idx = np.argmin(objs)
         bin_s = svals[opt_idx]
         err = self._compute_err(s=bin_s)
-        return bin_s, cvals[opt_idx], scals[opt_idx], err
+        if return_intm:
+            return (
+                bin_s,
+                cvals[opt_idx],
+                scals[opt_idx],
+                err,
+                (opt_s, thres, svals, cvals, yfvals, scals, objs, opt_idx),
+            )
+        else:
+            return bin_s, cvals[opt_idx], scals[opt_idx], err
 
-    def solve_penal(self, masking=True, scaling=True) -> Tuple[np.ndarray]:
+    def solve_penal(
+        self, masking=True, scaling=True, return_intm=False
+    ) -> Tuple[np.ndarray]:
         if self.penal is None:
             opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
             opt_penal = 0
@@ -556,10 +586,11 @@ class DeconvBin:
             def opt_fn(x):
                 self.update(**{pn: x.item()})
                 _, _, _, obj = self.solve_thres(scaling=False)
-                self.dashboard.update(
-                    uid=self.dashboard_uid,
-                    penal_err={"penal": x.item(), "scale": self.scale, "err": obj},
-                )
+                if self.dashboard is not None:
+                    self.dashboard.update(
+                        uid=self.dashboard_uid,
+                        penal_err={"penal": x.item(), "scale": self.scale, "err": obj},
+                    )
                 if obj < err_full:
                     return obj
                 else:
@@ -570,20 +601,36 @@ class DeconvBin:
                 bounds=[(0, ub)],
                 maxfun=self.max_iter_penal,
                 locally_biased=False,
-                vol_tol=1e-3,
+                vol_tol=1e-2,
             )
+            direct_pn = res.x
             if not res.success:
-                warnings.warn(
+                logger.warning(
                     "could not find optimal penalty within {} iterations".format(
                         res.nfev
                     )
                 )
-            opt_penal = res.x.item()
+                opt_penal = 0
+            elif err_min <= opt_fn(direct_pn):
+                # DIRECT seem to mistakenly report high penalty when 0 penalty attains better error
+                opt_penal = 0
+            else:
+                opt_penal = direct_pn.item()
             self.update(**{pn: opt_penal})
-            opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(scaling=scaling)
+            if return_intm:
+                opt_s, opt_c, opt_scl, opt_obj, intm = self.solve_thres(
+                    scaling=scaling, return_intm=return_intm
+                )
+            else:
+                opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(
+                    scaling=scaling, return_intm=return_intm
+                )
             if opt_scl == 0:
-                warnings.warn("could not find non-zero solution")
-        return opt_s, opt_c, opt_scl, opt_obj, opt_penal
+                logger.warning("could not find non-zero solution")
+        if return_intm:
+            return opt_s, opt_c, opt_scl, opt_obj, opt_penal, intm
+        else:
+            return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(
         self, reset_scale: bool = True, concur_penal: bool = False
@@ -733,6 +780,10 @@ class DeconvBin:
                 l=lb_copy,
                 u=ub_inf_copy,
                 verbose=False,
+                polish=True,
+                warm_start=False,
+                # max_iter=int(1e5) if self.backend == "osqp" else None,
+                # eps_prim_inf=1e-8,
             )
             P_copy = self.P.copy()
             q_copy = self.q.copy()
@@ -746,6 +797,10 @@ class DeconvBin:
                 l=lb_copy,
                 u=ub_copy,
                 verbose=False,
+                polish=True,
+                warm_start=False,
+                # max_iter=int(1e5) if self.backend == "osqp" else None,
+                # eps_prim_inf=1e-8,
             )
         logger.debug(f"{self.backend} setup completed successfully")
 
@@ -759,11 +814,12 @@ class DeconvBin:
             prob = self.prob
         else:
             prob = self.prob_free
-        if self.backend in ["osqp", "emosqp", "cuosqp"] and self.x_cache is not None:
-            prob.warm_start(x=self.x_cache)
+        # if self.backend in ["osqp", "emosqp", "cuosqp"] and self.x_cache is not None:
+        #     prob.warm_start(x=self.x_cache)
         res = prob.solve()
         if self.backend == "cvxpy":
             opt_s = self.s.value.squeeze()
+            opt_b = 0
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             x = res[0] if self.backend == "emosqp" else res.x
             if res.info.status not in ["solved", "solved inaccurate"]:
@@ -777,9 +833,9 @@ class DeconvBin:
                     x = np.zeros_like(x, dtype=float)
                 else:
                     x = x.astype(float)
-            if update_cache:
-                self.x_cache = x
-                prob.warm_start(x=x)
+            # if update_cache:
+            #     self.x_cache = x
+            #     prob.warm_start(x=x)
             if self.norm == "huber":
                 xlen = len(self.nzidx_s) if self.free_kernel else len(self.nzidx_c)
                 sol = x[:xlen]
@@ -919,7 +975,10 @@ class DeconvBin:
             offsets=-np.arange(len(coef)),
             format="csc",
         )
-        H_shape, H_nnz = self.H.shape, self.H.nnz
+        try:
+            H_shape, H_nnz = self.H.shape, self.H.nnz
+        except AttributeError:
+            H_shape, H_nnz = None, None
         self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
         logger.debug(
             f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
@@ -935,7 +994,10 @@ class DeconvBin:
             self.G_org = sps.bmat(
                 [[None, G_diag], [np.zeros((1, 1)), None]], format="csc"
             )
-            G_shape, G_nnz = self.G.shape, self.G.nnz
+            try:
+                G_shape, G_nnz = self.G.shape, self.G.nnz
+            except AttributeError:
+                G_shape, G_nnz = None, None
             self.G = self.G_org[:, self.nzidx_c][self.nzidx_s, :]
             logger.debug(
                 f"Updating G matrix - shape before: {G_shape}, shape new: {self.G.shape}, nnz before: {G_nnz}, nnz new: {self.G.nnz}"
@@ -991,8 +1053,12 @@ class DeconvBin:
                         [None, None, sps.eye(ly, format="csc")],
                     ]
                 )
+        try:
+            P_shape, P_nnz = self.P.shape, self.P.nnz
+        except AttributeError:
+            P_shape, P_nnz = None, None
         logger.debug(
-            f"Updating P matrix - shape before: {self.P.shape}, shape new: {P.shape}, nnz before: {self.P.nnz}, nnz new: {P.nnz}"
+            f"Updating P matrix - shape before: {P_shape}, shape new: {P.shape}, nnz before: {P_nnz}, nnz new: {P.nnz}"
         )
         self.P = sps.triu(P).tocsc()
 
@@ -1054,7 +1120,10 @@ class DeconvBin:
         else:
             Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
             Ar = self.scale * self.R
-        A_shape, A_nnz = self.A.shape, self.A.nnz
+        try:
+            A_shape, A_nnz = self.A.shape, self.A.nnz
+        except AttributeError:
+            A_shape, A_nnz = None, None
         if self.norm == "huber":
             e = sps.eye(self.y_len, format="csc")
             self.A = sps.bmat(
@@ -1085,12 +1154,12 @@ class DeconvBin:
                 [np.full(xlen + self.y_len * 2, np.inf), self.y - self.huber_k]
             )
         else:
-            ym = self.y.mean()
+            bb = self.y.mean() if self.use_base else 0
             if self.free_kernel:
                 self.lb = np.zeros(len(self.nzidx_s) + 1)
-                self.ub = np.concatenate([np.full(1, ym), np.ones(len(self.nzidx_s))])
+                self.ub = np.concatenate([np.full(1, bb), np.ones(len(self.nzidx_s))])
                 self.ub_inf = np.concatenate(
-                    [np.full(1, ym), np.full(len(self.nzidx_s), np.inf)]
+                    [np.full(1, bb), np.full(len(self.nzidx_s), np.inf)]
                 )
             else:
                 self.lb, self.ub, self.ub_inf = (
@@ -1098,7 +1167,7 @@ class DeconvBin:
                     np.zeros(self.T + 1),
                     np.zeros(self.T + 1),
                 )
-            self.ub[0] = ym
-            self.ub[self.nzidx_s + 1] = 1
-            self.ub_inf[0] = ym
-            self.ub_inf[self.nzidx_s + 1] = np.inf
+                self.ub[0] = bb
+                self.ub[self.nzidx_s + 1] = 1
+                self.ub_inf[0] = bb
+                self.ub_inf[self.nzidx_s + 1] = np.inf
