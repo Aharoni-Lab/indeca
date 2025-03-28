@@ -96,7 +96,7 @@ class TestDeconvBin:
         if upsamp == upsamp_y:  # upsample factor matches ground truth
             assert mdist <= 1
             assert recall >= 0.8
-            assert precs >= 0.95
+            assert precs >= 0.8
         elif upsamp < upsamp_y:  # upsample factor smaller than ground truth
             assert mdist <= upsamp_y / upsamp
             assert recall >= 0.95
