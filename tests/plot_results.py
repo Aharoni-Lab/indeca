@@ -61,54 +61,64 @@ def iter_plot(data, color, dhm0, dhm1, **kwargs):
 
 fig_path = FIG_PATH / "pipeline"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_pipeline").drop_duplicates()
-id_vars = [
-    "method",
-    "use_all",
-    "unit_id",
-    "iter",
-    "qthres",
-    "test_id",
-    "upsamp",
-    "ns_lev",
-    "taus",
-]
-val_vals = ["f1", "dhm0", "dhm1"]
-resdf = pd.melt(
-    result,
-    id_vars=id_vars,
-    value_vars=val_vals,
-    var_name="metric",
-    value_name="value",
-).drop_duplicates()
-for (ns_lev, tau, upsamp), res_sub in resdf.groupby(["ns_lev", "taus", "upsamp"]):
-    res_gt = res_sub[res_sub["method"] == "gt"].copy()
-    dhm0 = res_gt.query("metric == 'dhm0'")["value"].unique().item()
-    dhm1 = res_gt.query("metric == 'dhm1'")["value"].unique().item()
-    res_sub = res_sub[res_sub["method"] != "gt"].copy()
-    res_sub["row_lab"] = res_sub["metric"]
-    res_sub["col_lab"] = (
-        res_sub["method"]
-        + "|"
-        + res_sub["use_all"].map(lambda u: "all_cell" if u else "individual")
-    )
-    g = sns.FacetGrid(
-        res_sub,
-        height=2.5,
-        aspect=1.4,
-        row="row_lab",
-        col="col_lab",
-        sharey="row",
-        sharex="col",
-        hue="col_lab",
-        col_order=["minian-bin|individual", "minian-bin|all_cell", "cnmf|individual"],
-        hue_order=["minian-bin|individual", "minian-bin|all_cell", "cnmf|individual"],
-        margin_titles=True,
-    )
-    g.map_dataframe(iter_plot, dhm0=dhm0, dhm1=dhm1)
-    g.add_legend()
-    g.figure.savefig(fig_path / "{}-{}-{}.svg".format(ns_lev, tau, upsamp))
-    plt.close(g.figure)
+result = load_agg_result(IN_RES_PATH / "test_pipeline")
+if result is not None:
+    result = result.drop_duplicates()
+    id_vars = [
+        "method",
+        "use_all",
+        "unit_id",
+        "iter",
+        "qthres",
+        "test_id",
+        "upsamp",
+        "ns_lev",
+        "taus",
+    ]
+    val_vals = ["f1", "dhm0", "dhm1"]
+    resdf = pd.melt(
+        result,
+        id_vars=id_vars,
+        value_vars=val_vals,
+        var_name="metric",
+        value_name="value",
+    ).drop_duplicates()
+    for (ns_lev, tau, upsamp), res_sub in resdf.groupby(["ns_lev", "taus", "upsamp"]):
+        res_gt = res_sub[res_sub["method"] == "gt"].copy()
+        dhm0 = res_gt.query("metric == 'dhm0'")["value"].unique().item()
+        dhm1 = res_gt.query("metric == 'dhm1'")["value"].unique().item()
+        res_sub = res_sub[res_sub["method"] != "gt"].copy()
+        res_sub["row_lab"] = res_sub["metric"]
+        res_sub["col_lab"] = (
+            res_sub["method"]
+            + "|"
+            + res_sub["use_all"].map(lambda u: "all_cell" if u else "individual")
+        )
+        g = sns.FacetGrid(
+            res_sub,
+            height=2.5,
+            aspect=1.4,
+            row="row_lab",
+            col="col_lab",
+            sharey="row",
+            sharex="col",
+            hue="col_lab",
+            col_order=[
+                "minian-bin|individual",
+                "minian-bin|all_cell",
+                "cnmf|individual",
+            ],
+            hue_order=[
+                "minian-bin|individual",
+                "minian-bin|all_cell",
+                "cnmf|individual",
+            ],
+            margin_titles=True,
+        )
+        g.map_dataframe(iter_plot, dhm0=dhm0, dhm1=dhm1)
+        g.add_legend()
+        g.figure.savefig(fig_path / "{}-{}-{}.svg".format(ns_lev, tau, upsamp))
+        plt.close(g.figure)
 
 
 # %% plot AR results
@@ -198,9 +208,9 @@ def agg_result(
 
 fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal").drop_duplicates()
+result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal")
 if result is not None:
-    result = result[result["y_scaling"]]
+    result = result[result["y_scaling"]].drop_duplicates()
     grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
     res_agg = result.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
     for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):
