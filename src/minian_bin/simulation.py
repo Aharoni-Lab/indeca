@@ -99,10 +99,11 @@ def ar_trace(
     tau_d: float = None,
     tau_r: float = None,
     shifted: bool = False,
+    rng=None,
 ):
     if g is None:
         g = np.array(tau2AR(tau_d, tau_r))
-    S = markov_fire(frame, P).astype(float)
+    S = markov_fire(frame, P, rng=rng).astype(float)
     C = apply_arcoef(S, g, shifted=shifted)
     return C, S
 
@@ -120,7 +121,9 @@ def exp_trace(frame: int, P: np.ndarray, tau_d: float, tau_r: float, trunc_thres
     return C, S
 
 
-def markov_fire(frame: int, P: np.ndarray):
+def markov_fire(frame: int, P: np.ndarray, rng=None):
+    if rng is None:
+        rng = np.random.default_rng()
     # makes sure markov probabilities are correct shape
     assert P.shape == (2, 2)
     # make sure probabilities sum to 1
@@ -129,7 +132,7 @@ def markov_fire(frame: int, P: np.ndarray):
         # allocate array for spiking and generate
         S = np.zeros(frame, dtype=int)
         for i in range(1, len(S)):
-            S[i] = np.random.choice([0, 1], p=P[S[i - 1], :])
+            S[i] = rng.choice([0, 1], p=P[S[i - 1], :])
         # make sure at least one firing exists
         if S.sum() > 0:
             break

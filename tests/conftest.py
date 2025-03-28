@@ -96,7 +96,7 @@ def fixt_y(
             P_fire = np.array([[0.98, 0.02], [0.75, 0.25]])
         else:
             P_fire = np.array([[0.998, 0.002], [0.75, 0.25]])
-    np.random.seed(rand_seed)
+    rng = np.random.default_rng(rand_seed)
     Y, C_org, S_org, C, S, scales = [], [], [], [], [], []
     for i in range(ncell):
         c_org, s_org = ar_trace(
@@ -105,6 +105,7 @@ def fixt_y(
             tau_d=taus[0] * upsamp,
             tau_r=taus[1] * upsamp,
             shifted=True,
+            rng=rng,
         )
         if upsamp > 1:
             c = np.convolve(c_org, np.ones(upsamp), "valid")[::upsamp]
@@ -112,10 +113,10 @@ def fixt_y(
         else:
             c, s = c_org, s_org
         if y_scaling:
-            scl = np.random.uniform(0.5, 2)
+            scl = rng.uniform(0.5, 2)
         else:
             scl = 1
-        y = scl * (c + np.random.normal(0, ns_lev, c.shape) * upsamp)
+        y = scl * (c + rng.normal(0, ns_lev, c.shape) * upsamp)
         Y.append(y)
         C_org.append(c_org)
         S_org.append(s_org)
