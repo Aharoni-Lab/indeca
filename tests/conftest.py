@@ -13,6 +13,7 @@ from minian_bin.deconv import DeconvBin
 from minian_bin.simulation import AR2tau, ar_trace, tau2AR
 
 from .testing_utils.io import download_realds, load_gt_ds
+from .testing_utils.misc import get_upsamp_scale
 
 AGG_RES_DIR = "tests/output/data/agg_results"
 
@@ -146,7 +147,6 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
         upsamp_y = upsamp
     y, c, c_org, s, s_org, scale = fixt_y(taus=taus, upsamp=upsamp_y, **kwargs)
     assert y.ndim == 1, "fixt_deconv only support single cell mode"
-    upsamp_ratio = upsamp_y / upsamp
     taus_up = np.array(taus) * upsamp
     _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
     deconv = DeconvBin(
@@ -158,7 +158,9 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
         backend=backend,
         norm=norm,
     )
-    deconv.update(scale=upsamp_ratio)
+    if upsamp_y != upsamp:
+        scl = get_upsamp_scale(taus, upsamp_y, upsamp)
+        deconv.update(scale=scl)
     return deconv, y, c, c_org, s, s_org, scale
 
 
