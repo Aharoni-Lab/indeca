@@ -70,7 +70,7 @@ class TestDeconvBin:
                     "c": c,
                     "s": s,
                     "s_solve": deconv.R @ s_bin,
-                    "c_solve": deconv.R @ c_bin,
+                    "c_solve": deconv.R @ c_bin * deconv.scale,
                     "c_org": c_org,
                     "s_org": s_org,
                     "c_bin": c_bin,
