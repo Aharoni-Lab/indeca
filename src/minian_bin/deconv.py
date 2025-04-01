@@ -783,6 +783,8 @@ class DeconvBin:
                 polish=True,
                 warm_start=False,
                 adaptive_rho=False,
+                eps_abs=1e-6,
+                eps_rel=1e-6,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
@@ -801,6 +803,8 @@ class DeconvBin:
                 polish=True,
                 warm_start=False,
                 adaptive_rho=False,
+                eps_abs=1e-6,
+                eps_rel=1e-6,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
