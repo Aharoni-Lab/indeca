@@ -717,7 +717,7 @@ class DeconvBin:
         self._reset_mask()
         if reset_scale:
             self.update(scale=1)
-            s_free, _ = self.solve(amp_constraint=False)
+            s_free, _ = self.solve(amp_constraint=False, pks_polish=False)
             self.update(scale=np.ptp(s_free))
         metric_df = None
         for i in range(self.max_iter_scal):
@@ -997,7 +997,7 @@ class DeconvBin:
     def _update_mask(self, amp_constraint: bool = True) -> None:
         self._reset_mask()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            opt_s, _ = self.solve(amp_constraint)
+            opt_s, _ = self.solve(amp_constraint, pks_polish=amp_constraint)
             opt_c = self.H @ opt_s
             nzidx_s = np.where(opt_s > self.delta_penal)[0]
             nzidx_c = np.where(opt_c > self.delta_penal)[0]
