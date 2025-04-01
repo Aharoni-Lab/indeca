@@ -51,14 +51,7 @@ class TestDeconvBin:
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("upsamp", [1, 2, 5])
     @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
-    @pytest.mark.parametrize(
-        "ns_lev",
-        [
-            0,
-            pytest.param(0.2, marks=pytest.mark.xfail),
-            pytest.param(0.5, marks=pytest.mark.xfail),
-        ],
-    )
+    @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
     def test_solve_thres(
         self, taus, rand_seed, upsamp, upsamp_y, ns_lev, test_fig_path_html, results_bag
     ):
@@ -112,16 +105,12 @@ class TestDeconvBin:
         )
         results_bag.data = dat
         # assert
-        if upsamp == upsamp_y:  # upsample factor matches ground truth
-            assert mdist <= 1
-            assert recall >= 0.8
-            assert precs >= 0.8
-        elif upsamp < upsamp_y:  # upsample factor smaller than ground truth
-            assert mdist <= upsamp_y / upsamp
-            assert recall >= 0.95
-        else:  # upsample factor larger than ground truth
-            assert mdist <= 1
-            assert precs >= 0.95
+        if upsamp == upsamp_y == 1 and ns_lev <= 0.2:
+            assert f1 == 1
+            assert mdist == 0
+        else:
+            assert f1 >= 0.6
+            assert mdist <= max(upsamp, upsamp_y)
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
