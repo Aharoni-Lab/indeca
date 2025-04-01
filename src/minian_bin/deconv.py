@@ -546,7 +546,7 @@ class DeconvBin:
                     )
                 )
         self.b = opt_b
-        if pks_polish and self.backend != "cvxpy":
+        if pks_polish and self.backend != "cvxpy" and len(self.nzidx_s) == self.T:
             opt_s_ft = np.where(opt_s > pks_delta, opt_s, 0)
             labs, _ = label(opt_s_ft)
             labs = labs - 1
