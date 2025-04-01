@@ -15,20 +15,37 @@ from .testing_utils.plotting import plot_met_ROC, plot_traces
 class TestDeconvBin:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
-    @pytest.mark.parametrize("backend", ["osqp", "cvxpy"])
-    def test_solve(self, taus, rand_seed, backend, eq_atol, test_fig_path_html):
+    @pytest.mark.parametrize(
+        "backend,upsamp", [("osqp", 1), ("osqp", 2), ("osqp", 5), ("cvxpy", 1)]
+    )
+    def test_solve(self, taus, rand_seed, backend, upsamp, eq_atol, test_fig_path_html):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
-            taus=taus, backend=backend, rand_seed=rand_seed
+            taus=taus, backend=backend, rand_seed=rand_seed, upsamp=upsamp
         )
+        R = deconv.R.value if backend == "cvxpy" else deconv.R
         s_solve, b_solve = deconv.solve(amp_constraint=False)
+        c_solve = deconv.H @ s_solve
+        c_solve_R = R @ c_solve
         # plotting
         fig = go.Figure()
-        fig.add_traces(plot_traces({"c": c, "s": s, "s_solve": s_solve}))
+        fig.add_traces(
+            plot_traces(
+                {
+                    "c": c,
+                    "s": s,
+                    "c_org": c_org,
+                    "s_org": s_org,
+                    "s_solve": s_solve,
+                    "c_solve": c_solve,
+                    "c_solve_R": c_solve_R,
+                }
+            )
+        )
         fig.write_html(test_fig_path_html)
         # assertion
         assert np.isclose(b_solve, 0, atol=eq_atol)
-        assert np.isclose(s, s_solve, atol=eq_atol).all()
+        assert np.isclose(s_org, s_solve, atol=eq_atol).all()
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))

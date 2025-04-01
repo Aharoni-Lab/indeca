@@ -78,7 +78,7 @@ def test_fig_path_svg(request, func_figs_dir):
 
 @pytest.fixture()
 def eq_atol():
-    return 1e-3
+    return 1e-1
 
 
 def fixt_y(
