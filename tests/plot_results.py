@@ -224,8 +224,6 @@ if result is not None:
                 facet_kws={"height": 3.5},
             )
             g.tick_params(rotation=45)
-            if met != "mdist":
-                g.set(yscale="log")
             g.figure.savefig(
                 fig_path / "tau({},{})-{}.svg".format(td, tr, met), bbox_inches="tight"
             )
