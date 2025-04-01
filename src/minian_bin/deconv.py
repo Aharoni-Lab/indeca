@@ -1,3 +1,4 @@
+import itertools as itt
 import warnings
 from typing import Tuple
 
@@ -7,8 +8,9 @@ import osqp
 import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
+from scipy.ndimage import label
 from scipy.optimize import direct
-from scipy.signal import ShortTimeFFT
+from scipy.signal import ShortTimeFFT, find_peaks
 from scipy.special import huber
 
 from minian_bin.logging_config import get_module_logger
@@ -433,8 +435,70 @@ class DeconvBin:
                 )
             logger.debug("Optimization problem updated")
 
+    def _cut_pks_labs(self, s, labs, pks):
+        pk_labs = np.full_like(labs, -1)
+        lb = 0
+        for ilab in range(labs.max() + 1):
+            lb_idxs = np.where(labs == ilab)[0]
+            cur_pks = [p for p in pks if p in lb_idxs]
+            if len(cur_pks) > 1:
+                p_start = lb_idxs[0]
+                for p0, p1 in zip(cur_pks[:-1], cur_pks[1:]):
+                    p_stop = p0 + np.argmin(s[p0:p1]).item()
+                    pk_labs[p_start:p_stop] = lb
+                    lb += 1
+                    p_start = p_stop
+                pk_labs[p_stop : lb_idxs[-1] + 1] = lb
+                lb += 1
+            else:
+                pk_labs[lb_idxs] = lb
+                lb += 1
+        return pk_labs
+
+    def _merge_sparse_regs(
+        self, s, regs, err_rtol=0, max_len=9, constraint_sum: bool = True
+    ):
+        s_ret = s.copy()
+        for r in range(regs.max() + 1):
+            ridx = np.where(regs == r)[0]
+            rlen = len(ridx)
+            rsum = s[ridx].sum()
+            ns_min = max(int(np.around(rsum)), 1)
+            if rlen > max_len or ns_min > rlen:
+                continue
+            s_new = s_ret.copy()
+            s_new[ridx] = 0
+            err_before = self._compute_err(s=s_ret)
+            err_ls = []
+            idx_ls = []
+            if constraint_sum:
+                ns_vals = [ns_min]
+            else:
+                ns_vals = list(range(ns_min, rlen + 1))
+            for ns in ns_vals:
+                for idxs in itt.combinations(ridx, ns):
+                    idxs = np.array(idxs)
+                    s_test = s_new.copy()
+                    s_test[idxs] = rsum / ns
+                    err_after = self._compute_err(s=s_test)
+                    err_ls.append(err_after)
+                    idx_ls.append(idxs)
+            err_min_idx = np.argmin(err_ls)
+            err_min = err_ls[err_min_idx]
+            if err_min - err_before < err_rtol * err_before:
+                idx_min = idx_ls[err_min_idx]
+                s_new[idx_min] = rsum / len(idx_min)
+                s_ret = s_new
+        return s_ret
+
     def solve(
-        self, amp_constraint: bool = True, update_cache: bool = False
+        self,
+        amp_constraint: bool = True,
+        update_cache: bool = False,
+        pks_polish: bool = True,
+        pks_delta: float = 1e-5,
+        pks_err_rtol: float = 10,
+        pks_cut: bool = False,
     ) -> np.ndarray:
         if self.l0_penal == 0:
             opt_s, opt_b = self._solve(
@@ -481,8 +545,18 @@ class DeconvBin:
                         self.max_iter_l0
                     )
                 )
-        self.s = np.abs(opt_s)
         self.b = opt_b
+        if pks_polish and self.backend != "cvxpy":
+            opt_s_ft = np.where(opt_s > pks_delta, opt_s, 0)
+            labs, _ = label(opt_s_ft)
+            labs = labs - 1
+            if pks_cut:
+                pks_idx, _ = find_peaks(opt_s_ft)
+                labs = self._cut_pks_labs(s=opt_s_ft, labs=labs, pks=pks_idx)
+            opt_s = self._merge_sparse_regs(
+                s=opt_s_ft, regs=labs, err_rtol=pks_err_rtol
+            )
+        self.s = np.abs(opt_s)
         return self.s, self.b
 
     def solve_thres(
@@ -491,12 +565,13 @@ class DeconvBin:
         amp_constraint: bool = True,
         ignore_res: bool = False,
         return_intm: bool = False,
+        pks_polish: bool = True,
     ) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
-        opt_s, opt_b = self.solve(amp_constraint=amp_constraint)
+        opt_s, opt_b = self.solve(amp_constraint=amp_constraint, pks_polish=pks_polish)
         R = self.R.value if self.backend == "cvxpy" else self.R
         if ignore_res:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
