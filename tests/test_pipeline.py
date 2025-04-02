@@ -101,7 +101,7 @@ class TestPipeline:
                 except AssertionError:
                     dhm0, dhm1 = 0, 0
                 mdist, f1, prec, rec = assignment_distance(
-                    s_ref=S_org[uid, :], s_slv=sb, tdist_thres=3
+                    s_ref=S_org[uid, :-1], s_slv=sb[:-1], tdist_thres=3
                 )
                 res_df.append(
                     pd.DataFrame(
@@ -132,7 +132,7 @@ class TestPipeline:
                 except AssertionError:
                     dhm0, dhm1 = 0, 0
                 mdist, f1, prec, rec = assignment_distance(
-                    s_ref=S_org[uid, :], s_slv=sb, tdist_thres=3
+                    s_ref=S_org[uid, :-1], s_slv=sb[:-1], tdist_thres=3
                 )
                 res_df.append(
                     pd.DataFrame(
