@@ -14,7 +14,7 @@ from scipy.signal import ShortTimeFFT, find_peaks
 from scipy.special import huber
 
 from minian_bin.logging_config import get_module_logger
-from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
+from minian_bin.simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
 from minian_bin.utils import scal_lstsq
 
 # Initialize logger for this module
@@ -133,6 +133,7 @@ class DeconvBin:
             if tau is None:
                 tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
                 self.tau = np.array([tau_d, tau_r])
+                self.ps = np.array([p, -p])
                 coef, _, _ = exp_pulse(
                     tau_d,
                     tau_r,
@@ -149,6 +150,7 @@ class DeconvBin:
             if theta is None:
                 self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
+            self.ps = ps
             coef, _, _ = exp_pulse(
                 tau[0],
                 tau[1],
@@ -161,7 +163,6 @@ class DeconvBin:
         if coef is None:
             assert coef_len is not None
             coef = np.ones(coef_len * upsamp)
-        assert (~np.isnan(coef)).all()
         self.coef_len = len(coef)
         self.T = self.y_len * upsamp
         l0_penal = 0
@@ -284,6 +285,23 @@ class DeconvBin:
                 h=self.coef.value if backend == "cvxpy" else self.coef,
                 uid=self.dashboard_uid,
             )
+        tr_exp, _, _ = exp_pulse(
+            self.tau[0],
+            self.tau[1],
+            p_d=self.ps[0],
+            p_r=self.ps[1],
+            nsamp=self.coef_len,
+        )
+        tr_ar, _, _ = ar_pulse(
+            self.theta[0], self.theta[1], nsamp=self.coef_len, shifted=True
+        )
+        assert (~np.isnan(coef)).all()
+        assert np.isclose(
+            tr_exp, coef, atol=self.atol
+        ).all(), "exp time constant inconsistent"
+        assert np.isclose(
+            tr_ar, coef, atol=self.atol
+        ).all(), "ar coefficients inconsistent"
 
     def update(
         self,
