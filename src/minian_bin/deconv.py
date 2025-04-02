@@ -742,10 +742,14 @@ class DeconvBin:
         metric_df = None
         for i in range(self.max_iter_scal):
             if concur_penal:
-                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal()
+                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
+                    pks_polish=i > 0
+                )
             else:
                 cur_penal = 0
-                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(scaling=True)
+                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(
+                    scaling=True, pks_polish=i > 0
+                )
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
                 pad_s[self.nzidx_s] = cur_s
