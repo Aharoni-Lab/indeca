@@ -5,7 +5,7 @@ import pandas as pd
 from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
-from .AR_kernel import estimate_coefs, fit_sumexp_gd, solve_fit_h_num
+from .AR_kernel import AR_upsamp_real, estimate_coefs, fit_sumexp_gd, solve_fit_h_num
 from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .logging_config import get_module_logger
@@ -94,15 +94,9 @@ def pipeline_bin(
                 use_smooth=est_use_smooth,
                 add_lag=est_add_lag,
             )
-            tau_d, tau_r, pp = AR2tau(*cur_theta, solve_amp=True)
-            cur_p = np.array([pp, -pp])
-            cur_tau = np.array([tau_d, tau_r])
-            if (np.imag(cur_tau) != 0).any() or pp == np.inf:
-                tr = ar_pulse(*cur_theta, nsamp=ar_kn_len, shifted=True)[0]
-                lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
-                cur_tau = (-1 / lams) * up_factor
-                logger.debug(f"Cell {icell}: Converted to real tau values: {cur_tau}")
-            cur_theta = tau2AR(cur_tau[0], cur_tau[1], cur_p)
+            cur_theta, cur_tau, cur_p = AR_upsamp_real(
+                cur_theta, upsamp=up_factor, fit_nsamp=ar_kn_len
+            )
             tau[icell, :] = cur_tau
             theta[icell, :] = cur_theta
             ps[icell, :] = cur_p
