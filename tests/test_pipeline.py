@@ -20,7 +20,7 @@ class TestPipeline:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("upsamp", [1, pytest.param(2, marks=pytest.mark.slow)])
-    @pytest.mark.parametrize("max_iter", [5])
+    @pytest.mark.parametrize("max_iter", [10])
     @pytest.mark.parametrize("ncell", [1, pytest.param(10, marks=pytest.mark.slow)])
     @pytest.mark.parametrize("ar_kn_len", [60])
     @pytest.mark.parametrize(
