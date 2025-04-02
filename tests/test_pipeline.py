@@ -96,7 +96,7 @@ class TestPipeline:
                 tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
                 try:
                     (dhm0, dhm1), _ = find_dhm(
-                        True, np.array([tau_d, tau_r]), np.array([1, -1])
+                        True, np.array([tau_d, tau_r]) / upsamp, np.array([1, -1])
                     )
                 except AssertionError:
                     dhm0, dhm1 = 0, 0
