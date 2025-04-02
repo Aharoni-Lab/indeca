@@ -139,7 +139,7 @@ class TestPipeline:
                         [
                             {
                                 "method": "cnmf",
-                                "use_all": False,
+                                "use_all": Y.shape[0] > 1,
                                 "iter": "final",
                                 "unit_id": uid,
                                 "qthres": qthres,
