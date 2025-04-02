@@ -29,6 +29,7 @@ class TestPipeline:
     )
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("penalty", [None, "l1"])
     def test_pipeline(
         self,
         taus,
@@ -38,6 +39,7 @@ class TestPipeline:
         ncell,
         ar_kn_len,
         ns_lev,
+        penalty,
         est_noise_freq,
         est_add_lag,
         results_bag,
@@ -73,6 +75,7 @@ class TestPipeline:
             upsamp,
             max_iters=max_iter,
             return_iter=True,
+            deconv_penal=penalty,
             ar_use_all=True,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
