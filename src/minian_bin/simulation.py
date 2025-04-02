@@ -87,7 +87,7 @@ def apply_exp(
     else:
         raise ValueError("Invalid tau_d: {:.2f}, tau_r: {:.2f}".format(tau_d, tau_r))
     if trunc_thres is not None:
-        trunc_idx = np.where(kn > trunc_thres)[0].max()
+        trunc_idx = np.where(kn >= trunc_thres)[0].max() + 1
         kn = kn[:trunc_idx]
     return np.convolve(kn, s, mode="full")[: len(s)]
 
