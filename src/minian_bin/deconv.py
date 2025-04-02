@@ -647,10 +647,12 @@ class DeconvBin:
             return bin_s, cvals[opt_idx], scals[opt_idx], err
 
     def solve_penal(
-        self, masking=True, scaling=True, return_intm=False
+        self, masking=True, scaling=True, return_intm=False, pks_polish=True
     ) -> Tuple[np.ndarray]:
         if self.penal is None:
-            opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
+            opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(
+                scaling=scaling, return_intm=return_intm, pks_polish=pks_polish
+            )
             opt_penal = 0
         elif self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -665,7 +667,7 @@ class DeconvBin:
             ub, ub_last = err_full, err_full
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
-                s, b = self.solve()
+                s, b = self.solve(pks_polish=pks_polish)
                 cur_err = self._compute_err(s=s, b=b)
                 # DIRECT finds weird solutions with high penalty and baseline,
                 # so we want to eliminate those possibilities
@@ -678,7 +680,7 @@ class DeconvBin:
 
             def opt_fn(x):
                 self.update(**{pn: x.item()})
-                _, _, _, obj = self.solve_thres(scaling=False)
+                _, _, _, obj = self.solve_thres(scaling=False, pks_polish=pks_polish)
                 if self.dashboard is not None:
                     self.dashboard.update(
                         uid=self.dashboard_uid,
@@ -712,11 +714,11 @@ class DeconvBin:
             self.update(**{pn: opt_penal})
             if return_intm:
                 opt_s, opt_c, opt_scl, opt_obj, intm = self.solve_thres(
-                    scaling=scaling, return_intm=return_intm
+                    scaling=scaling, return_intm=return_intm, pks_polish=pks_polish
                 )
             else:
                 opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(
-                    scaling=scaling, return_intm=return_intm
+                    scaling=scaling, return_intm=return_intm, pks_polish=pks_polish
                 )
             if opt_scl == 0:
                 logger.warning("could not find non-zero solution")
