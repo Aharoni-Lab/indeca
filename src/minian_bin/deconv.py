@@ -364,6 +364,7 @@ class DeconvBin:
                     nsamp=self.coef_len,
                     kn_len=self.coef_len,
                 )
+                self.tau = tau
                 self.theta = theta_new
             if coef is not None:
                 self.coef = coef
