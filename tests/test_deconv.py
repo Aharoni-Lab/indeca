@@ -24,7 +24,7 @@ class TestDeconvBin:
             taus=taus, backend=backend, rand_seed=rand_seed, upsamp=upsamp
         )
         R = deconv.R.value if backend == "cvxpy" else deconv.R
-        s_solve, b_solve = deconv.solve(amp_constraint=False)
+        s_solve, b_solve = deconv.solve(amp_constraint=False, pks_polish=True)
         c_solve = deconv.H @ s_solve
         c_solve_R = R @ c_solve
         # plotting
@@ -161,7 +161,7 @@ class TestDeconvBin:
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
             taus=taus, rand_seed=rand_seed
         )
-        s_free, _ = deconv.solve(amp_constraint=False, pks_polish=False)
+        s_free, _ = deconv.solve(amp_constraint=False)
         scl_init = np.ptp(s_free)
         deconv.update(scale=scl_init)
         opt_s, opt_c, scl_slv, obj, pn_slv, intm = deconv.solve_penal(
