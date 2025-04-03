@@ -292,9 +292,8 @@ class DeconvBin:
             p_r=self.ps[1],
             nsamp=self.coef_len,
         )
-        tr_ar, _, _ = ar_pulse(
-            self.theta[0], self.theta[1], nsamp=self.coef_len, shifted=True
-        )
+        theta = self.theta.value if self.backend == "cvxpy" else self.theta
+        tr_ar, _, _ = ar_pulse(theta[0], theta[1], nsamp=self.coef_len, shifted=True)
         assert (~np.isnan(coef)).all()
         assert np.isclose(
             tr_exp, coef, atol=self.atol
