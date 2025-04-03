@@ -1043,7 +1043,7 @@ class DeconvBin:
             opt_s, _ = self.solve(amp_constraint)
             opt_c = self.H @ opt_s
             nzidx_s = np.where(opt_s > self.delta_penal)[0]
-            nzidx_c = np.where(opt_c > self.delta_penal)[0]
+            nzidx_c = np.where(opt_c > 0)[0]
             if len(nzidx_s) == 0 or len(nzidx_c) == 0:
                 return
             self.nzidx_s = nzidx_s
@@ -1247,6 +1247,9 @@ class DeconvBin:
             Ar = self.scale * self.R @ self.H
         else:
             Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
+            # record spike terms that requires constraint
+            self.nzidx_A = np.where((Ax != 0).sum(axis=1))[0]
+            Ax = Ax[self.nzidx_A, :]
             Ar = self.scale * self.R
         try:
             A_shape, A_nnz = self.A.shape, self.A.nnz
@@ -1290,12 +1293,9 @@ class DeconvBin:
                     [np.full(1, bb), np.full(len(self.nzidx_s), np.inf)]
                 )
             else:
-                self.lb, self.ub, self.ub_inf = (
-                    np.zeros(self.T + 1),
-                    np.zeros(self.T + 1),
-                    np.zeros(self.T + 1),
-                )
-                self.ub[0] = bb
-                self.ub[self.nzidx_s + 1] = 1
-                self.ub_inf[0] = bb
-                self.ub_inf[self.nzidx_s + 1] = np.inf
+                ub_pad, ub_inf_pad = np.zeros(self.T), np.zeros(self.T)
+                ub_pad[self.nzidx_s] = 1
+                ub_inf_pad[self.nzidx_s] = np.inf
+                self.lb = np.zeros(len(self.nzidx_A) + 1)
+                self.ub = np.concatenate([np.full(1, bb), ub_pad[self.nzidx_A]])
+                self.ub_inf = np.concatenate([np.full(1, bb), ub_inf_pad[self.nzidx_A]])
