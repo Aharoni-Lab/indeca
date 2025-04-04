@@ -206,7 +206,7 @@ fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
 result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal")
 if result is not None:
-    result = result[result["y_scaling"]].drop_duplicates()
+    result = result[~result["y_scaling"]].drop_duplicates()
     grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
     res_agg = result.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
     for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):

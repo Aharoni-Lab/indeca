@@ -236,7 +236,7 @@ class TestDemoDeconv:
     @pytest.mark.parametrize("rand_seed", np.arange(15))
     @pytest.mark.parametrize("upsamp", [1, 2])
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
-    @pytest.mark.parametrize("y_scaling", [True])
+    @pytest.mark.parametrize("y_scaling", [False])
     def test_demo_solve_penal(
         self, taus, rand_seed, upsamp, ns_lev, y_scaling, test_fig_path_svg, results_bag
     ):
@@ -251,9 +251,6 @@ class TestDemoDeconv:
         _, _, _, _, intm_free = deconv.solve_thres(
             scaling=False, amp_constraint=False, return_intm=True
         )
-        s_free, _ = deconv.solve(amp_constraint=False)
-        scl_init = np.ptp(s_free)
-        deconv.update(scale=scl_init)
         _, _, _, _, intm_nopn = deconv.solve_thres(scaling=True, return_intm=True)
         _, _, _, _, opt_penal, intm_pn = deconv.solve_penal(
             scaling=True, return_intm=True
