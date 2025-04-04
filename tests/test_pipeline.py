@@ -182,12 +182,11 @@ class TestPipeline:
         fig.update_layout(height=350 * niter, width=1200 * ncell)
         fig.write_html(test_fig_path_html)
         # assertion
-        if ns_lev == 0 and upsamp == 1:
+        if ns_lev == 0:
             f1_last = res_df.set_index(["method", "iter"]).loc[
                 ("minian-bin", niter - 1), "f1"
             ]
-            # TODO: make this pass with all f1 == 1
-            assert f1_last.median() >= 0.75
+            assert f1_last.min() == 1
 
 
 @pytest.mark.slow
