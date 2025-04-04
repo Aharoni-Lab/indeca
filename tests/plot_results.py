@@ -23,8 +23,6 @@ def iter_plot(data, color, dhm0, dhm1, **kwargs):
         ax.axhline(dhm0, color="grey", ls=":")
     elif met == "dhm1":
         ax.axhline(dhm1, color="grey", ls=":")
-    elif met == "f1":
-        ax.set_yscale("log")
     if mthd == "cnmf":
         data = data.groupby(["qthres", "test_id"])["value"].median().reset_index()
     elif use_all:
@@ -93,7 +91,9 @@ if result is not None:
         res_sub["col_lab"] = (
             res_sub["method"]
             + "|"
-            + res_sub["penalty"].map({"": "no_penal", "l1": "l1"})
+            + res_sub["penalty"]
+            .fillna("no_penal")
+            .replace({"": "no_penal", "l1": "l1"})
             + "|"
             + res_sub["use_all"].map(lambda u: "all" if u else "individual")
         )
