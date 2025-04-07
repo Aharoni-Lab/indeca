@@ -1,0 +1,65 @@
+.dashboard-grid {
+  padding: 20px;
+}
+
+.cell-card {
+  margin-bottom: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.cell-card .card-header {
+  background-color: #f8f9fa;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cell-card h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.iteration-info {
+  font-size: 0.9rem;
+  color: #666;
+  background-color: #e9ecef;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.plot-container {
+  height: 300px;
+  margin-bottom: 15px;
+}
+
+.parameters-container {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 4px;
+}
+
+.parameters-container h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+}
+
+.parameters-table {
+  width: 100%;
+}
+
+.parameters-table td {
+  padding: 5px;
+}
+
+.parameters-table td:first-child {
+  font-weight: bold;
+  width: 40%;
+}
+
+.loading, .no-data {
+  text-align: center;
+  padding: 50px;
+  font-size: 1.2rem;
+  color: #666;
+} 

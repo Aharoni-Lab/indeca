@@ -11,6 +11,15 @@ from .deconv import DeconvBin
 from .logging_config import get_module_logger
 from .simulation import AR2tau, ar_pulse, tau2AR
 
+# Import the DashboardAdapter for the new FastAPI dashboard
+try:
+    from .api.dashboard_adapter import DashboardAdapter
+    from .api.dashboard_adapter_fixed import DashboardAdapterFixed
+    HAS_FASTAPI_DASHBOARD = True
+except ImportError:
+    HAS_FASTAPI_DASHBOARD = False
+    print("FastAPI dashboard not available. Install required dependencies to use it.")
+
 # Initialize logger for this module
 logger = get_module_logger("pipeline")
 logger.info("Pipeline module initialized")  # Test message on import
@@ -41,6 +50,8 @@ def pipeline_bin(
     ar_norm="l1",
     da_client=None,
     spawn_dashboard=True,
+    use_fastapi_dashboard=False,
+    dashboard_session_id=None,
 ):
     """Binary pursuit pipeline for spike inference.
 
@@ -49,6 +60,10 @@ def pipeline_bin(
     Y : array-like
         Input fluorescence trace
     ...
+    use_fastapi_dashboard : bool, default=False
+        Whether to use the new FastAPI dashboard
+    dashboard_session_id : str, optional
+        Session ID for the FastAPI dashboard
 
     Returns
     -------
@@ -66,14 +81,39 @@ def pipeline_bin(
         f"{ncell} cells with {T} timepoints"
     )
     if spawn_dashboard:
-        if da_client is not None:
-            logger.debug("Using Dask client for distributed computation")
-            dashboard = da_client.submit(
-                Dashboard, Y=Y, kn_len=ar_kn_len, actor=True
-            ).result()
+        if use_fastapi_dashboard and HAS_FASTAPI_DASHBOARD:
+            logger.info("Using FastAPI dashboard adapter")
+            if da_client is not None:
+                logger.debug("Using Dask client for distributed computation with FastAPI dashboard")
+                # Use the fixed adapter with Dask to avoid pickling issues
+                dashboard = DashboardAdapterFixed(
+                    Y=Y,
+                    kn_len=ar_kn_len,
+                    max_iters=max_iters,
+                    session_id=dashboard_session_id,
+                )
+                logger.info(f"Created fixed dashboard adapter with session_id: {dashboard.session_id}")
+            else:
+                logger.debug("Running in single-machine mode with FastAPI dashboard")
+                dashboard = DashboardAdapter(
+                    Y=Y,
+                    kn_len=ar_kn_len,
+                    max_iters=max_iters,
+                    session_id=dashboard_session_id,
+                )
         else:
-            logger.debug("Running in single-machine mode")
-            dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
+            # Fall back to original dashboard if FastAPI dashboard is not available
+            if use_fastapi_dashboard and not HAS_FASTAPI_DASHBOARD:
+                logger.warning("FastAPI dashboard requested but not available, falling back to original dashboard")
+            
+            if da_client is not None:
+                logger.debug("Using Dask client for distributed computation")
+                dashboard = da_client.submit(
+                    Dashboard, Y=Y, kn_len=ar_kn_len, actor=True
+                ).result()
+            else:
+                logger.debug("Running in single-machine mode")
+                dashboard = Dashboard(Y=Y, kn_len=ar_kn_len)
     else:
         dashboard = None
     # 1. estimate initial guess at convolution kernel

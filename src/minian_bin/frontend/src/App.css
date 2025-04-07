@@ -1,0 +1,59 @@
+.App {
+  text-align: center;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.App-header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.connection-status {
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.status-connected {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.status-disconnected {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.status-connecting {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+.status-polling {
+  color: #17a2b8;
+  font-weight: bold;
+}
+
+.status-error {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.status-no-session {
+  color: #6c757d;
+  font-weight: bold;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 300px;
+  font-size: 1.2rem;
+  color: #666;
+} 
