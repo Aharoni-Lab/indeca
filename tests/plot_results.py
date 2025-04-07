@@ -23,12 +23,10 @@ def iter_plot(data, color, dhm0, dhm1, **kwargs):
         ax.axhline(dhm0, color="grey", ls=":")
     elif met == "dhm1":
         ax.axhline(dhm1, color="grey", ls=":")
-    elif met == "f1":
-        ax.set_yscale("log")
-    if use_all:
-        data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
     if mthd == "cnmf":
         data = data.groupby(["qthres", "test_id"])["value"].median().reset_index()
+    elif use_all:
+        data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
     if mthd == "minian-bin":
         sns.swarmplot(
             data,
@@ -67,6 +65,7 @@ if result is not None:
     id_vars = [
         "method",
         "use_all",
+        "penalty",
         "unit_id",
         "iter",
         "qthres",
@@ -92,8 +91,13 @@ if result is not None:
         res_sub["col_lab"] = (
             res_sub["method"]
             + "|"
-            + res_sub["use_all"].map(lambda u: "all_cell" if u else "individual")
+            + res_sub["penalty"]
+            .fillna("no_penal")
+            .replace({"": "no_penal", "l1": "l1"})
+            + "|"
+            + res_sub["use_all"].map(lambda u: "all" if u else "individual")
         )
+        col_ord = sorted(res_sub["col_lab"].unique().tolist())
         g = sns.FacetGrid(
             res_sub,
             height=2.5,
@@ -103,16 +107,8 @@ if result is not None:
             sharey="row",
             sharex="col",
             hue="col_lab",
-            col_order=[
-                "minian-bin|individual",
-                "minian-bin|all_cell",
-                "cnmf|individual",
-            ],
-            hue_order=[
-                "minian-bin|individual",
-                "minian-bin|all_cell",
-                "cnmf|individual",
-            ],
+            col_order=col_ord,
+            hue_order=col_ord,
             margin_titles=True,
         )
         g.map_dataframe(iter_plot, dhm0=dhm0, dhm1=dhm1)
@@ -210,7 +206,7 @@ fig_path = FIG_PATH / "demo_solve_penal"
 fig_path.mkdir(parents=True, exist_ok=True)
 result = load_agg_result(IN_RES_PATH / "test_demo_solve_penal")
 if result is not None:
-    result = result[result["y_scaling"]].drop_duplicates()
+    result = result[~result["y_scaling"]].drop_duplicates()
     grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
     res_agg = result.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
     for (td, tr), res_sub in res_agg.groupby(["tau_d", "tau_r"]):
@@ -224,8 +220,6 @@ if result is not None:
                 facet_kws={"height": 3.5},
             )
             g.tick_params(rotation=45)
-            if met != "mdist":
-                g.set(yscale="log")
             g.figure.savefig(
                 fig_path / "tau({},{})-{}.svg".format(td, tr, met), bbox_inches="tight"
             )

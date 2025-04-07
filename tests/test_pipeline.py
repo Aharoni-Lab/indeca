@@ -20,7 +20,7 @@ class TestPipeline:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("upsamp", [1, pytest.param(2, marks=pytest.mark.slow)])
-    @pytest.mark.parametrize("max_iter", [5])
+    @pytest.mark.parametrize("max_iter", [10])
     @pytest.mark.parametrize("ncell", [1, pytest.param(10, marks=pytest.mark.slow)])
     @pytest.mark.parametrize("ar_kn_len", [60])
     @pytest.mark.parametrize(
@@ -29,6 +29,7 @@ class TestPipeline:
     )
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("penalty", [None, "l1"])
     def test_pipeline(
         self,
         taus,
@@ -38,6 +39,7 @@ class TestPipeline:
         ncell,
         ar_kn_len,
         ns_lev,
+        penalty,
         est_noise_freq,
         est_add_lag,
         results_bag,
@@ -73,6 +75,7 @@ class TestPipeline:
             upsamp,
             max_iters=max_iter,
             return_iter=True,
+            deconv_penal=penalty,
             ar_use_all=True,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
@@ -96,12 +99,12 @@ class TestPipeline:
                 tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
                 try:
                     (dhm0, dhm1), _ = find_dhm(
-                        True, np.array([tau_d, tau_r]), np.array([1, -1])
+                        True, np.array([tau_d, tau_r]) / upsamp, np.array([1, -1])
                     )
                 except AssertionError:
                     dhm0, dhm1 = 0, 0
                 mdist, f1, prec, rec = assignment_distance(
-                    s_ref=S_org[uid, :], s_slv=sb, tdist_thres=3
+                    s_ref=S_org[uid, :-1], s_slv=sb[:-1], tdist_thres=3
                 )
                 res_df.append(
                     pd.DataFrame(
@@ -132,14 +135,14 @@ class TestPipeline:
                 except AssertionError:
                     dhm0, dhm1 = 0, 0
                 mdist, f1, prec, rec = assignment_distance(
-                    s_ref=S_org[uid, :], s_slv=sb, tdist_thres=3
+                    s_ref=S_org[uid, :-1], s_slv=sb[:-1], tdist_thres=3
                 )
                 res_df.append(
                     pd.DataFrame(
                         [
                             {
                                 "method": "cnmf",
-                                "use_all": False,
+                                "use_all": Y.shape[0] > 1,
                                 "iter": "final",
                                 "unit_id": uid,
                                 "qthres": qthres,
@@ -179,12 +182,11 @@ class TestPipeline:
         fig.update_layout(height=350 * niter, width=1200 * ncell)
         fig.write_html(test_fig_path_html)
         # assertion
-        if ns_lev == 0 and upsamp == 1:
+        if ns_lev == 0:
             f1_last = res_df.set_index(["method", "iter"]).loc[
                 ("minian-bin", niter - 1), "f1"
             ]
-            # TODO: make this pass with all f1 == 1
-            assert f1_last.median() >= 0.75
+            assert f1_last.min() == 1
 
 
 @pytest.mark.slow

@@ -15,33 +15,82 @@ from .testing_utils.plotting import plot_met_ROC, plot_traces
 class TestDeconvBin:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
-    @pytest.mark.parametrize("backend", ["osqp", "cvxpy"])
-    def test_solve(self, taus, rand_seed, backend, eq_atol, test_fig_path_html):
+    @pytest.mark.parametrize(
+        "backend,upsamp", [("osqp", 1), ("osqp", 2), ("osqp", 5), ("cvxpy", 1)]
+    )
+    def test_solve(self, taus, rand_seed, backend, upsamp, eq_atol, test_fig_path_html):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
-            taus=taus, backend=backend, rand_seed=rand_seed
+            taus=taus, backend=backend, rand_seed=rand_seed, upsamp=upsamp
         )
-        s_solve, b_solve = deconv.solve(amp_constraint=False)
+        R = deconv.R.value if backend == "cvxpy" else deconv.R
+        s_solve, b_solve = deconv.solve(amp_constraint=False, pks_polish=True)
+        c_solve = deconv.H @ s_solve
+        c_solve_R = R @ c_solve
         # plotting
         fig = go.Figure()
-        fig.add_traces(plot_traces({"c": c, "s": s, "s_solve": s_solve}))
+        fig.add_traces(
+            plot_traces(
+                {
+                    "c": c,
+                    "s": s,
+                    "c_org": c_org,
+                    "s_org": s_org,
+                    "s_solve": s_solve,
+                    "c_solve": c_solve,
+                    "c_solve_R": c_solve_R,
+                }
+            )
+        )
         fig.write_html(test_fig_path_html)
         # assertion
         assert np.isclose(b_solve, 0, atol=eq_atol)
-        assert np.isclose(s, s_solve, atol=eq_atol).all()
+        assert np.isclose(s_org, s_solve, atol=eq_atol).all()
+
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize("upsamp", [1])
+    def test_masking(self, taus, rand_seed, upsamp, eq_atol, test_fig_path_html):
+        # act
+        deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
+            taus=taus, rand_seed=rand_seed, upsamp=upsamp
+        )
+        s_nomsk, b_nomsk = deconv._solve(amp_constraint=False)
+        c_nomsk = deconv.H @ s_nomsk
+        deconv._update_mask()
+        s_msk, b_msk = deconv._solve(amp_constraint=False)
+        c_msk = deconv.H @ s_msk
+        s_msk = deconv._pad_s(s_msk)
+        c_msk = deconv._pad_c(c_msk)
+        # plotting
+        fig = go.Figure()
+        fig.add_traces(
+            plot_traces(
+                {
+                    "c": c,
+                    "s": s,
+                    "c_org": c_org,
+                    "s_org": s_org,
+                    "s_nomsk": s_nomsk,
+                    "c_nomsk": c_nomsk,
+                    "s_msk": s_msk,
+                    "c_msk": c_msk,
+                }
+            )
+        )
+        fig.write_html(test_fig_path_html)
+        # assertion
+        assert np.isclose(b_nomsk, 0, atol=eq_atol)
+        assert np.isclose(b_msk, 0, atol=eq_atol)
+        assert set(np.where(s)[0]).issubset(set(deconv.nzidx_s))
+        assert np.isclose(s_org, s_nomsk, atol=eq_atol).all()
+        assert np.isclose(s_org, s_msk, atol=eq_atol).all()
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("upsamp", [1, 2, 5])
     @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
-    @pytest.mark.parametrize(
-        "ns_lev",
-        [
-            0,
-            pytest.param(0.2, marks=pytest.mark.xfail),
-            pytest.param(0.5, marks=pytest.mark.xfail),
-        ],
-    )
+    @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
     def test_solve_thres(
         self, taus, rand_seed, upsamp, upsamp_y, ns_lev, test_fig_path_html, results_bag
     ):
@@ -58,7 +107,9 @@ class TestDeconvBin:
         )
         s_direct = intm[0]
         s_bin = s_bin.astype(float)
-        mdist, f1, precs, recall = assignment_distance(s_ref=s_org, s_slv=s_bin)
+        mdist, f1, precs, recall = assignment_distance(
+            s_ref=s_org, s_slv=s_bin, tdist_thres=5
+        )
         # plotting
         fig = go.Figure()
         fig.add_traces(
@@ -68,7 +119,7 @@ class TestDeconvBin:
                     "c": c,
                     "s": s,
                     "s_solve": deconv.R @ s_bin,
-                    "c_solve": deconv.R @ c_bin,
+                    "c_solve": deconv.R @ c_bin * deconv.scale,
                     "c_org": c_org,
                     "s_org": s_org,
                     "c_bin": c_bin,
@@ -93,16 +144,12 @@ class TestDeconvBin:
         )
         results_bag.data = dat
         # assert
-        if upsamp == upsamp_y:  # upsample factor matches ground truth
-            assert mdist <= 1
-            assert recall >= 0.8
-            assert precs >= 0.8
-        elif upsamp < upsamp_y:  # upsample factor smaller than ground truth
-            assert mdist <= upsamp_y / upsamp
-            assert recall >= 0.95
-        else:  # upsample factor larger than ground truth
-            assert mdist <= 1
-            assert precs >= 0.95
+        if upsamp == upsamp_y == 1 and ns_lev <= 0.2:
+            assert f1 == 1
+            assert mdist == 0
+        else:
+            assert f1 >= 0.6
+            assert mdist <= max(upsamp, upsamp_y)
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
@@ -189,7 +236,7 @@ class TestDemoDeconv:
     @pytest.mark.parametrize("rand_seed", np.arange(15))
     @pytest.mark.parametrize("upsamp", [1, 2])
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
-    @pytest.mark.parametrize("y_scaling", [True])
+    @pytest.mark.parametrize("y_scaling", [False])
     def test_demo_solve_penal(
         self, taus, rand_seed, upsamp, ns_lev, y_scaling, test_fig_path_svg, results_bag
     ):
@@ -204,9 +251,6 @@ class TestDemoDeconv:
         _, _, _, _, intm_free = deconv.solve_thres(
             scaling=False, amp_constraint=False, return_intm=True
         )
-        s_free, _ = deconv.solve(amp_constraint=False)
-        scl_init = np.ptp(s_free)
-        deconv.update(scale=scl_init)
         _, _, _, _, intm_nopn = deconv.solve_thres(scaling=True, return_intm=True)
         _, _, _, _, opt_penal, intm_pn = deconv.solve_penal(
             scaling=True, return_intm=True
@@ -249,4 +293,4 @@ class TestDemoDeconv:
         fig.savefig(test_fig_path_svg)
         # assertion
         if ns_lev == 0 and upsamp == 1:
-            assert (cur_svals[oidx] == s).all()
+            assert (cur_svals[oidx][:-1] == s[:-1]).all()

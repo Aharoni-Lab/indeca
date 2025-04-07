@@ -1,3 +1,4 @@
+import itertools as itt
 import warnings
 from typing import Tuple
 
@@ -7,12 +8,13 @@ import osqp
 import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
+from scipy.ndimage import label
 from scipy.optimize import direct
-from scipy.signal import ShortTimeFFT
+from scipy.signal import ShortTimeFFT, find_peaks
 from scipy.special import huber
 
 from minian_bin.logging_config import get_module_logger
-from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
+from minian_bin.simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
 from minian_bin.utils import scal_lstsq
 
 # Initialize logger for this module
@@ -131,6 +133,7 @@ class DeconvBin:
             if tau is None:
                 tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
                 self.tau = np.array([tau_d, tau_r])
+                self.ps = np.array([p, -p])
                 coef, _, _ = exp_pulse(
                     tau_d,
                     tau_r,
@@ -147,6 +150,7 @@ class DeconvBin:
             if theta is None:
                 self.theta = np.array(tau2AR(tau[0], tau[1]))
             self.tau = np.array(tau)
+            self.ps = ps
             coef, _, _ = exp_pulse(
                 tau[0],
                 tau[1],
@@ -159,7 +163,6 @@ class DeconvBin:
         if coef is None:
             assert coef_len is not None
             coef = np.ones(coef_len * upsamp)
-        assert (~np.isnan(coef)).all()
         self.coef_len = len(coef)
         self.T = self.y_len * upsamp
         l0_penal = 0
@@ -282,6 +285,22 @@ class DeconvBin:
                 h=self.coef.value if backend == "cvxpy" else self.coef,
                 uid=self.dashboard_uid,
             )
+        tr_exp, _, _ = exp_pulse(
+            self.tau[0],
+            self.tau[1],
+            p_d=self.ps[0],
+            p_r=self.ps[1],
+            nsamp=self.coef_len,
+        )
+        theta = self.theta.value if self.backend == "cvxpy" else self.theta
+        tr_ar, _, _ = ar_pulse(theta[0], theta[1], nsamp=self.coef_len, shifted=True)
+        assert (~np.isnan(coef)).all()
+        assert np.isclose(
+            tr_exp, coef, atol=self.atol
+        ).all(), "exp time constant inconsistent"
+        assert np.isclose(
+            tr_ar, coef, atol=self.atol
+        ).all(), "ar coefficients inconsistent"
 
     def update(
         self,
@@ -345,6 +364,7 @@ class DeconvBin:
                     nsamp=self.coef_len,
                     kn_len=self.coef_len,
                 )
+                self.tau = tau
                 self.theta = theta_new
             if coef is not None:
                 self.coef = coef
@@ -433,8 +453,85 @@ class DeconvBin:
                 )
             logger.debug("Optimization problem updated")
 
+    def _cut_pks_labs(self, s, labs, pks):
+        pk_labs = np.full_like(labs, -1)
+        lb = 0
+        for ilab in range(labs.max() + 1):
+            lb_idxs = np.where(labs == ilab)[0]
+            cur_pks = [p for p in pks if p in lb_idxs]
+            if len(cur_pks) > 1:
+                p_start = lb_idxs[0]
+                for p0, p1 in zip(cur_pks[:-1], cur_pks[1:]):
+                    p_stop = p0 + np.argmin(s[p0:p1]).item()
+                    pk_labs[p_start:p_stop] = lb
+                    lb += 1
+                    p_start = p_stop
+                pk_labs[p_stop : lb_idxs[-1] + 1] = lb
+                lb += 1
+            else:
+                pk_labs[lb_idxs] = lb
+                lb += 1
+        return pk_labs
+
+    def _merge_sparse_regs(
+        self, s, regs, err_rtol=0, max_len=9, constraint_sum: bool = True
+    ):
+        s_ret = s.copy()
+        for r in range(regs.max() + 1):
+            ridx = np.where(regs == r)[0]
+            ridx = sorted(list(set(ridx).intersection(set(self.nzidx_s))))
+            rlen = len(ridx)
+            rsum = s[ridx].sum()
+            ns_min = max(int(np.around(rsum)), 1)
+            if rlen > max_len or ns_min > rlen or rlen <= 1:
+                continue
+            s_new = s_ret.copy()
+            s_new[ridx] = 0
+            err_before = self._compute_err(s=s_ret[self.nzidx_s])
+            err_ls = []
+            idx_ls = []
+            if constraint_sum:
+                ns_vals = [ns_min]
+            else:
+                ns_vals = list(range(ns_min, rlen + 1))
+            for ns in ns_vals:
+                for idxs in itt.combinations(ridx, ns):
+                    idxs = np.array(idxs)
+                    s_test = s_new.copy()
+                    s_test[idxs] = rsum / ns
+                    err_after = self._compute_err(s=s_test[self.nzidx_s])
+                    err_ls.append(err_after)
+                    idx_ls.append(idxs)
+            err_min_idx = np.argmin(err_ls)
+            err_min = err_ls[err_min_idx]
+            if err_min - err_before < err_rtol * err_before:
+                idx_min = idx_ls[err_min_idx]
+                s_new[idx_min] = rsum / len(idx_min)
+                s_ret = s_new
+        return s_ret
+
+    def _pad_s(self, s=None):
+        if s is None:
+            s = self.s
+        s_ret = np.zeros(self.T)
+        s_ret[self.nzidx_s] = s
+        return s_ret
+
+    def _pad_c(self, c=None):
+        if c is None:
+            c = self.s
+        c_ret = np.zeros(self.T)
+        c_ret[self.nzidx_c] = c
+        return c_ret
+
     def solve(
-        self, amp_constraint: bool = True, update_cache: bool = False
+        self,
+        amp_constraint: bool = True,
+        update_cache: bool = False,
+        pks_polish: bool = None,
+        pks_delta: float = 1e-5,
+        pks_err_rtol: float = 10,
+        pks_cut: bool = False,
     ) -> np.ndarray:
         if self.l0_penal == 0:
             opt_s, opt_b = self._solve(
@@ -481,8 +578,20 @@ class DeconvBin:
                         self.max_iter_l0
                     )
                 )
-        self.s = np.abs(opt_s)
         self.b = opt_b
+        if pks_polish is None:
+            pks_polish = amp_constraint
+        if pks_polish and self.backend != "cvxpy":
+            s_pad = self._pad_s(s=opt_s)
+            s_ft = np.where(s_pad > pks_delta, s_pad, 0)
+            labs, _ = label(s_ft)
+            labs = labs - 1
+            if pks_cut:
+                pks_idx, _ = find_peaks(s_ft)
+                labs = self._cut_pks_labs(s=s_ft, labs=labs, pks=pks_idx)
+            opt_s = self._merge_sparse_regs(s=s_ft, regs=labs, err_rtol=pks_err_rtol)
+            opt_s = opt_s[self.nzidx_s]
+        self.s = np.abs(opt_s)
         return self.s, self.b
 
     def solve_thres(
@@ -491,12 +600,13 @@ class DeconvBin:
         amp_constraint: bool = True,
         ignore_res: bool = False,
         return_intm: bool = False,
+        pks_polish: bool = None,
     ) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
             y = self.y.value.squeeze()
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
             y = self.y
-        opt_s, opt_b = self.solve(amp_constraint=amp_constraint)
+        opt_s, opt_b = self.solve(amp_constraint=amp_constraint, pks_polish=pks_polish)
         R = self.R.value if self.backend == "cvxpy" else self.R
         if ignore_res:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
@@ -554,10 +664,12 @@ class DeconvBin:
             return bin_s, cvals[opt_idx], scals[opt_idx], err
 
     def solve_penal(
-        self, masking=True, scaling=True, return_intm=False
+        self, masking=True, scaling=True, return_intm=False, pks_polish=None
     ) -> Tuple[np.ndarray]:
         if self.penal is None:
-            opt_s, opt_c, opt_scl, opt_obj = self.solve_thres()
+            opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(
+                scaling=scaling, return_intm=return_intm, pks_polish=pks_polish
+            )
             opt_penal = 0
         elif self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -565,14 +677,17 @@ class DeconvBin:
             if masking:
                 self._reset_cache()
                 self._update_mask()
-            s_min, b_min = self.solve(update_cache=True)
+            s_nopn, _, _, err_nopn, intm = self.solve_thres(
+                scaling=scaling, return_intm=True, pks_polish=pks_polish
+            )
+            s_min = intm[0]
             ymean = self.y.mean()
             err_full = self._compute_err(s=np.zeros(len(self.nzidx_s)), b=ymean)
-            err_min = self._compute_err(s=s_min, b=b_min)
+            err_min = self._compute_err(s=s_min)
             ub, ub_last = err_full, err_full
             for _ in range(int(np.ceil(np.log2(ub)))):
                 self.update(**{pn: ub})
-                s, b = self.solve()
+                s, b = self.solve(pks_polish=pks_polish)
                 cur_err = self._compute_err(s=s, b=b)
                 # DIRECT finds weird solutions with high penalty and baseline,
                 # so we want to eliminate those possibilities
@@ -585,7 +700,7 @@ class DeconvBin:
 
             def opt_fn(x):
                 self.update(**{pn: x.item()})
-                _, _, _, obj = self.solve_thres(scaling=False)
+                _, _, _, obj = self.solve_thres(scaling=False, pks_polish=pks_polish)
                 if self.dashboard is not None:
                     self.dashboard.update(
                         uid=self.dashboard_uid,
@@ -611,7 +726,7 @@ class DeconvBin:
                     )
                 )
                 opt_penal = 0
-            elif err_min <= opt_fn(direct_pn):
+            elif err_nopn <= opt_fn(direct_pn):
                 # DIRECT seem to mistakenly report high penalty when 0 penalty attains better error
                 opt_penal = 0
             else:
@@ -619,11 +734,11 @@ class DeconvBin:
             self.update(**{pn: opt_penal})
             if return_intm:
                 opt_s, opt_c, opt_scl, opt_obj, intm = self.solve_thres(
-                    scaling=scaling, return_intm=return_intm
+                    scaling=scaling, return_intm=return_intm, pks_polish=pks_polish
                 )
             else:
                 opt_s, opt_c, opt_scl, opt_obj = self.solve_thres(
-                    scaling=scaling, return_intm=return_intm
+                    scaling=scaling, return_intm=return_intm, pks_polish=pks_polish
                 )
             if opt_scl == 0:
                 logger.warning("could not find non-zero solution")
@@ -647,10 +762,14 @@ class DeconvBin:
         metric_df = None
         for i in range(self.max_iter_scal):
             if concur_penal:
-                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal()
+                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
+                    pks_polish=i > 0
+                )
             else:
                 cur_penal = 0
-                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(scaling=True)
+                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(
+                    scaling=True, pks_polish=i > 0
+                )
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
                 pad_s[self.nzidx_s] = cur_s
@@ -782,6 +901,11 @@ class DeconvBin:
                 verbose=False,
                 polish=True,
                 warm_start=False,
+                adaptive_rho=False,
+                eps_abs=1e-6,
+                eps_rel=1e-6,
+                eps_prim_inf=1e-7,
+                eps_dual_inf=1e-7,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
@@ -799,6 +923,11 @@ class DeconvBin:
                 verbose=False,
                 polish=True,
                 warm_start=False,
+                adaptive_rho=False,
+                eps_abs=1e-6,
+                eps_rel=1e-6,
+                eps_prim_inf=1e-7,
+                eps_dual_inf=1e-7,
                 # max_iter=int(1e5) if self.backend == "osqp" else None,
                 # eps_prim_inf=1e-8,
             )
@@ -913,13 +1042,10 @@ class DeconvBin:
         self._reset_mask()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             opt_s, _ = self.solve(amp_constraint)
-            opt_c = self.H @ opt_s
             nzidx_s = np.where(opt_s > self.delta_penal)[0]
-            nzidx_c = np.where(opt_c > self.delta_penal)[0]
-            if len(nzidx_s) == 0 or len(nzidx_c) == 0:
+            if len(nzidx_s) == 0:
                 return
             self.nzidx_s = nzidx_s
-            self.nzidx_c = nzidx_c
             self._update_R()
             self._update_w()
             self._setup_prob_osqp()
@@ -1119,6 +1245,9 @@ class DeconvBin:
             Ar = self.scale * self.R @ self.H
         else:
             Ax = sps.csc_matrix(self.G_org[:, self.nzidx_c])
+            # record spike terms that requires constraint
+            self.nzidx_A = np.where((Ax != 0).sum(axis=1))[0]
+            Ax = Ax[self.nzidx_A, :]
             Ar = self.scale * self.R
         try:
             A_shape, A_nnz = self.A.shape, self.A.nnz
@@ -1162,12 +1291,9 @@ class DeconvBin:
                     [np.full(1, bb), np.full(len(self.nzidx_s), np.inf)]
                 )
             else:
-                self.lb, self.ub, self.ub_inf = (
-                    np.zeros(self.T + 1),
-                    np.zeros(self.T + 1),
-                    np.zeros(self.T + 1),
-                )
-                self.ub[0] = bb
-                self.ub[self.nzidx_s + 1] = 1
-                self.ub_inf[0] = bb
-                self.ub_inf[self.nzidx_s + 1] = np.inf
+                ub_pad, ub_inf_pad = np.zeros(self.T), np.zeros(self.T)
+                ub_pad[self.nzidx_s] = 1
+                ub_inf_pad[self.nzidx_s] = np.inf
+                self.lb = np.zeros(len(self.nzidx_A) + 1)
+                self.ub = np.concatenate([np.full(1, bb), ub_pad[self.nzidx_A]])
+                self.ub_inf = np.concatenate([np.full(1, bb), ub_inf_pad[self.nzidx_A]])
