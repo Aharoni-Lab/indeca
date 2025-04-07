@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,7 @@ from .testing_utils.io import download_realds, load_gt_ds
 from .testing_utils.misc import get_upsamp_scale
 
 AGG_RES_DIR = "tests/output/data/agg_results"
+TEST_DATA_DIR = "tests/data"
 
 
 @pytest.fixture
@@ -23,13 +25,6 @@ def temp_data_dir():
     """Fixture to provide a temporary directory for test data."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield Path(tmpdir)
-
-
-@pytest.fixture()
-def test_data_dir(request):
-    test_path = os.path.dirname(request.path)
-    dat_dir = os.path.abspath(os.path.join(test_path, "data"))
-    return dat_dir
 
 
 @pytest.fixture
@@ -170,35 +165,42 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
 #         shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
 
 
-@pytest.fixture()
-def fixt_realds(test_data_dir, request):
-    dsname = request.param.get("dsname", "X-DS09-GCaMP6f-m-V1")
-    subset_cell = request.param.get("subset_cell", (0, 10))
-    subset_fm = request.param.get("subset_fm", (0, 5000))
-    if not os.path.exists(os.path.join(test_data_dir, dsname)) or not os.listdir(
-        os.path.join(test_data_dir, dsname)
+def fixt_realds(dsname, ncell=None, nfm=None):
+    if not os.path.exists(os.path.join(TEST_DATA_DIR, dsname)) or not os.listdir(
+        os.path.join(TEST_DATA_DIR, dsname)
     ):
-        download_realds(test_data_dir, dsname)
-    Y, ap_df, fluo_df = load_gt_ds(os.path.join(test_data_dir, dsname), return_ap=True)
-    Y = Y.isel(frame=slice(*subset_fm)).dropna("frame")
-    ap_df = ap_df[ap_df["frame"].between(*subset_fm)]
-    fluo_df = fluo_df[fluo_df["frame"].between(*subset_fm)]
+        download_realds(TEST_DATA_DIR, dsname)
+    Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(TEST_DATA_DIR, dsname))
+    if fluo_df["fps"].nunique() > 1:
+        warnings.warn("More than one fps found in dataset {}".format(dsname))
+        fps_ncell = fluo_df.groupby(["fps"])["unit_id"].nunique()
+        fps_keep = fps_ncell.index[fps_ncell.argmax()]
+        ap_df = ap_df[ap_df["fps"] == fps_keep].copy()
+        fluo_df = fluo_df[fluo_df["fps"] == fps_keep].copy()
+        uids = fluo_df["unit_id"].unique()
+        Y = Y.sel(unit_id=uids).dropna("frame", how="all").fillna(0)
+        S_true = S_true.sel(unit_id=uids, frame=Y.coords["frame"])
+    if nfm is not None:
+        ap_df = ap_df[ap_df["frame"].between(0, nfm)]
+        fluo_df = fluo_df[fluo_df["frame"].between(0, nfm)]
+        Y = Y.isel(frame=slice(0, nfm))
+        S_true = S_true.isel(frame=slice(0, nfm))
     ap_ct = ap_df.groupby("unit_id")["ap_time"].count().reset_index()
     act_uids = np.array(ap_ct.loc[ap_ct["ap_time"] > 1, "unit_id"])
-    Y = Y.sel(unit_id=act_uids)
-    try:
-        Y = Y.isel(unit_id=slice(*subset_cell))
-    except IndexError:
-        raise IndexError(
-            "Cannot select {} active cells with frame subset {}".format(
-                subset_cell, subset_fm
+    if ncell is not None and ncell > len(act_uids):
+        warnings.warn(
+            "Cannot select {} active cells with {} frames in dataset {}".format(
+                ncell, nfm, dsname
             )
         )
+    else:
+        act_uids = act_uids[:ncell]
+    Y = Y.sel(unit_id=act_uids)
+    S_true = S_true.sel(unit_id=act_uids)
+    ap_df = ap_df.set_index("unit_id").loc[act_uids]
+    fluo_df = fluo_df.set_index("unit_id").loc[act_uids]
     Y = Y * 100
-    uids = np.array(Y.coords["unit_id"])
-    ap_df = ap_df.set_index("unit_id").loc[uids]
-    fluo_df = fluo_df.set_index("unit_id").loc[uids]
-    return Y, ap_df, fluo_df
+    return Y, S_true, ap_df, fluo_df
 
 
 def pytest_sessionfinish(session):
