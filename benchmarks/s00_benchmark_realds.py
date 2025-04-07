@@ -32,6 +32,7 @@ try:
     import uvicorn
     from minian_bin.api.app import app
     from minian_bin.api.dashboard_adapter import DashboardAdapter
+
     HAS_FASTAPI_DASHBOARD = True
 except ImportError:
     HAS_FASTAPI_DASHBOARD = False
@@ -102,11 +103,19 @@ os.makedirs(FIG_PATH, exist_ok=True)
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Run benchmark analysis")
-    parser.add_argument("--subset", action="store_true", help="Use a subset of the data")
-    parser.add_argument("--fastapi-dashboard", action="store_true", help="Use FastAPI dashboard")
-    parser.add_argument("--dashboard-port", type=int, default=54321, help="Port for FastAPI dashboard")
-    parser.add_argument("--open-browser", action="store_true", help="Open browser automatically")
-    
+    parser.add_argument(
+        "--subset", action="store_true", help="Use a subset of the data"
+    )
+    parser.add_argument(
+        "--fastapi-dashboard", action="store_true", help="Use FastAPI dashboard"
+    )
+    parser.add_argument(
+        "--dashboard-port", type=int, default=54321, help="Port for FastAPI dashboard"
+    )
+    parser.add_argument(
+        "--open-browser", action="store_true", help="Open browser automatically"
+    )
+
     return parser.parse_args()
 
 
@@ -178,33 +187,33 @@ da.config.set(
 
 if __name__ == "__main__":
     args = parse_args()
-    
+
     # Check if FastAPI dashboard is requested but not available
     if args.fastapi_dashboard and not HAS_FASTAPI_DASHBOARD:
-        logger.warning("FastAPI dashboard requested but not available. Install required dependencies.")
+        logger.warning(
+            "FastAPI dashboard requested but not available. Install required dependencies."
+        )
         args.fastapi_dashboard = False
-    
+
     # Start FastAPI server if needed
     if args.fastapi_dashboard:
         logger.info(f"Starting FastAPI server on port {args.dashboard_port}")
         # Generate a unique session ID for this run
         dashboard_session_id = str(uuid.uuid4())
         logger.info(f"Dashboard session ID: {dashboard_session_id}")
-        
+
         # Start server in a separate thread
         server_thread = threading.Thread(
-            target=run_fastapi_server,
-            args=(args.dashboard_port,),
-            daemon=True
+            target=run_fastapi_server, args=(args.dashboard_port,), daemon=True
         )
         server_thread.start()
-        
+
         # Open browser if requested
         if args.open_browser:
             dashboard_url = f"http://localhost:{args.dashboard_port}?session_id={dashboard_session_id}"
             logger.info(f"Opening dashboard in browser at {dashboard_url}")
             webbrowser.open(dashboard_url)
-    
+
     logger.info("Starting benchmark analysis")
     logger.debug("Creating Dask cluster with 16 workers")
     cluster = LocalCluster(
@@ -214,7 +223,7 @@ if __name__ == "__main__":
         dashboard_address="0.0.0.0:12345",
     )
     client = Client(cluster)
-    
+
     if args.subset:
         subset = {
             "frame": slice(0, 8000),
@@ -223,7 +232,7 @@ if __name__ == "__main__":
         logger.info("Using data subset")
     else:
         subset = None
-        
+
     logger.debug(f"Data subsetting: {subset}")
     for dsname in DS_LS:
         if not os.path.exists(os.path.join(LOCAL_DS_PATH, dsname)) or not os.listdir(
@@ -273,7 +282,9 @@ if __name__ == "__main__":
             deconv_backend="osqp",
             da_client=client,
             use_fastapi_dashboard=args.fastapi_dashboard,
-            dashboard_session_id=dashboard_session_id if args.fastapi_dashboard else None,
+            dashboard_session_id=dashboard_session_id
+            if args.fastapi_dashboard
+            else None,
         )
 
         logger.debug("Computing results")

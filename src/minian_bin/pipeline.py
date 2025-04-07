@@ -15,6 +15,7 @@ from .simulation import AR2tau, ar_pulse, tau2AR
 try:
     from .api.dashboard_adapter import DashboardAdapter
     from .api.dashboard_adapter_fixed import DashboardAdapterFixed
+
     HAS_FASTAPI_DASHBOARD = True
 except ImportError:
     HAS_FASTAPI_DASHBOARD = False
@@ -84,7 +85,9 @@ def pipeline_bin(
         if use_fastapi_dashboard and HAS_FASTAPI_DASHBOARD:
             logger.info("Using FastAPI dashboard adapter")
             if da_client is not None:
-                logger.debug("Using Dask client for distributed computation with FastAPI dashboard")
+                logger.debug(
+                    "Using Dask client for distributed computation with FastAPI dashboard"
+                )
                 # Use the fixed adapter with Dask to avoid pickling issues
                 dashboard = DashboardAdapterFixed(
                     Y=Y,
@@ -92,7 +95,9 @@ def pipeline_bin(
                     max_iters=max_iters,
                     session_id=dashboard_session_id,
                 )
-                logger.info(f"Created fixed dashboard adapter with session_id: {dashboard.session_id}")
+                logger.info(
+                    f"Created fixed dashboard adapter with session_id: {dashboard.session_id}"
+                )
             else:
                 logger.debug("Running in single-machine mode with FastAPI dashboard")
                 dashboard = DashboardAdapter(
@@ -104,8 +109,10 @@ def pipeline_bin(
         else:
             # Fall back to original dashboard if FastAPI dashboard is not available
             if use_fastapi_dashboard and not HAS_FASTAPI_DASHBOARD:
-                logger.warning("FastAPI dashboard requested but not available, falling back to original dashboard")
-            
+                logger.warning(
+                    "FastAPI dashboard requested but not available, falling back to original dashboard"
+                )
+
             if da_client is not None:
                 logger.debug("Using Dask client for distributed computation")
                 dashboard = da_client.submit(

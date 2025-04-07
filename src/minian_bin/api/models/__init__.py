@@ -1,1 +1,1 @@
-"""Pydantic models for the dashboard API.""" 
+"""Pydantic models for the dashboard API."""

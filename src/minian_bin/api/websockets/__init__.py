@@ -1,1 +1,1 @@
-"""WebSocket connections for real-time dashboard updates.""" 
+"""WebSocket connections for real-time dashboard updates."""

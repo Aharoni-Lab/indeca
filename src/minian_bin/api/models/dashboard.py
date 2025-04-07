@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 class DataType(str, Enum):
     """Types of data that can be sent to the dashboard."""
+
     TRACE = "trace"
     ITERATION = "iteration"
     KERNEL = "kernel"
@@ -19,11 +20,12 @@ class DataType(str, Enum):
 
 class TraceData(BaseModel):
     """Model for trace data."""
+
     uid: int = Field(..., description="Cell/Unit ID")
     y: List[float] = Field(..., description="Original fluorescence trace")
     c: Optional[List[float]] = Field(None, description="Calcium trace")
     s: Optional[List[float]] = Field(None, description="Spike trace")
-    
+
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {
@@ -33,6 +35,7 @@ class TraceData(BaseModel):
 
 class IterationData(BaseModel):
     """Model for iteration data."""
+
     iter: int = Field(..., description="Iteration number")
     uid: int = Field(..., description="Cell/Unit ID")
     scale: Optional[float] = Field(None, description="Scale value")
@@ -43,6 +46,7 @@ class IterationData(BaseModel):
 
 class KernelData(BaseModel):
     """Model for kernel data."""
+
     uid: int = Field(..., description="Cell/Unit ID")
     h: List[float] = Field(..., description="Kernel values")
     h_fit: Optional[List[float]] = Field(None, description="Fitted kernel values")
@@ -50,10 +54,11 @@ class KernelData(BaseModel):
 
 class DashboardUpdateMessage(BaseModel):
     """Model for messages sent to the dashboard."""
+
     type: DataType = Field(..., description="Type of data being sent")
     uid: Optional[int] = Field(None, description="Cell/Unit ID if applicable")
     data: Dict[str, Any] = Field(..., description="Data payload")
-    
+
     class Config:
         arbitrary_types_allowed = True
         json_encoders = {
@@ -63,5 +68,6 @@ class DashboardUpdateMessage(BaseModel):
 
 class DashboardConnection(BaseModel):
     """Model for dashboard connection information."""
+
     client_id: str = Field(..., description="Unique client ID")
-    session_id: Optional[str] = Field(None, description="Session ID") 
+    session_id: Optional[str] = Field(None, description="Session ID")
