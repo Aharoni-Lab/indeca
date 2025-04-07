@@ -176,3 +176,46 @@ def plot_agg_boxswarm(
     )
     g.tight_layout()
     return g
+
+
+def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwargs):
+    ax = plt.gca()
+    mthd = data["method"].unique().item()
+    met = data["metric"].unique().item()
+    use_all = data["use_all"].unique().item()
+    if met == "dhm0" and dhm1 is not None:
+        ax.axhline(dhm0, color="grey", ls=":")
+    elif met == "dhm1" and dhm1 is not None:
+        ax.axhline(dhm1, color="grey", ls=":")
+    if aggregate and mthd == "cnmf":
+        data = data.groupby(["qthres", "test_id"])["value"].median().reset_index()
+    elif aggregate and use_all:
+        data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
+    if mthd == "minian-bin":
+        sns.swarmplot(
+            data,
+            x="iter",
+            y="value",
+            ax=ax,
+            color=color,
+            edgecolor="auto",
+            warn_thresh=0.8,
+            linewidth=1,
+            **kwargs,
+        )
+        sns.lineplot(data, x="iter", y="value", ax=ax, color=color, **kwargs)
+    elif mthd == "cnmf":
+        sns.swarmplot(
+            data,
+            x="qthres",
+            y="value",
+            ax=ax,
+            color=color,
+            edgecolor="auto",
+            warn_thresh=0.8,
+            linewidth=1,
+            **kwargs,
+        )
+        sns.boxplot(
+            data, x="qthres", y="value", color=color, saturation=0.5, ax=ax, **kwargs
+        )
