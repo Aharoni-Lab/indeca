@@ -178,3 +178,6 @@ cython_debug/
 /tests/output
 *.npy
 *.feat
+
+# Dashboard data
+/src/minian_bin/api/data/
