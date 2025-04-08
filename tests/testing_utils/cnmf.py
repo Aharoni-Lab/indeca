@@ -3,6 +3,7 @@ import numpy as np
 import scipy.sparse as sps
 
 from minian_bin.AR_kernel import estimate_coefs
+from minian_bin.deconv import construct_G, construct_R
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 
 
@@ -64,21 +65,13 @@ def pipeline_cnmf(
     return C_cnmf, S_cnmf, tau
 
 
-def construct_R(T: int, up_factor: int):
-    rs_vec = np.zeros(T * up_factor)
-    rs_vec[:up_factor] = 1
-    return sps.coo_matrix(
-        np.stack([np.roll(rs_vec, up_factor * i) for i in range(T)], axis=0)
-    )
-
-
 def prob_deconv(
     y_len: int,
     coef_len: int = 60,
     ar_mode: bool = True,
     use_base: bool = False,
     R: np.ndarray = None,
-    norm: str = "l1",
+    norm: str = "l2",
     amp_constraint: bool = False,
     mixin: bool = False,
 ):
@@ -114,7 +107,7 @@ def prob_deconv(
                 cp.diag(cp.promote(-coef[i], (T - i - 1,)), -i - 1)
                 for i in range(coef_len)
             ]
-        ) + np.eye(T)
+        ) + sps.eye(T)
         cons = [s == G @ c]
     else:
         H = sum([cp.diag(cp.promote(coef[i], (T - i,)), -i) for i in range(coef_len)])
