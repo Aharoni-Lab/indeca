@@ -21,6 +21,7 @@ if result is not None:
     result = result.drop_duplicates()
     id_vars = [
         "dsname",
+        "ncell",
         "method",
         "use_all",
         "penalty",
@@ -38,7 +39,7 @@ if result is not None:
         var_name="metric",
         value_name="value",
     ).drop_duplicates()
-    for (ds), res_sub in resdf.groupby(["dsname"]):
+    for (ds, ncell), res_sub in resdf.groupby(["dsname", "ncell"]):
         res_sub = res_sub[res_sub["method"] != "gt"].copy()
         res_sub["row_lab"] = res_sub["metric"]
         res_sub["col_lab"] = (
@@ -66,7 +67,7 @@ if result is not None:
         )
         g.map_dataframe(plot_pipeline_iter, aggregate=False)
         g.add_legend()
-        g.figure.savefig(fig_path / "{}.svg".format(ds))
+        g.figure.savefig(fig_path / "{}-{}.svg".format(ds, ncell))
         plt.close(g.figure)
 
 
