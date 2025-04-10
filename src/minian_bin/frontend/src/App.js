@@ -10,15 +10,16 @@ const WS_URL = `ws://${window.location.hostname}:54321/dashboard/ws`;
 
 // Dashboard component
 function App() {
-  // Get session ID from URL parameters
-  const [searchParams] = useSearchParams();
-  const sessionId = searchParams.get('session_id');
+  const [sessionId, setSessionId] = useState(null);
+  const dataSourceRef = useRef('websocket');
+  const setDataSourceRef = useRef((value) => {
+    dataSourceRef.current = value;
+  });
   const [clientId, setClientId] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [data, setData] = useState(null);
   const webSocket = useRef(null);
   const pollingIntervalRef = useRef(null);
-  const dataSourceRef = useRef('none'); // 'websocket' or 'polling' or 'none'
 
   // State management
   const [traceData, setTraceData] = useState({});

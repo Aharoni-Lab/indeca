@@ -181,3 +181,25 @@ cython_debug/
 
 # Dashboard data
 /src/minian_bin/api/data/
+
+# Node.js and React specific
+/node_modules
+/.pnp
+.pnp.js
+/coverage
+/src/minian_bin/frontend/node_modules
+/src/minian_bin/frontend/build
+/src/minian_bin/frontend/.DS_Store
+/src/minian_bin/frontend/.env.local
+/src/minian_bin/frontend/.env.development.local
+/src/minian_bin/frontend/.env.test.local
+/src/minian_bin/frontend/.env.production.local
+/src/minian_bin/frontend/npm-debug.log*
+/src/minian_bin/frontend/yarn-debug.log*
+/src/minian_bin/frontend/yarn-error.log*
+/src/minian_bin/frontend/.cache
+
+# IDE specific folders
+.idea/
+*.swp
+*.swo
