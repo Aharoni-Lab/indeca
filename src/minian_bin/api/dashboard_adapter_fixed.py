@@ -57,9 +57,9 @@ def get_or_create_session_data(session_id, Y):
         # Initialize new session data
         data = {
             "Y": Y.tolist() if hasattr(Y, "tolist") else Y,
-            "traces": {}, 
+            "traces": {},
             "iterations": {},
-            "kernels": {}
+            "kernels": {},
         }
         save_dashboard_data(session_id, data)
     return data
@@ -72,7 +72,7 @@ def get_all_sessions():
 
 class DashboardAdapterFixed:
     """A version of DashboardAdapter that works with Dask by using file-based storage."""
-    
+
     def __init__(
         self,
         Y: np.ndarray = None,
@@ -85,7 +85,7 @@ class DashboardAdapterFixed:
         client=None,  # Ignored but kept for API compatibility
     ):
         """Initialize the dashboard adapter.
-        
+
         Args:
             Y: Input fluorescence traces (ncell x T)
             ncell: Number of cells (if Y not provided)
@@ -102,7 +102,7 @@ class DashboardAdapterFixed:
             Y = np.ones((ncell, T))
         else:
             ncell, T = Y.shape
-        
+
         self.Y = Y
         self.ncell = ncell
         self.T = T
@@ -111,23 +111,23 @@ class DashboardAdapterFixed:
         self.it_update = 0
         self.it_view = 0
         self.session_id = session_id or str(uuid.uuid4())
-        
+
         # Initialize data storage for this session in main process
         session_data = get_or_create_session_data(self.session_id, Y)
-        
+
         logger.info(f"Dashboard adapter initialized with session_id {self.session_id}")
-    
+
     def set_iter(self, it: int):
         """Set the current iteration.
-        
+
         Args:
             it: Iteration number
         """
         self.it_update = it
-        
+
     def update(self, uid: int = None, **kwargs):
         """Update dashboard data.
-        
+
         Args:
             uid: Optional cell/unit ID. If None, update for all cells.
             **kwargs: Keyword arguments with updated values
@@ -137,80 +137,92 @@ class DashboardAdapterFixed:
         if session_data is None:
             # Re-initialize if data is missing
             session_data = get_or_create_session_data(self.session_id, self.Y)
-            
+
         if uid is None:
             uids = range(self.ncell)
         else:
             uids = [uid]
-        
+
         # Track if anything was updated
         updated = False
-        
+
         for u in uids:
             str_u = str(u)
             # Store trace data
             if "c" in kwargs or "s" in kwargs:
                 if str_u not in session_data["traces"]:
                     session_data["traces"][str_u] = {
-                        "y": self.Y[u].tolist() if hasattr(self.Y[u], "tolist") else self.Y[u]
+                        "y": self.Y[u].tolist()
+                        if hasattr(self.Y[u], "tolist")
+                        else self.Y[u]
                     }
                     updated = True
-                
+
                 if "c" in kwargs:
                     try:
                         c_data = kwargs["c"]
                         if hasattr(c_data, "shape") and len(c_data.shape) > 1:
                             c_data = c_data[u]
-                        session_data["traces"][str_u]["c"] = c_data.tolist() if hasattr(c_data, "tolist") else c_data
+                        session_data["traces"][str_u]["c"] = (
+                            c_data.tolist() if hasattr(c_data, "tolist") else c_data
+                        )
                         updated = True
                     except (IndexError, AttributeError) as e:
                         logger.warning(f"Error storing c data for cell {u}: {e}")
-                
+
                 if "s" in kwargs:
                     try:
                         s_data = kwargs["s"]
                         if hasattr(s_data, "shape") and len(s_data.shape) > 1:
                             s_data = s_data[u]
-                        session_data["traces"][str_u]["s"] = s_data.tolist() if hasattr(s_data, "tolist") else s_data
+                        session_data["traces"][str_u]["s"] = (
+                            s_data.tolist() if hasattr(s_data, "tolist") else s_data
+                        )
                         updated = True
                     except (IndexError, AttributeError) as e:
                         logger.warning(f"Error storing s data for cell {u}: {e}")
-            
+
             # Store kernel data
             if "h" in kwargs or "h_fit" in kwargs:
                 if str_u not in session_data["kernels"]:
                     session_data["kernels"][str_u] = {}
                     updated = True
-                
+
                 if "h" in kwargs:
                     try:
                         h_data = kwargs["h"]
                         if hasattr(h_data, "shape") and len(h_data.shape) > 1:
                             h_data = h_data[u]
-                        session_data["kernels"][str_u]["h"] = h_data.tolist() if hasattr(h_data, "tolist") else h_data
+                        session_data["kernels"][str_u]["h"] = (
+                            h_data.tolist() if hasattr(h_data, "tolist") else h_data
+                        )
                         updated = True
                     except (IndexError, AttributeError) as e:
                         logger.warning(f"Error storing h data for cell {u}: {e}")
-                
+
                 if "h_fit" in kwargs:
                     try:
                         h_fit_data = kwargs["h_fit"]
                         if hasattr(h_fit_data, "shape") and len(h_fit_data.shape) > 1:
                             h_fit_data = h_fit_data[u]
-                        session_data["kernels"][str_u]["h_fit"] = h_fit_data.tolist() if hasattr(h_fit_data, "tolist") else h_fit_data
+                        session_data["kernels"][str_u]["h_fit"] = (
+                            h_fit_data.tolist()
+                            if hasattr(h_fit_data, "tolist")
+                            else h_fit_data
+                        )
                         updated = True
                     except (IndexError, AttributeError) as e:
                         logger.warning(f"Error storing h_fit data for cell {u}: {e}")
-            
+
             # Store iteration data
             if any(k in kwargs for k in ["tau_d", "tau_r", "err", "scale"]):
                 if str_u not in session_data["iterations"]:
                     session_data["iterations"][str_u] = {}
                     updated = True
-                
+
                 session_data["iterations"][str_u]["iter"] = self.it_update
                 updated = True
-                
+
                 for k in ["tau_d", "tau_r", "err", "scale"]:
                     if k in kwargs:
                         try:
@@ -221,16 +233,16 @@ class DashboardAdapterFixed:
                                 val = val[u]
                                 if hasattr(val, "item"):
                                     val = val.item()
-                            
+
                             session_data["iterations"][str_u][k] = val
                             updated = True
                         except (IndexError, ValueError, AttributeError) as e:
                             logger.warning(f"Error storing {k} data for cell {u}: {e}")
-        
+
         # Save changes if anything was updated
         if updated:
             save_dashboard_data(self.session_id, session_data)
-    
+
     def stop(self):
         """Clean up resources."""
         logger.info(f"Dashboard adapter stopped for session {self.session_id}")
@@ -245,4 +257,4 @@ def get_dashboard_data():
 
 def get_session_data(session_id):
     """Get dashboard data for a specific session."""
-    return load_dashboard_data(session_id) 
+    return load_dashboard_data(session_id)

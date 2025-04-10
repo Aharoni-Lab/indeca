@@ -1,1 +1,1 @@
-"""FastAPI backend for minian-bin dashboard.""" 
+"""FastAPI backend for minian-bin dashboard."""

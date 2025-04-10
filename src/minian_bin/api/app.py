@@ -43,54 +43,64 @@ static_dir.mkdir(exist_ok=True, parents=True)
 index_path = static_dir / "index.html"
 if index_path.exists():
     logger.info(f"Found index.html at {index_path}")
-    
+
     # Serve static files if they exist
     static_files_dir = static_dir / "static"
     if static_files_dir.exists():
         logger.info(f"Mounting static files from {static_files_dir}")
-        app.mount("/static", StaticFiles(directory=str(static_files_dir)), name="static")
-    
+        app.mount(
+            "/static", StaticFiles(directory=str(static_files_dir)), name="static"
+        )
+
     # Root endpoint to serve index.html
     @app.get("/", include_in_schema=False)
     async def root():
         logger.info(f"Serving index.html from {index_path}")
         return FileResponse(index_path)
-    
+
     # Catch-all route to handle client-side routing
     @app.get("/{catch_all:path}")
     async def catch_all(catch_all: str, request: Request):
         # Skip API routes
-        if catch_all.startswith("dashboard/") or catch_all.startswith("docs") or catch_all.startswith("openapi.json"):
+        if (
+            catch_all.startswith("dashboard/")
+            or catch_all.startswith("docs")
+            or catch_all.startswith("openapi.json")
+        ):
             raise HTTPException(status_code=404, detail="Not found")
-        
+
         # Check if the file exists in the build directory
         file_path = static_dir / catch_all
         if file_path.exists() and file_path.is_file():
             logger.debug(f"Serving file: {file_path}")
             return FileResponse(file_path)
-        
+
         # If not found, serve index.html for client-side routing
         logger.debug(f"Path {catch_all} not found, serving index.html")
         return FileResponse(index_path)
+
 else:
     logger.warning(f"index.html not found at {index_path}, serving API docs instead")
-    
+
     # Root endpoint redirects to API docs if no frontend is available
     @app.get("/", include_in_schema=False)
     async def root():
         return RedirectResponse(url="/docs")
+
 
 # Health check endpoint
 @app.get("/health", include_in_schema=False)
 async def health():
     return {"status": "ok"}
 
+
 @app.on_event("startup")
 async def startup_event():
     """Event handler for application startup."""
     logger.info("Starting up the API server")
 
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Event handler for application shutdown."""
-    logger.info("Shutting down the API server") 
+    logger.info("Shutting down the API server")

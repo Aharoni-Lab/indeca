@@ -1,1 +1,1 @@
-"""API routes for the dashboard.""" 
+"""API routes for the dashboard."""
