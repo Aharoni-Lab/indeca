@@ -197,7 +197,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
     @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
-    @pytest.mark.parametrize("ncell", [5, None])
+    @pytest.mark.parametrize("ncell", [1, 5, None])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
     def test_demo_pipeline_realds(
