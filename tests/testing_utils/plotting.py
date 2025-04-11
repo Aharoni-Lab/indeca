@@ -79,7 +79,7 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     return ax.add_collection(lc)
 
 
-def plot_met_ROC(metdf, grad_color: bool = True):
+def plot_met_ROC_thres(metdf, grad_color: bool = True):
     if "group" not in metdf.columns:
         metdf["group"] = ""
     fig = plt.figure(constrained_layout=True, figsize=(8, 4))
@@ -142,6 +142,50 @@ def plot_met_ROC(metdf, grad_color: bool = True):
                 color="gray",
                 markersize=15,
             )
+    fig.legend()
+    return fig
+
+
+def  plot_met_ROC_scale(metdf, iterdf, opt_scale, grad_color: bool = True):
+    fig = plt.figure(constrained_layout=True, figsize=(8, 4))
+    gs = GridSpec(3, 2, figure=fig)
+    ax_obj = fig.add_subplot(gs[0, 0])
+    ax_f1 = fig.add_subplot(gs[1, 0])
+    ax_iter = fig.add_subplot(gs[2, 0])
+    ax_roc = fig.add_subplot(gs[:, 1])
+    ax_roc.invert_xaxis()
+    lw = 2
+    ls = ["solid"] if grad_color else ["dotted", "dashed", "dashdot"]
+    scls = metdf["scale"]
+    ax_obj.set_xlabel("Scale")
+    ax_obj.set_ylabel("Error")
+    if grad_color:
+        ax_obj.plot(scls, metdf["objs"], alpha=0)
+        colored_line(x=scls, y=metdf["objs"], c=scls, ax=ax_obj, linewidths=lw)
+    else:
+        ax_obj.plot(scls, metdf["objs"], ls=ls)
+    ax_obj.axvline(opt_scale, ls="dotted", color="gray")
+    ax_iter.set_xlabel("Iter")
+    ax_iter.set_ylabel("Scale")
+    ax_iter.plot(iterdf["iter"], iterdf["scale"])
+    ax_iter.axhline(opt_scale, ls="dotted", color="gray")
+    ax_f1.set_xlabel("Scale")
+    ax_f1.set_ylabel("f1 Score")
+    if grad_color:
+        ax_f1.plot(scls, metdf["f1"], alpha=0)
+        colored_line(x=scls, y=metdf["f1"], c=scls, ax=ax_f1, linewidths=lw)
+    else:
+        ax_f1.plot(scls, metdf["f1"], ls=ls)
+    ax_f1.axvline(opt_scale, ls="dotted", color="gray")
+    ax_roc.set_xlabel("Precision")
+    ax_roc.set_ylabel("Recall")
+    if grad_color:
+        ax_roc.plot(metdf["prec"], metdf["recall"], alpha=0)
+        colored_line(
+            x=metdf["prec"], y=metdf["recall"], c=scls, ax=ax_roc, linewidths=lw
+        )
+    else:
+        ax_roc.plot(metdf["prec"], metdf["recall"], ls=ls)
     fig.legend()
     return fig
 
