@@ -748,7 +748,10 @@ class DeconvBin:
             return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(
-        self, reset_scale: bool = True, concur_penal: bool = False
+        self,
+        reset_scale: bool = True,
+        concur_penal: bool = False,
+        return_met: bool = False,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -840,7 +843,10 @@ class DeconvBin:
             )
         self._reset_cache()
         self._reset_mask()
-        return opt_s, opt_c, cur_scl, cur_obj, cur_penal
+        if return_met:
+            return opt_s, opt_c, cur_scl, cur_obj, cur_penal, metric_df
+        else:
+            return opt_s, opt_c, cur_scl, cur_obj, cur_penal
 
     def _setup_prob_osqp(self) -> None:
         logger.debug("Setting up OSQP problem")
