@@ -3,13 +3,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from .conftest import fixt_deconv
+from minian_bin.AR_kernel import AR2tau, tau2AR
+from minian_bin.deconv import DeconvBin
+
+from .conftest import fixt_deconv, fixt_realds
 from .testing_utils.metrics import (
     assignment_distance,
     compute_metrics,
     df_assign_metadata,
 )
-from .testing_utils.plotting import plot_met_ROC, plot_traces
+from .testing_utils.plotting import plot_met_ROC_scale, plot_met_ROC_thres, plot_traces
 
 
 class TestDeconvBin:
@@ -229,7 +232,7 @@ class TestDemoDeconv:
             {"objs": objs, "scals": scals, "thres": thres, "opt_idx": opt_idx},
             tdist_thres=3,
         )
-        fig = plot_met_ROC(metdf)
+        fig = plot_met_ROC_thres(metdf)
         fig.savefig(test_fig_path_svg)
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
@@ -289,8 +292,67 @@ class TestDemoDeconv:
         )
         results_bag.data = metdf
         # plotting
-        fig = plot_met_ROC(metdf, grad_color=False)
+        fig = plot_met_ROC_thres(metdf, grad_color=False)
         fig.savefig(test_fig_path_svg)
         # assertion
         if ns_lev == 0 and upsamp == 1:
             assert (cur_svals[oidx][:-1] == s[:-1]).all()
+
+    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("ar_kn_len", [100])
+    @pytest.mark.parametrize("est_noise_freq", [None])
+    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("taus", [(21.18, 7.23)])
+    @pytest.mark.parametrize("ncell", [1])
+    @pytest.mark.parametrize("nfm", [None])
+    @pytest.mark.parametrize("penalty", [None])
+    def test_demo_solve_scale_realds(
+        self,
+        upsamp,
+        ar_kn_len,
+        est_noise_freq,
+        est_add_lag,
+        dsname,
+        taus,
+        ncell,
+        nfm,
+        penalty,
+        test_fig_path_svg,
+    ):
+        Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell=ncell, nfm=nfm)
+        theta = tau2AR(taus[0], taus[1])
+        _, _, p = AR2tau(theta[0], theta[1], solve_amp=True)
+        deconv = DeconvBin(y=Y.squeeze(), tau=taus, ps=(p, -p), penal=penalty)
+        s_free, b_free = deconv.solve(amp_constraint=False)
+        scl_ub = np.ptp(s_free)
+        res_df = []
+        for scl in np.linspace(0, scl_ub, 100)[1:]:
+            deconv.update(scale=scl)
+            sbin, cbin, _, obj = deconv.solve_thres(scaling=False)
+            sb_idx = np.where(sbin)[0] / upsamp
+            t_sb = np.interp(sb_idx, fluo_df["frame"], fluo_df["fluo_time"])
+            t_ap = ap_df["ap_time"]
+            mdist, f1, prec, rec = assignment_distance(
+                t_ref=np.atleast_1d(t_ap), t_slv=np.atleast_1d(t_sb), tdist_thres=1
+            )
+            res_df.append(
+                pd.DataFrame(
+                    [
+                        {
+                            "scale": scl,
+                            "objs": obj,
+                            "mdist": mdist,
+                            "f1": f1,
+                            "prec": prec,
+                            "recall": rec,
+                        }
+                    ]
+                )
+            )
+        res_df = pd.concat(res_df, ignore_index=True)
+        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
+            return_met=True
+        )
+        fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
+        fig.savefig(test_fig_path_svg)
