@@ -307,6 +307,7 @@ class TestDemoDeconv:
     @pytest.mark.parametrize("ncell", [1])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
+    @pytest.mark.parametrize("err_weighting", [None, "corr"])
     def test_demo_solve_scale_realds(
         self,
         upsamp,
@@ -318,18 +319,34 @@ class TestDemoDeconv:
         ncell,
         nfm,
         penalty,
+        err_weighting,
         test_fig_path_svg,
     ):
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell=ncell, nfm=nfm)
         theta = tau2AR(taus[0], taus[1])
         _, _, p = AR2tau(theta[0], theta[1], solve_amp=True)
-        deconv = DeconvBin(y=Y.squeeze(), tau=taus, ps=(p, -p), penal=penalty)
-        s_free, b_free = deconv.solve(amp_constraint=False)
+        deconv = DeconvBin(
+            y=Y.squeeze(),
+            tau=taus,
+            ps=(p, -p),
+            penal=penalty,
+            err_weighting=err_weighting,
+        )
+        deconv_nowt = DeconvBin(
+            y=Y.squeeze(),
+            tau=taus,
+            ps=(p, -p),
+            penal=penalty,
+            err_weighting=None,
+        )
+        s_free, b_free = deconv_nowt.solve(amp_constraint=False)
         scl_ub = np.ptp(s_free)
         res_df = []
         for scl in np.linspace(0, scl_ub, 100)[1:]:
             deconv.update(scale=scl)
-            sbin, cbin, _, obj = deconv.solve_thres(scaling=False)
+            deconv_nowt.update(scale=scl)
+            _, _, _, obj = deconv.solve_thres(scaling=False)
+            sbin, cbin, _, _ = deconv_nowt.solve_thres(scaling=False)
             sb_idx = np.where(sbin)[0] / upsamp
             t_sb = np.interp(sb_idx, fluo_df["frame"], fluo_df["fluo_time"])
             t_ap = ap_df["ap_time"]
