@@ -321,7 +321,9 @@ class TestDemoDeconv:
         penalty,
         err_weighting,
         test_fig_path_svg,
+        test_fig_path_html,
     ):
+        # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell=ncell, nfm=nfm)
         theta = tau2AR(taus[0], taus[1])
         _, _, p = AR2tau(theta[0], theta[1], solve_amp=True)
@@ -339,6 +341,7 @@ class TestDemoDeconv:
             penal=penalty,
             err_weighting=None,
         )
+        err_wt = deconv.err_wt.squeeze()
         s_free, b_free = deconv_nowt.solve(amp_constraint=False)
         scl_ub = np.ptp(s_free)
         res_df = []
@@ -371,5 +374,19 @@ class TestDemoDeconv:
         opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
             return_met=True
         )
+        # plotting
         fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
         fig.savefig(test_fig_path_svg)
+        fig = go.Figure()
+        fig.add_traces(
+            plot_traces(
+                {
+                    "y": Y.squeeze(),
+                    "s_true": S_true.squeeze(),
+                    "opt_s": opt_s.squeeze(),
+                    "opt_c": opt_c.squeeze(),
+                    "err_wt": err_wt,
+                }
+            )
+        )
+        fig.write_html(test_fig_path_html)
