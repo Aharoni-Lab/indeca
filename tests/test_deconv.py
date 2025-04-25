@@ -392,7 +392,8 @@ class TestDemoDeconv:
     @pytest.mark.parametrize("ncell", [1])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
-    @pytest.mark.parametrize("err_weighting", [None, "corr"])
+    @pytest.mark.parametrize("err_weighting", [None])
+    @pytest.mark.parametrize("obj_crit", [None, "mean_spk", "aic", "bic", "spk_diff"])
     def test_demo_solve_scale_realds(
         self,
         upsamp,
@@ -405,6 +406,7 @@ class TestDemoDeconv:
         nfm,
         penalty,
         err_weighting,
+        obj_crit,
         test_fig_path_svg,
         test_fig_path_html,
     ):
@@ -418,23 +420,15 @@ class TestDemoDeconv:
             ps=(p, -p),
             penal=penalty,
             err_weighting=err_weighting,
-        )
-        deconv_nowt = DeconvBin(
-            y=Y.squeeze(),
-            tau=taus,
-            ps=(p, -p),
-            penal=penalty,
-            err_weighting=None,
+            use_base=True,
         )
         err_wt = deconv.err_wt.squeeze()
-        s_free, b_free = deconv_nowt.solve(amp_constraint=False)
+        s_free, b_free = deconv.solve(amp_constraint=False)
         scl_ub = np.ptp(s_free)
         res_df = []
         for scl in np.linspace(0, scl_ub, 100)[1:]:
             deconv.update(scale=scl)
-            deconv_nowt.update(scale=scl)
-            _, _, _, obj = deconv.solve_thres(scaling=False)
-            sbin, cbin, _, _ = deconv_nowt.solve_thres(scaling=False)
+            sbin, cbin, _, obj = deconv.solve_thres(scaling=False, obj_crit=obj_crit)
             sb_idx = np.where(sbin)[0] / upsamp
             t_sb = np.interp(sb_idx, fluo_df["frame"], fluo_df["fluo_time"])
             t_ap = ap_df["ap_time"]
@@ -457,7 +451,7 @@ class TestDemoDeconv:
             )
         res_df = pd.concat(res_df, ignore_index=True)
         opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
-            return_met=True
+            return_met=True, obj_crit=obj_crit
         )
         # plotting
         fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
