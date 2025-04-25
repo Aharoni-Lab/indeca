@@ -641,9 +641,12 @@ class DeconvBin:
         cvals = [self._compute_c(s) for s in svals]
         yfvals = [R @ c for c in cvals]
         if scaling:
-            scals = [scal_lstsq(yf, y - res - opt_b) for yf in yfvals]
+            scal_fit = [scal_lstsq(yf, y - res, fit_intercept=True) for yf in yfvals]
+            scals = [sf[0] for sf in scal_fit]
+            bs = [sf[1] for sf in scal_fit]
         else:
             scals = [self.scale] * len(yfvals)
+            bs = [(y - res - scl * yf).mean() for scl, yf in zip(scals, yfvals)]
         objs = [
             self._compute_err(y_fit=scl * yf, res=res) for scl, yf in zip(scals, yfvals)
         ]

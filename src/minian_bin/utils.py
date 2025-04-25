@@ -12,10 +12,12 @@ def norm(a):
         return a - amin
 
 
-def scal_lstsq(a, b):
+def scal_lstsq(a, b, fit_intercept=False):
     if a.ndim == 1:
         a = a.reshape((-1, 1))
-    return np.linalg.lstsq(a, b.squeeze(), rcond=None)[0].item()
+    if fit_intercept:
+        a = np.concatenate([a, np.ones_like(a)], axis=1)
+    return np.linalg.lstsq(a, b.squeeze(), rcond=None)[0]
 
 
 def scal_like(src: np.ndarray, tgt: np.ndarray, zero_center=True):
