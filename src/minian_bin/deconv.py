@@ -276,6 +276,8 @@ class DeconvBin:
                 self.coef = coef
             self.c = np.zeros(self.T * upsamp)
             self.s = np.zeros(self.T * upsamp)
+            self.s_bin = None
+            self.b = 0
             self.l1_penal = l1_penal
             self.scale = scale
             self._update_Wt()
@@ -668,16 +670,19 @@ class DeconvBin:
             objs = merr_diff
         else:
             opt_idx = np.argmin(objs)
+        s_bin = svals[opt_idx]
+        self.s_bin = s_bin
+        self.b = bs[opt_idx]
         if return_intm:
             return (
-                svals[opt_idx],
+                s_bin,
                 cvals[opt_idx],
                 scals[opt_idx],
                 objs[opt_idx],
                 (opt_s, thres, svals, cvals, yfvals, scals, objs, opt_idx),
             )
         else:
-            return svals[opt_idx], cvals[opt_idx], scals[opt_idx], objs[opt_idx]
+            return s_bin, cvals[opt_idx], scals[opt_idx], objs[opt_idx]
 
     def solve_penal(
         self, masking=True, scaling=True, return_intm=False, pks_polish=None
@@ -802,6 +807,8 @@ class DeconvBin:
                 cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(
                     scaling=True, pks_polish=i > 0, obj_crit=obj_crit
                 )
+            if self.err_weighting == "adaptive":
+                self._update_Wt()
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
                 pad_s[self.nzidx_s] = cur_s
@@ -829,7 +836,8 @@ class DeconvBin:
                     {
                         "iter": i,
                         "scale": cur_scl,
-                        "obj": cur_obj,
+                        "obj_raw": cur_obj,
+                        "obj": cur_obj / self.err_wt.sum(),
                         "penal": cur_penal,
                         "nnz": (cur_s > 0).sum(),
                     }
@@ -855,10 +863,10 @@ class DeconvBin:
         else:
             warnings.warn("max scale iterations reached")
         opt_idx = max(metric_df["obj"].idxmin() - 1, 0)
-        self.update(scale=metric_df.loc[opt_idx, "scale"])
         self._update_Wt(clear=True)
         self._reset_cache()
         self._reset_mask()
+        self.update(scale=metric_df.loc[opt_idx, "scale"])
         cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(scaling=False)
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
@@ -1166,6 +1174,15 @@ class DeconvBin:
                 with np.errstate(all="ignore"):
                     self.err_wt[i] = np.corrcoef(yseg, cseg)[0, 1].clip(0, 1)
             self.err_wt = np.nan_to_num(self.err_wt)
+        elif self.err_weighting == "adaptive":
+            if self.s_bin is not None:
+                # use a small number instead of 0 to preserve sparsity pattern of P
+                self.err_wt = np.full(self.y_len, 1e-10)
+                s_bin_R = self.R @ self.s_bin
+                for nzidx in np.where(s_bin_R > 0)[0]:
+                    self.err_wt[nzidx : nzidx + self.coef_len] = 1
+            else:
+                self.err_wt = np.ones(self.y_len)
         self.Wt = sps.diags(self.err_wt)
 
     def _update_HG(self) -> None:

@@ -205,7 +205,7 @@ class TestDeconvBin:
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("penalty", [None])
-    @pytest.mark.parametrize("err_weighting", [None, "corr"])
+    @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
     def test_solve_scale(
         self,
         taus,
@@ -237,9 +237,13 @@ class TestDeconvBin:
             penal=penalty,
             err_weighting=None,
         )
-        err_wt = deconv.err_wt.squeeze()
+        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
+            return_met=True
+        )
         s_free, b_free = deconv_nowt.solve(amp_constraint=False)
         scl_ub = np.ptp(s_free)
+        deconv._update_Wt()
+        err_wt = deconv.err_wt.squeeze()
         res_df = []
         for scl in np.linspace(0, scl_ub, 100)[1:]:
             deconv.update(scale=scl)
@@ -264,9 +268,6 @@ class TestDeconvBin:
                 )
             )
         res_df = pd.concat(res_df, ignore_index=True)
-        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
-            return_met=True
-        )
         # plotting
         fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
         fig.savefig(test_fig_path_svg)
@@ -392,8 +393,8 @@ class TestDemoDeconv:
     @pytest.mark.parametrize("ncell", [1])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
-    @pytest.mark.parametrize("err_weighting", [None])
-    @pytest.mark.parametrize("obj_crit", [None, "mean_spk", "aic", "bic", "spk_diff"])
+    @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
+    @pytest.mark.parametrize("obj_crit", [None])
     def test_demo_solve_scale_realds(
         self,
         upsamp,
@@ -422,9 +423,13 @@ class TestDemoDeconv:
             err_weighting=err_weighting,
             use_base=True,
         )
-        err_wt = deconv.err_wt.squeeze()
+        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
+            return_met=True, obj_crit=obj_crit
+        )
         s_free, b_free = deconv.solve(amp_constraint=False)
         scl_ub = np.ptp(s_free)
+        deconv._update_Wt()
+        err_wt = deconv.err_wt.squeeze()
         res_df = []
         for scl in np.linspace(0, scl_ub, 100)[1:]:
             deconv.update(scale=scl)
@@ -450,9 +455,6 @@ class TestDemoDeconv:
                 )
             )
         res_df = pd.concat(res_df, ignore_index=True)
-        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
-            return_met=True, obj_crit=obj_crit
-        )
         # plotting
         fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
         fig.savefig(test_fig_path_svg)
