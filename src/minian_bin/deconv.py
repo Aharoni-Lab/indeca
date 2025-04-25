@@ -808,7 +808,8 @@ class DeconvBin:
                 {
                     "iter": -1,
                     "scale": self.scale,
-                    "obj": self._compute_err(s=s_free),
+                    "obj_raw": self._compute_err(s=s_free),
+                    "obj": 0,
                     "penal": 0,
                     "nnz": (s_free > 0).sum(),
                 }
@@ -846,13 +847,15 @@ class DeconvBin:
                 prev_scals = np.array(metric_df["scale"])
                 last_scal = prev_scals[-1]
                 last_obj = np.array(metric_df["obj"])[-1]
+            y_wt = np.array(self.y * self.err_wt)
+            err_tt = self._res_err(y_wt - y_wt.mean())
             cur_met = pd.DataFrame(
                 [
                     {
                         "iter": i,
                         "scale": cur_scl,
                         "obj_raw": cur_obj,
-                        "obj": cur_obj / self.err_wt.sum(),
+                        "obj": (cur_obj - err_tt) / err_tt,
                         "penal": cur_penal,
                         "nnz": (cur_s > 0).sum(),
                     }
