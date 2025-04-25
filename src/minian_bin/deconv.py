@@ -315,6 +315,7 @@ class DeconvBin:
         l1_penal: float = None,
         w: np.ndarray = None,
         update_weighting: bool = False,
+        clear_weighting: bool = False,
     ) -> None:
         logger.debug(
             f"Updating parameters - backend: {self.backend}, tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
@@ -385,9 +386,11 @@ class DeconvBin:
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
-                if self.err_weighting and update_weighting:
-                    self._update_Wt()
-                    updt_q0 = True
+            if self.err_weighting is not None and update_weighting:
+                self._update_Wt(clear=clear_weighting)
+                updt_P = True
+                updt_q0 = True
+                updt_q = True
             if self.norm == "huber":
                 if any((scale is not None, scale_mul is not None, updt_HG)):
                     self._update_A()
@@ -401,14 +404,14 @@ class DeconvBin:
                     self._update_bounds()
                     updt_bounds = True
             else:
-                if updt_HG:
+                if any((updt_HG, updt_A)):
                     A_before = self.A.copy()
                     self._update_A()
                     assert self.A.shape == A_before.shape
                     assert (self.A.nonzero()[0] == A_before.nonzero()[0]).all()
                     assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
                     updt_A = True
-                if any((scale is not None, scale_mul is not None, updt_HG)):
+                if any((scale is not None, scale_mul is not None, updt_HG, updt_P)):
                     P_before = self.P.copy()
                     self._update_P()
                     assert self.P.shape == P_before.shape
@@ -416,14 +419,26 @@ class DeconvBin:
                     assert (self.P.nonzero()[1] == P_before.nonzero()[1]).all()
                     updt_P = True
                 if any(
-                    (scale is not None, scale_mul is not None, y is not None, updt_HG)
+                    (
+                        scale is not None,
+                        scale_mul is not None,
+                        y is not None,
+                        updt_HG,
+                        updt_q0,
+                    )
                 ):
                     q0_before = self.q0.copy()
                     self._update_q0()
                     assert self.q0.shape == q0_before.shape
                     updt_q0 = True
                 if any(
-                    (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
+                    (
+                        w is not None,
+                        l0_penal is not None,
+                        l1_penal is not None,
+                        updt_q0,
+                        updt_q,
+                    )
                 ):
                     q_before = self.q.copy()
                     self._update_q()
@@ -438,7 +453,9 @@ class DeconvBin:
                 if updt_q:
                     self.prob_free.update_lin_cost(self.q)
                     self.prob.update_lin_cost(self.q)
-            elif self.backend in ["osqp", "cuosqp"]:
+            elif self.backend in ["osqp", "cuosqp"] and any(
+                (updt_P, updt_q, updt_A, updt_bounds)
+            ):
                 self.prob_free.update(
                     Px=self.P.copy().data if updt_P else None,
                     q=self.q.copy() if updt_q else None,
@@ -807,8 +824,6 @@ class DeconvBin:
                 cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(
                     scaling=True, pks_polish=i > 0, obj_crit=obj_crit
                 )
-            if self.err_weighting == "adaptive":
-                self._update_Wt()
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
                 pad_s[self.nzidx_s] = cur_s
@@ -844,6 +859,8 @@ class DeconvBin:
                 ]
             )
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
+            if self.err_weighting == "adaptive":
+                self.update(update_weighting=True)
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
@@ -863,7 +880,7 @@ class DeconvBin:
         else:
             warnings.warn("max scale iterations reached")
         opt_idx = max(metric_df["obj"].idxmin() - 1, 0)
-        self._update_Wt(clear=True)
+        self.update(update_weighting=True, clear_weighting=True)
         self._reset_cache()
         self._reset_mask()
         self.update(scale=metric_df.loc[opt_idx, "scale"])
