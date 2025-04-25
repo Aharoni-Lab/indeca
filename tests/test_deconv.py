@@ -206,6 +206,7 @@ class TestDeconvBin:
     @pytest.mark.parametrize("rand_seed", np.arange(3))
     @pytest.mark.parametrize("penalty", [None])
     @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
+    @pytest.mark.parametrize("obj_crit", [None])
     def test_solve_scale(
         self,
         taus,
@@ -214,6 +215,7 @@ class TestDeconvBin:
         rand_seed,
         penalty,
         err_weighting,
+        obj_crit,
         test_fig_path_svg,
         test_fig_path_html,
     ):
@@ -230,26 +232,23 @@ class TestDeconvBin:
             penal=penalty,
             err_weighting=err_weighting,
         )
-        deconv_nowt = DeconvBin(
-            y=y,
-            tau=taus,
-            ps=(p, -p),
-            penal=penalty,
-            err_weighting=None,
-        )
         opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
-            return_met=True
+            return_met=True, obj_crit=obj_crit
         )
-        s_free, b_free = deconv_nowt.solve(amp_constraint=False)
-        scl_ub = np.ptp(s_free)
-        deconv._update_Wt()
+        deconv.update(update_weighting=True)
         err_wt = deconv.err_wt.squeeze()
+        deconv.update(update_weighting=True, clear_weighting=True, scale=1)
+        deconv._reset_mask()
+        deconv._reset_cache()
+        s_free, b_free = deconv.solve(amp_constraint=False)
+        scl_ub = np.ptp(s_free)
         res_df = []
         for scl in np.linspace(0, scl_ub, 100)[1:]:
             deconv.update(scale=scl)
-            deconv_nowt.update(scale=scl)
-            _, _, _, obj = deconv.solve_thres(scaling=False)
-            sbin, cbin, _, _ = deconv_nowt.solve_thres(scaling=False)
+            sbin, cbin, _, _ = deconv.solve_thres(scaling=False, obj_crit=obj_crit)
+            deconv.err_wt = err_wt
+            obj = deconv._compute_err(s=sbin, obj_crit=obj_crit)
+            deconv.err_wt = np.ones_like(err_wt)
             mdist, f1, prec, rec = assignment_distance(
                 s_ref=s_true, s_slv=sbin, tdist_thres=3
             )
@@ -426,14 +425,20 @@ class TestDemoDeconv:
         opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
             return_met=True, obj_crit=obj_crit
         )
+        deconv.update(update_weighting=True)
+        err_wt = deconv.err_wt.squeeze()
+        deconv.update(update_weighting=True, clear_weighting=True, scale=1)
+        deconv._reset_mask()
+        deconv._reset_cache()
         s_free, b_free = deconv.solve(amp_constraint=False)
         scl_ub = np.ptp(s_free)
-        deconv._update_Wt()
-        err_wt = deconv.err_wt.squeeze()
         res_df = []
         for scl in np.linspace(0, scl_ub, 100)[1:]:
             deconv.update(scale=scl)
-            sbin, cbin, _, obj = deconv.solve_thres(scaling=False, obj_crit=obj_crit)
+            sbin, cbin, _, _ = deconv.solve_thres(scaling=False, obj_crit=obj_crit)
+            deconv.err_wt = err_wt
+            obj = deconv._compute_err(s=sbin, obj_crit=obj_crit)
+            deconv.err_wt = np.ones_like(err_wt)
             sb_idx = np.where(sbin)[0] / upsamp
             t_sb = np.interp(sb_idx, fluo_df["frame"], fluo_df["fluo_time"])
             t_ap = ap_df["ap_time"]
