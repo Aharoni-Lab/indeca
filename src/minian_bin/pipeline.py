@@ -80,8 +80,12 @@ def pipeline_bin(
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         logger.debug(f"Using provided tau_init: {tau_init}")
+        theta = tau2AR(tau_init[0], tau_init[1])
+        _, _, pp = AR2tau(theta[0], theta[1], solve_amp=True)
+        ps = np.array([pp, -pp])
         theta = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
         tau = np.tile(tau_init, (ncell, 1))
+        ps = np.tile(ps, (ncell, 1))
     else:
         logger.debug("Computing initial tau values")
         theta = np.empty((ncell, p))
