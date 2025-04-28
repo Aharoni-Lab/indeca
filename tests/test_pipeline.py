@@ -193,13 +193,14 @@ class TestPipeline:
 class TestDemoPipeline:
     @pytest.mark.parametrize("upsamp", [1])
     @pytest.mark.parametrize("max_iter", [10])
-    @pytest.mark.parametrize("ar_kn_len", [100])
+    @pytest.mark.parametrize("ar_kn_len", [150])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
     @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
     @pytest.mark.parametrize("ncell", [1, 5, None])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
+    @pytest.mark.parametrize("tau_init", [(21.18, 7.23), None])
     def test_demo_pipeline_realds(
         self,
         upsamp,
@@ -211,6 +212,7 @@ class TestDemoPipeline:
         ncell,
         nfm,
         penalty,
+        tau_init,
         results_bag,
         test_fig_path_html,
     ):
@@ -236,6 +238,7 @@ class TestDemoPipeline:
             np.atleast_2d(Y),
             up_factor=upsamp,
             max_iters=max_iter,
+            tau_init=tau_init,
             return_iter=True,
             deconv_use_base=True,
             deconv_penal=penalty,

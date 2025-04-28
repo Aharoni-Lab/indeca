@@ -24,6 +24,7 @@ if result is not None:
         "ncell",
         "method",
         "use_all",
+        "tau_init",
         "penalty",
         "unit_id",
         "iter",
@@ -39,7 +40,9 @@ if result is not None:
         var_name="metric",
         value_name="value",
     ).drop_duplicates()
-    for (ds, ncell), res_sub in resdf.groupby(["dsname", "ncell"]):
+    for (ds, ncell, tau_init), res_sub in resdf.groupby(
+        ["dsname", "ncell", "tau_init"]
+    ):
         res_sub = res_sub[res_sub["method"] != "gt"].copy()
         res_sub["row_lab"] = res_sub["metric"]
         res_sub["col_lab"] = (
@@ -55,7 +58,7 @@ if result is not None:
         g = sns.FacetGrid(
             res_sub,
             height=2.5,
-            aspect=1.4,
+            aspect=2,
             row="row_lab",
             col="col_lab",
             sharey="row",
@@ -67,7 +70,7 @@ if result is not None:
         )
         g.map_dataframe(plot_pipeline_iter, aggregate=False)
         g.add_legend()
-        g.figure.savefig(fig_path / "{}-{}.svg".format(ds, ncell))
+        g.figure.savefig(fig_path / "{}-{}-{}.svg".format(ds, ncell, tau_init))
         plt.close(g.figure)
 
 
