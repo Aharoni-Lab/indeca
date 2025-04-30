@@ -220,14 +220,6 @@ class TestDemoPipeline:
     ):
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
-        C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
-            np.atleast_2d(Y),
-            up_factor=upsamp,
-            est_noise_freq=est_noise_freq,
-            est_use_smooth=False,
-            est_add_lag=est_add_lag,
-            sps_penal=0,
-        )
         (
             C_bin,
             S_bin,
@@ -296,6 +288,59 @@ class TestDemoPipeline:
                         ]
                     )
                 )
+        res_df = pd.concat(res_df, ignore_index=True)
+        results_bag.data = res_df
+        # plotting
+        niter = len(S_bin_iter)
+        ncell = Y.shape[0]
+        fig = make_subplots(rows=niter, cols=ncell)
+        for uid, i_iter in itt.product(range(ncell), range(niter)):
+            sb = S_bin_iter[i_iter][uid, :]
+            cb = C_bin_iter[i_iter][uid, :]
+            tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+            fig.add_traces(
+                plot_traces(
+                    {
+                        "y": Y[uid, :],
+                        "s_true": S_true[uid, :],
+                        "c_bin": cb,
+                        "s_bin": sb,
+                    }
+                ),
+                rows=i_iter + 1,
+                cols=uid + 1,
+            )
+        fig.update_layout(height=350 * niter, width=1200 * ncell)
+        fig.write_html(test_fig_path_html)
+
+    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("est_noise_freq", [None])
+    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("ncell", [1, 5, None])
+    @pytest.mark.parametrize("nfm", [None])
+    def test_demo_pipeline_realds_cnmf(
+        self,
+        upsamp,
+        est_noise_freq,
+        est_add_lag,
+        dsname,
+        ncell,
+        nfm,
+        results_bag,
+    ):
+        # act
+        Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
+        C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
+            np.atleast_2d(Y),
+            up_factor=upsamp,
+            est_noise_freq=est_noise_freq,
+            est_use_smooth=False,
+            est_add_lag=est_add_lag,
+            sps_penal=0,
+        )
+        # save results
+        res_df = []
         for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
             for qthres in [0.25, 0.5, 0.75]:
                 sb = S_cnmf[iu, :] > qthres
@@ -339,25 +384,3 @@ class TestDemoPipeline:
                 )
         res_df = pd.concat(res_df, ignore_index=True)
         results_bag.data = res_df
-        # plotting
-        niter = len(S_bin_iter)
-        ncell = Y.shape[0]
-        fig = make_subplots(rows=niter, cols=ncell)
-        for uid, i_iter in itt.product(range(ncell), range(niter)):
-            sb = S_bin_iter[i_iter][uid, :]
-            cb = C_bin_iter[i_iter][uid, :]
-            tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
-            fig.add_traces(
-                plot_traces(
-                    {
-                        "y": Y[uid, :],
-                        "s_true": S_true[uid, :],
-                        "c_bin": cb,
-                        "s_bin": sb,
-                    }
-                ),
-                rows=i_iter + 1,
-                cols=uid + 1,
-            )
-        fig.update_layout(height=350 * niter, width=1200 * ncell)
-        fig.write_html(test_fig_path_html)

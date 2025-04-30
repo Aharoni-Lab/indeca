@@ -16,7 +16,9 @@ FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
 # %% plot pipeline realds results
 fig_path = FIG_PATH / "pipeline_realds"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
+res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
+res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
+result = pd.concat([res_bin, res_cnmf], ignore_index=True)
 if result is not None:
     result = result.drop_duplicates()
     id_vars = [
