@@ -791,6 +791,7 @@ class DeconvBin:
         concur_penal: bool = False,
         return_met: bool = False,
         obj_crit: str = None,
+        early_stop: bool = True,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -870,6 +871,7 @@ class DeconvBin:
                     np.abs(cur_obj - opt_obj) < self.rtol * opt_obj,
                     np.abs(cur_scl - last_scal) < self.atol,
                     np.abs(cur_obj - last_obj) < self.atol,
+                    early_stop and cur_obj > last_obj,
                 )
             ):
                 break
