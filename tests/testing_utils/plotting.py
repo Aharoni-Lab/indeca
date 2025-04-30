@@ -146,7 +146,7 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
     return fig
 
 
-def  plot_met_ROC_scale(metdf, iterdf, opt_scale, grad_color: bool = True):
+def plot_met_ROC_scale(metdf, iterdf, opt_scale, grad_color: bool = True):
     fig = plt.figure(constrained_layout=True, figsize=(8, 4))
     gs = GridSpec(3, 2, figure=fig)
     ax_obj = fig.add_subplot(gs[0, 0])
