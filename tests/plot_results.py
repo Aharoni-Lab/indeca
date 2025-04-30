@@ -40,9 +40,7 @@ if result is not None:
         var_name="metric",
         value_name="value",
     ).drop_duplicates()
-    for (ds, ncell, tau_init), res_sub in resdf.groupby(
-        ["dsname", "ncell", "tau_init"]
-    ):
+    for (ds, ncell), res_sub in resdf.groupby(["dsname", "ncell"]):
         res_sub = res_sub[res_sub["method"] != "gt"].copy()
         res_sub["row_lab"] = res_sub["metric"]
         res_sub["col_lab"] = (
@@ -53,6 +51,8 @@ if result is not None:
             .replace({"": "no_penal", "l1": "l1"})
             + "|"
             + res_sub["use_all"].map(lambda u: "all" if u else "individual")
+            + "|"
+            + res_sub["tau_init"].map(lambda t: "no_init" if t == "None" else "init")
         )
         col_ord = sorted(res_sub["col_lab"].unique().tolist())
         g = sns.FacetGrid(
@@ -70,7 +70,7 @@ if result is not None:
         )
         g.map_dataframe(plot_pipeline_iter, aggregate=False)
         g.add_legend()
-        g.figure.savefig(fig_path / "{}-{}-{}.svg".format(ds, ncell, tau_init))
+        g.figure.savefig(fig_path / "{}-{}.svg".format(ds, ncell))
         plt.close(g.figure)
 
 

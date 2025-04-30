@@ -201,6 +201,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
     @pytest.mark.parametrize("tau_init", [(21.18, 7.23), None])
+    @pytest.mark.parametrize("ar_use_all", [True, False])
     def test_demo_pipeline_realds(
         self,
         upsamp,
@@ -213,6 +214,7 @@ class TestDemoPipeline:
         nfm,
         penalty,
         tau_init,
+        ar_use_all,
         results_bag,
         test_fig_path_html,
     ):
@@ -243,7 +245,7 @@ class TestDemoPipeline:
             deconv_use_base=True,
             deconv_penal=penalty,
             deconv_err_weighting="adaptive",
-            ar_use_all=True,
+            ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
@@ -281,7 +283,7 @@ class TestDemoPipeline:
                         [
                             {
                                 "method": "minian-bin",
-                                "use_all": "unit_id" in Y.dims,
+                                "use_all": ar_use_all,
                                 "unit_id": uid,
                                 "iter": i_iter,
                                 "mdist": mdist,
