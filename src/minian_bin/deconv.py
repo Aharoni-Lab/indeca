@@ -884,7 +884,7 @@ class DeconvBin:
                 self.update(scale=cur_scl)
         else:
             warnings.warn("max scale iterations reached")
-        opt_idx = max(metric_df["obj"].idxmin() - 1, 0)
+        opt_idx = max(metric_df["obj"].idxmin() - 1, 1)
         self.update(update_weighting=True, clear_weighting=True)
         self._reset_cache()
         self._reset_mask()
