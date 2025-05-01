@@ -891,7 +891,7 @@ class DeconvBin:
         self._reset_cache()
         self._reset_mask()
         self.update(scale=metric_df.loc[opt_idx, "scale"])
-        cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(scaling=False)
+        cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(scaling=False)
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
         opt_c[self.nzidx_c] = cur_c
