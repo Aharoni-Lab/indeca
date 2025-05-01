@@ -368,6 +368,7 @@ class DeconvBin:
                     kn_len=self.coef_len,
                 )
                 self.tau = tau
+                self.ps = np.array([p, -p])
                 self.theta = theta_new
             if coef is not None:
                 self.coef = coef
