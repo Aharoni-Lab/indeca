@@ -819,12 +819,12 @@ class DeconvBin:
         )
         for i in range(self.max_iter_scal):
             if concur_penal:
-                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
+                cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(
                     pks_polish=i > 0
                 )
             else:
                 cur_penal = 0
-                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(
+                cur_s, cur_c, cur_scl, cur_obj_raw = self.solve_thres(
                     scaling=True, pks_polish=i > 0, obj_crit=obj_crit
                 )
             if self.dashboard is not None:
@@ -851,13 +851,14 @@ class DeconvBin:
                 last_obj = np.array(metric_df["obj"])[-1]
             y_wt = np.array(self.y * self.err_wt)
             err_tt = self._res_err(y_wt - y_wt.mean())
+            cur_obj = (cur_obj_raw - err_tt) / err_tt
             cur_met = pd.DataFrame(
                 [
                     {
                         "iter": i,
                         "scale": cur_scl,
-                        "obj_raw": cur_obj,
-                        "obj": (cur_obj - err_tt) / err_tt,
+                        "obj_raw": cur_obj_raw,
+                        "obj": cur_obj,
                         "penal": cur_penal,
                         "nnz": (cur_s > 0).sum(),
                     }
@@ -890,7 +891,7 @@ class DeconvBin:
         self._reset_cache()
         self._reset_mask()
         self.update(scale=metric_df.loc[opt_idx, "scale"])
-        cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(scaling=False)
+        cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(scaling=False)
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
         opt_c[self.nzidx_c] = cur_c
