@@ -280,7 +280,13 @@ def pipeline_bin(
             tau = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
                 lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-                    y, s, scal_best[icell], N=p, s_len=ar_kn_len, norm=ar_norm
+                    y,
+                    s,
+                    scal_best[icell],
+                    N=p,
+                    s_len=ar_kn_len,
+                    norm=ar_norm,
+                    up_factor=up_factor,
                 )
                 if dashboard is not None:
                     dashboard.update(uid=icell, h=h, h_fit=h_fit)
