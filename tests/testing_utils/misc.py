@@ -28,4 +28,4 @@ def get_upsamp_scale(taus, upsamp_ref, upsamp_slv, nsamp=100):
     )
     R_ref = construct_R(nsamp, upsamp_ref)
     R_slv = construct_R(nsamp, upsamp_slv)
-    return scal_lstsq(R_slv @ pulse_slv, R_ref @ pulse_ref)
+    return scal_lstsq(R_slv @ pulse_slv, R_ref @ pulse_ref, fit_intercept=False).item()
