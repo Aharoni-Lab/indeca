@@ -820,12 +820,12 @@ class DeconvBin:
         for i in range(self.max_iter_scal):
             if concur_penal:
                 cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(
-                    pks_polish=i > 0
+                    pks_polish=i > 0 or not reset_scale
                 )
             else:
                 cur_penal = 0
                 cur_s, cur_c, cur_scl, cur_obj_raw = self.solve_thres(
-                    scaling=True, pks_polish=i > 0, obj_crit=obj_crit
+                    scaling=True, pks_polish=i > 0 or not reset_scale, obj_crit=obj_crit
                 )
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
