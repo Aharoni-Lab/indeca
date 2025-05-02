@@ -20,14 +20,13 @@ res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
 res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
 if res_bin is not None or res_cnmf is not None:
     result = pd.concat([res_bin, res_cnmf], ignore_index=True)
-    result = result.drop_duplicates()
+    result = result.drop_duplicates().fillna("None")
     id_vars = [
         "dsname",
         "ncell",
         "method",
         "use_all",
         "tau_init",
-        "penalty",
         "unit_id",
         "iter",
         "qthres",
@@ -47,10 +46,6 @@ if res_bin is not None or res_cnmf is not None:
         res_sub["row_lab"] = res_sub["metric"]
         res_sub["col_lab"] = (
             res_sub["method"]
-            + "|"
-            + res_sub["penalty"]
-            .fillna("no_penal")
-            .replace({"": "no_penal", "l1": "l1"})
             + "|"
             + res_sub["use_all"].map(lambda u: "all" if u else "individual")
             + "|"
