@@ -29,7 +29,8 @@ class TestPipeline:
     )
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("penalty", [None, "l1"])
+    @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
+    @pytest.mark.parametrize("ar_use_all", [True, False])
     def test_pipeline(
         self,
         taus,
@@ -39,7 +40,8 @@ class TestPipeline:
         ncell,
         ar_kn_len,
         ns_lev,
-        penalty,
+        err_weighting,
+        ar_use_all,
         est_noise_freq,
         est_add_lag,
         results_bag,
@@ -75,8 +77,8 @@ class TestPipeline:
             upsamp,
             max_iters=max_iter,
             return_iter=True,
-            deconv_penal=penalty,
-            ar_use_all=True,
+            deconv_err_weighting=err_weighting,
+            ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
@@ -88,11 +90,7 @@ class TestPipeline:
         (dhm0, dhm1), _ = find_dhm(
             True, np.array([taus[0], taus[1]]), np.array([1, -1])
         )
-        res_df = [
-            pd.DataFrame(
-                [{"method": "gt", "use_all": True, "dhm0": dhm0, "dhm1": dhm1}]
-            )
-        ]
+        res_df = [pd.DataFrame([{"method": "gt", "dhm0": dhm0, "dhm1": dhm1}])]
         for uid in range(Y.shape[0]):
             for i_iter, sbin in enumerate(S_bin_iter):
                 sb = sbin[uid, :]
@@ -111,7 +109,6 @@ class TestPipeline:
                         [
                             {
                                 "method": "minian-bin",
-                                "use_all": Y.shape[0] > 1,
                                 "unit_id": uid,
                                 "iter": i_iter,
                                 "mdist": mdist,
@@ -142,7 +139,6 @@ class TestPipeline:
                         [
                             {
                                 "method": "cnmf",
-                                "use_all": Y.shape[0] > 1,
                                 "iter": "final",
                                 "unit_id": uid,
                                 "qthres": qthres,
