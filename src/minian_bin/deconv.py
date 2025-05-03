@@ -805,27 +805,18 @@ class DeconvBin:
             self.update(scale=np.ptp(s_free))
         else:
             s_free = np.zeros(len(self.nzidx_s))
-        metric_df = pd.DataFrame(
-            [
-                {
-                    "iter": -1,
-                    "scale": self.scale,
-                    "obj_raw": self._compute_err(s=s_free),
-                    "obj": 0,
-                    "penal": 0,
-                    "nnz": (s_free > 0).sum(),
-                }
-            ]
-        )
+        metric_df = None
         for i in range(self.max_iter_scal):
             if concur_penal:
                 cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(
-                    pks_polish=i > 0 or not reset_scale
+                    scaling=i > 0, pks_polish=i > 1 or not reset_scale
                 )
             else:
                 cur_penal = 0
                 cur_s, cur_c, cur_scl, cur_obj_raw = self.solve_thres(
-                    scaling=True, pks_polish=i > 0 or not reset_scale, obj_crit=obj_crit
+                    scaling=i > 0,
+                    pks_polish=i > 1 or not reset_scale,
+                    obj_crit=obj_crit,
                 )
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
@@ -865,7 +856,7 @@ class DeconvBin:
                 ]
             )
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
-            if self.err_weighting == "adaptive":
+            if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
             if any(
                 (
@@ -886,7 +877,7 @@ class DeconvBin:
                 self.update(scale=cur_scl)
         else:
             warnings.warn("max scale iterations reached")
-        opt_idx = max(metric_df["obj"].idxmin() - 1, 1)
+        opt_idx = metric_df["obj"].idxmin()
         self.update(update_weighting=True, clear_weighting=True)
         self._reset_cache()
         self._reset_mask()
