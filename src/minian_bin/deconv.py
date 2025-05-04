@@ -316,6 +316,7 @@ class DeconvBin:
         w: np.ndarray = None,
         update_weighting: bool = False,
         clear_weighting: bool = False,
+        scale_coef: bool = False,
     ) -> None:
         logger.debug(
             f"Updating parameters - backend: {self.backend}, tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
@@ -338,6 +339,8 @@ class DeconvBin:
                 self.theta.value = theta_new
                 self._update_HG()
             if coef is not None:
+                if scale_coef:
+                    scale_mul = scal_lstsq(coef, self.coef).item()
                 self.coef.value = coef
                 self._update_HG()
             if scale is not None:
@@ -371,6 +374,8 @@ class DeconvBin:
                 self.ps = np.array([p, -p])
                 self.theta = theta_new
             if coef is not None:
+                if scale_coef:
+                    scale_mul = scal_lstsq(coef, self.coef).item()
                 self.coef = coef
             if scale is not None:
                 self.scale = scale

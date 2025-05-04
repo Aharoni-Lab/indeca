@@ -267,11 +267,9 @@ def pipeline_bin(
             tau = np.tile(cur_tau, (ncell, 1))
             for idx, d in enumerate(dcv):
                 if da_client is not None:
-                    da_client.submit(
-                        lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal), d
-                    )
+                    da_client.submit(lambda dd: dd.update(tau=cur_tau), d)
                 else:
-                    d.update(tau=cur_tau, scale_mul=ar_scal)
+                    d.update(tau=cur_tau)
             logger.debug(
                 f"Updating AR parameters for all cells: tau:{tau}, ar_scal: {ar_scal}"
             )
@@ -294,11 +292,11 @@ def pipeline_bin(
                 tau[icell, :] = cur_tau
                 if da_client is not None:
                     da_client.submit(
-                        lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal),
+                        lambda dd: dd.update(tau=cur_tau),
                         dcv[icell],
                     )
                 else:
-                    dcv[icell].update(tau=cur_tau, scale_mul=ar_scal)
+                    dcv[icell].update(tau=cur_tau)
                 logger.debug(
                     f"Updating AR parameters for cell {icell}: tau:{tau}, ar_scal: {ar_scal}"
                 )
