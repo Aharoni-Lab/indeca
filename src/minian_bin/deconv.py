@@ -893,6 +893,13 @@ class DeconvBin:
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
         opt_c[self.nzidx_c] = cur_c
+        nnz = int(opt_s.sum())
+        self.update(update_weighting=True)
+        y_wt = np.array(self.y * self.err_wt)
+        err_tt = self._res_err(y_wt - y_wt.mean())
+        err_cur = self._compute_err(s=opt_s)
+        err_rel = (err_cur - err_tt) / err_tt
+        self.update(update_weighting=True, clear_weighting=True)
         if self.dashboard is not None:
             self.dashboard.update(
                 uid=self.dashboard_uid,
@@ -903,9 +910,9 @@ class DeconvBin:
         self._reset_cache()
         self._reset_mask()
         if return_met:
-            return opt_s, opt_c, cur_scl, cur_obj, cur_penal, metric_df
+            return opt_s, opt_c, cur_scl, cur_obj, err_rel, nnz, cur_penal, metric_df
         else:
-            return opt_s, opt_c, cur_scl, cur_obj, cur_penal
+            return opt_s, opt_c, cur_scl, cur_obj, err_rel, nnz, cur_penal
 
     def _setup_prob_osqp(self) -> None:
         logger.debug("Setting up OSQP problem")
