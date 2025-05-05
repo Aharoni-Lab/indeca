@@ -231,7 +231,7 @@ def pipeline_bin(
             h_fit_ls.append(np.full(T * up_factor, np.nan))
         # 2.3 update AR
         metric_df = metric_df.set_index(["iter", "cell"])
-        if n_best is not None and i_iter > n_best:
+        if n_best is not None and i_iter >= n_best:
             S_best = np.empty_like(S)
             scal_best = np.empty_like(scale)
             if tau_init is not None:
