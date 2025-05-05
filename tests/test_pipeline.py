@@ -246,7 +246,10 @@ class TestDemoPipeline:
         for i_iter, sbin in enumerate(S_bin_iter):
             for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
                 sb = sbin[iu, :]
-                tau_d, tau_r = iter_df.loc[(i_iter, iu), ["tau_d", "tau_r"]]
+                try:
+                    tau_d, tau_r = iter_df.loc[(i_iter, iu), ["tau_d", "tau_r"]]
+                except KeyError:
+                    tau_d, tau_r = np.nan, np.nan
                 try:
                     (dhm0, dhm1), _ = find_dhm(
                         True, np.array([tau_d, tau_r]), np.array([1, -1])
@@ -293,7 +296,6 @@ class TestDemoPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
-            tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
             fig.add_traces(
                 plot_traces(
                     {

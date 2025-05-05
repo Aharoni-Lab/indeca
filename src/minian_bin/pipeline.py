@@ -363,6 +363,8 @@ def pipeline_bin(
         ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
+    C_ls.append(opt_C)
+    S_ls.append(opt_S)
     if dashboard is not None:
         dashboard.stop()
     logger.info("Pipeline completed successfully")
