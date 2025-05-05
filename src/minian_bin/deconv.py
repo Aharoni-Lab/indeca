@@ -198,8 +198,10 @@ class DeconvBin:
             self.yspec = self._get_stft_spec(y)
         if y is not None:
             self.huber_k = 0.5 * np.std(y)
+            self.err_total = self._res_err(y)
         else:
             self.huber_k = 0
+            self.err_total = 0
         self._update_R()
         # setup cvxpy
         if self.backend == "cvxpy":
