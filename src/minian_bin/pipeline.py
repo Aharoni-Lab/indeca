@@ -246,7 +246,7 @@ def pipeline_bin(
                 S_best[icell, :] = np.sum(
                     np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                 ) > (n_best / 2)
-                scal_best[icell] = np.median([scal_ls[i][icell] for i in cur_idx])
+                scal_best[icell] = np.mean([scal_ls[i][icell] for i in cur_idx])
         else:
             S_best = S
             scal_best = scale
