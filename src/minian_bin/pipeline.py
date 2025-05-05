@@ -234,8 +234,11 @@ def pipeline_bin(
         if n_best is not None and i_iter > n_best:
             S_best = np.empty_like(S)
             scal_best = np.empty_like(scale)
-            for icell, cell_met in metric_df.loc[1:, :].groupby("cell", sort=True):
-                cell_met = cell_met.reset_index().sort_values("err", ascending=True)
+            if tau_init is not None:
+                metric_best = metric_df
+            else:
+                metric_best = metric_df.loc[1:, :]
+            for icell, cell_met in metric_best.groupby("cell", sort=True):
                 cur_idx = np.array(cell_met["iter"][:n_best])
                 metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
                     cur_idx.astype(str)
