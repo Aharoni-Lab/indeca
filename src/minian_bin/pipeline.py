@@ -25,7 +25,8 @@ def pipeline_bin(
     return_iter=False,
     max_iters=50,
     n_best=3,
-    err_atol=1e-1,
+    use_rel_err=True,
+    err_atol=1e-4,
     err_rtol=5e-2,
     est_noise_freq=0.4,
     est_use_smooth=True,
@@ -121,8 +122,11 @@ def pipeline_bin(
             "tau_d",
             "tau_r",
             "err",
+            "err_rel",
+            "nnz",
             "scale",
             "best_idx",
+            "obj",
         ]
     )
     if da_client is not None:
@@ -193,7 +197,9 @@ def pipeline_bin(
         C = np.stack([r[1].squeeze() for r in res], axis=0)
         scale = np.array([r[2] for r in res])
         err = np.array([r[3] for r in res])
-        penal = np.array([r[4] for r in res])
+        err_rel = np.array([r[4] for r in res])
+        nnz = np.array([r[5] for r in res])
+        penal = np.array([r[6] for r in res])
         logger.debug(
             f"Iteration {i_iter} stats - Mean error: {err.mean():.4f}, Mean scale: {scale.mean():.4f}"
         )
@@ -207,15 +213,18 @@ def pipeline_bin(
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
                 "err": err,
+                "err_rel": err_rel,
                 "scale": scale,
                 "penal": penal,
+                "nnz": nnz,
+                "obj": err_rel if use_rel_err else err,
             }
         )
         if dashboard is not None:
             dashboard.update(
                 tau_d=cur_metric["tau_d"].squeeze(),
                 tau_r=cur_metric["tau_r"].squeeze(),
-                err=cur_metric["err"].squeeze(),
+                err=cur_metric["obj"].squeeze(),
                 scale=cur_metric["scale"].squeeze(),
             )
             dashboard.set_iter(min(i_iter + 1, max_iters - 1))
@@ -239,6 +248,7 @@ def pipeline_bin(
             else:
                 metric_best = metric_df.loc[1:, :]
             for icell, cell_met in metric_best.groupby("cell", sort=True):
+                cell_met = cell_met.reset_index().sort_values("obj", ascending=True)
                 cur_idx = np.array(cell_met["iter"][:n_best])
                 metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
                     cur_idx.astype(str)
@@ -307,15 +317,15 @@ def pipeline_bin(
                 )
         # 2.4 check convergence
         metric_prev = metric_df[metric_df["iter"] < i_iter].dropna(
-            subset=["err", "scale"]
+            subset=["obj", "scale"]
         )
         metric_last = metric_df[metric_df["iter"] == i_iter - 1].dropna(
-            subset=["err", "scale"]
+            subset=["obj", "scale"]
         )
         if len(metric_prev) > 0:
-            err_cur = cur_metric.set_index("cell")["err"]
-            err_last = metric_last.set_index("cell")["err"]
-            err_best = metric_prev.groupby("cell")["err"].min()
+            err_cur = cur_metric.set_index("cell")["obj"]
+            err_last = metric_last.set_index("cell")["obj"]
+            err_best = metric_prev.groupby("cell")["obj"].min()
             # converged by err
             if (np.abs(err_cur - err_last) < err_atol).all():
                 logger.info("Converged: absolute error tolerance reached")
@@ -327,13 +337,13 @@ def pipeline_bin(
             # converged by s
             S_best = np.empty((ncell, T * up_factor))
             for uid, udf in metric_prev.groupby("cell"):
-                best_iter = udf.set_index("iter")["err"].idxmin()
+                best_iter = udf.set_index("iter")["obj"].idxmin()
                 S_best[uid, :] = S_ls[best_iter][uid, :]
             if np.abs(S - S_best).sum() < 1:
                 logger.info("Converged: spike pattern stabilized")
                 break
             # trapped
-            err_all = metric_prev.pivot(columns="iter", index="cell", values="err")
+            err_all = metric_prev.pivot(columns="iter", index="cell", values="obj")
             diff_all = np.abs(err_cur.values.reshape((-1, 1)) - err_all.values)
             if (diff_all.min(axis=1) < err_atol).all():
                 logger.warning("Solution trapped in local optimal err")
@@ -349,7 +359,7 @@ def pipeline_bin(
     opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
     for icell in range(ncell):
         opt_idx = metric_df.loc[
-            metric_df[metric_df["cell"] == icell]["err"].idxmin(), "iter"
+            metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
         ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
