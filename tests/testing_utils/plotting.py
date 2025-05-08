@@ -213,7 +213,15 @@ def plot_met_ROC_scale(metdf, iterdf, opt_scale, grad_color: bool = True):
 
 
 def plot_agg_boxswarm(
-    dat, row, col, x, y, hue=None, facet_kws=dict(), box_kws=dict(), swarm_kws=dict()
+    dat,
+    row,
+    col,
+    x,
+    y,
+    hue=None,
+    facet_kws=dict(),
+    box_kws={"saturation": 0.5},
+    swarm_kws={"size": 5, "linewidth": 1.2},
 ):
     if hue is None:
         hue = x
@@ -223,7 +231,6 @@ def plot_agg_boxswarm(
         x=x,
         y=y,
         hue=hue,
-        saturation=0.5,
         showfliers=False,
         palette="tab10",
         **box_kws,
@@ -233,10 +240,8 @@ def plot_agg_boxswarm(
         x=x,
         y=y,
         hue=hue,
-        edgecolor="auto",
         palette="tab10",
-        size=5,
-        linewidth=1.2,
+        edgecolor="auto",
         warn_thresh=0.9,
         **swarm_kws,
     )
