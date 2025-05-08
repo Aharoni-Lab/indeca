@@ -301,6 +301,7 @@ class TestDemoDeconv:
         ns_lev,
         thres_scaling,
         test_fig_path_svg,
+        results_bag,
     ):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
@@ -310,13 +311,15 @@ class TestDemoDeconv:
             scaling=thres_scaling, return_intm=True
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
-        # plotting
+        # save results
         metdf = compute_metrics(
             s_org,
             svals,
             {"objs": objs, "scals": scals, "thres": thres, "opt_idx": opt_idx},
             tdist_thres=3,
         )
+        results_bag.data = metdf
+        # plotting
         fig = plot_met_ROC_thres(metdf)
         fig.savefig(test_fig_path_svg)
 
