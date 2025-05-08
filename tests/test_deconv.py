@@ -106,7 +106,7 @@ class TestDeconvBin:
             ns_lev=ns_lev,
         )
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
-            scaling=False, return_intm=True
+            scaling=False, return_intm=True, pks_polish=True
         )
         s_direct = intm[0]
         s_bin = s_bin.astype(float)
