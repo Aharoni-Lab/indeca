@@ -38,6 +38,7 @@ def pipeline_bin(
     deconv_backend="osqp",
     deconv_err_weighting=None,
     deconv_use_base=True,
+    deconv_reset_scl=True,
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l1",
@@ -186,10 +187,13 @@ def pipeline_bin(
         ):
             if da_client is not None:
                 r = da_client.submit(
-                    lambda d: d.solve_scale(reset_scale=i_iter <= 1), dcv[icell]
+                    lambda d: d.solve_scale(
+                        reset_scale=i_iter <= 1 or deconv_reset_scl
+                    ),
+                    dcv[icell],
                 )
             else:
-                r = dcv[icell].solve_scale(reset_scale=i_iter <= 1)
+                r = dcv[icell].solve_scale(reset_scale=i_iter <= 1 or deconv_reset_scl)
             res.append(r)
         if da_client is not None:
             res = da_client.gather(res)
