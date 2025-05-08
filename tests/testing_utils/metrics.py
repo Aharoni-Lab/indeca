@@ -18,6 +18,7 @@ def assignment_distance(
     samp_ratio: float = None,
     tdist_thres: float = None,
     tdist_agg: str = "median",
+    include_range: float = None,
 ):
     if s_ref is not None:
         s_ref = np.nan_to_num(s_ref)
@@ -39,6 +40,10 @@ def assignment_distance(
         else:
             samp_ratio = 1
     t_slv = t_slv * samp_ratio
+    if include_range is not None:
+        t0, t1 = include_range
+        t_ref = t_ref[np.logical_and(t_ref >= t0, t_ref <= t1)]
+        t_slv = t_slv[np.logical_and(t_slv >= t0, t_slv <= t1)]
     dist_mat = cdist(t_ref.reshape((-1, 1)), t_slv.reshape((-1, 1)))
     if tdist_thres is not None:
         dist_mat_mask = dist_mat <= tdist_thres
