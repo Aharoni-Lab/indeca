@@ -111,7 +111,7 @@ class TestDeconvBin:
         s_direct = intm[0]
         s_bin = s_bin.astype(float)
         mdist, f1, precs, recall = assignment_distance(
-            s_ref=s_org, s_slv=s_bin, tdist_thres=5
+            s_ref=s_org, s_slv=s_bin, tdist_thres=5, include_range=(0, len(s_org) - 5)
         )
         # plotting
         fig = go.Figure()
