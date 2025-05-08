@@ -90,7 +90,11 @@ class TestDeconvBin:
         assert np.isclose(s_org, s_msk, atol=eq_atol).all()
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
-    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize(
+        "rand_seed",
+        list(range(3))
+        + [pytest.param(i, marks=pytest.mark.slow) for i in range(3, 15)],
+    )
     @pytest.mark.parametrize("upsamp", [1, 2, 5])
     @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
