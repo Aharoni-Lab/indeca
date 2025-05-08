@@ -79,17 +79,28 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     return ax.add_collection(lc)
 
 
-def plot_met_ROC_thres(metdf, grad_color: bool = True):
+def plot_met_ROC_thres(
+    metdf,
+    grad_color: bool = True,
+    fig=None,
+    lw=2,
+    grid_kws=dict(),
+    trim_xlabs=True,
+    log_err=True,
+    annt_color="gray",
+    annt_lw=1,
+):
     if "group" not in metdf.columns:
         metdf["group"] = ""
-    fig = plt.figure(constrained_layout=True, figsize=(8, 4))
-    gs = GridSpec(3, 2, figure=fig)
+    if fig is None:
+        fig = plt.figure(constrained_layout=True, figsize=(8, 4))
+    gs = GridSpec(3, 2, figure=fig, **grid_kws)
     ax_err = fig.add_subplot(gs[0, 0])
     ax_scl = fig.add_subplot(gs[1, 0])
     ax_f1 = fig.add_subplot(gs[2, 0])
     ax_roc = fig.add_subplot(gs[:, 1])
-    ax_roc.invert_xaxis()
-    lw = 2
+    ax_roc = move_yax_right(ax_roc)
+    ax_roc.set_aspect("equal", adjustable="datalim")
     ls = ["solid"] if grad_color else ["dotted", "dashed", "dashdot"]
     for (grp, grpdf), cur_ls in zip(metdf.groupby("group"), itt.cycle(ls)):
         try:
@@ -97,8 +108,13 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
         except ValueError:
             oidx = None
         th = np.array(grpdf["thres"])
-        ax_err.set_yscale("log")
-        ax_err.set_xlabel("Threshold")
+        if log_err:
+            ax_err.set_yscale("log")
+        if trim_xlabs:
+            ax_err.set_xticklabels([])
+            ax_err.set_xlabel("")
+        else:
+            ax_err.set_xlabel("Threshold")
         ax_err.set_ylabel("Error")
         if grad_color:
             ax_err.plot(th, grpdf["objs"], alpha=0)
@@ -106,8 +122,12 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
         else:
             ax_err.plot(th, grpdf["objs"], ls=cur_ls)
         if oidx is not None:
-            ax_err.axvline(th[oidx], ls="dotted", color="gray")
-        ax_scl.set_xlabel("Threshold")
+            ax_err.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
+        if trim_xlabs:
+            ax_scl.set_xticklabels([])
+            ax_scl.set_xlabel("")
+        else:
+            ax_scl.set_xlabel("Threshold")
         ax_scl.set_ylabel("Scale")
         if grad_color:
             ax_scl.plot(th, grpdf["scals"], alpha=0)
@@ -115,7 +135,7 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
         else:
             ax_scl.plot(th, grpdf["scals"], ls=cur_ls)
         if oidx is not None:
-            ax_scl.axvline(th[oidx], ls="dotted", color="gray")
+            ax_scl.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
         ax_f1.set_xlabel("Threshold")
         ax_f1.set_ylabel("f1 Score")
         if grad_color:
@@ -124,7 +144,7 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
         else:
             ax_f1.plot(th, grpdf["f1"], ls=cur_ls)
         if oidx is not None:
-            ax_f1.axvline(th[oidx], ls="dotted", color="gray")
+            ax_f1.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
         ax_roc.set_xlabel("Precision")
         ax_roc.set_ylabel("Recall")
         if grad_color:
@@ -139,10 +159,12 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
                 grpdf["prec"].iloc[oidx],
                 grpdf["recall"].iloc[oidx],
                 marker="x",
-                color="gray",
-                markersize=15,
+                color=annt_color,
+                lw=annt_lw,
+                markersize=12,
             )
-    fig.legend()
+    if metdf["group"].nunique() > 1:
+        fig.legend()
     return fig
 
 
@@ -263,3 +285,14 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
         sns.boxplot(
             data, x="qthres", y="value", color=color, saturation=0.5, ax=ax, **kwargs
         )
+
+
+def move_yax_right(ax):
+    # ax.yaxis.tick_right()
+    ax.yaxis.set_tick_params(labelright=True, labelleft=False)
+    ax.yaxis.set_label_position("right")
+    ax.yaxis.label.set_rotation(270)
+    ax.yaxis.label.set_verticalalignment("bottom")
+    ax.spines["right"].set_position(("outward", 0))
+    ax.spines["right"].set_visible(True)
+    return ax
