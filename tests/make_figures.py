@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from testing_utils.compose import GridSpec
 from testing_utils.misc import load_agg_result
 from testing_utils.plotting import (
     plot_agg_boxswarm,
@@ -17,6 +18,7 @@ IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
 FIG_PATH_PN = Path(__file__).parent / "output" / "figs" / "print" / "panels"
 FIG_PATH_FIG = Path(__file__).parent / "output" / "figs" / "print" / "figures"
 COLORS = {"annotation": "#566573"}
+PNLAB_PARAM = {"size": 11, "weight": "bold"}
 sns.set_theme(
     context="paper", style="darkgrid", rc={"xtick.major.pad": -2, "ytick.major.pad": -2}
 )
@@ -115,3 +117,15 @@ g.set_titles(
     col_template="Noise level: {col_name}",
 )
 g.figure.savefig(fig_path, bbox_inches="tight")
+
+# %% make deconv figure
+pns = {
+    "A": (FIG_PATH_PN / "deconv-thres.svg", (0, 0)),
+    "B": (FIG_PATH_PN / "deconv-upsamp.svg", (0, 1), (3, 1)),
+    "C": (FIG_PATH_PN / "deconv-full.svg", (1, 0), (2, 1)),
+}
+fig = GridSpec(
+    param_text=PNLAB_PARAM, wsep=5, hsep=0, halign="center", valign="top", **pns
+)
+fig.tile()
+fig.save(FIG_PATH_FIG / "deconv.svg")
