@@ -38,9 +38,11 @@ FIG_PATH_FIG.mkdir(parents=True, exist_ok=True)
 fig_w, fig_h = 5, 2.2
 fig_path = FIG_PATH_PN / "deconv-thres.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_thres")
-ressub = resdf.query(
-    "upsamp==1 & ns_lev==0.5 & rand_seed==2 & taus=='(6, 1)'"
-).drop_duplicates()
+ressub = (
+    resdf.query("upsamp==1 & ns_lev==0.5 & rand_seed==2 & taus=='(6, 1)'")
+    .drop_duplicates()
+    .copy()
+)
 fig = plt.figure(figsize=(fig_w, fig_h))
 fig = plot_met_ROC_thres(
     ressub,
@@ -56,7 +58,7 @@ fig.savefig(fig_path, bbox_inches="tight")
 # %% deconv-upsamp
 fig_path = FIG_PATH_PN / "deconv-upsamp.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_solve_thres").drop_duplicates()
-ressub = resdf.query("taus=='(6, 1)'")
+ressub = resdf.query("taus=='(6, 1)'").copy()
 g = plot_agg_boxswarm(
     ressub,
     row="upsamp",
@@ -106,7 +108,7 @@ fig_path = FIG_PATH_PN / "deconv-full.svg"
 grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_penal").drop_duplicates()
 resagg = resdf.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
-ressub = resagg.query("tau_d == 6 & tau_r == 1")
+ressub = resagg.query("tau_d == 6 & tau_r == 1").copy()
 g = plot_agg_boxswarm(
     ressub,
     row="upsamp",
@@ -242,7 +244,7 @@ def AR_scatter(
 
 fig_path = FIG_PATH_PN / "ar-full.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_fit_h_num")
-ressub = resdf.query("taus == '(6, 1)' & upsamp < 5").astype({"upsamp": int})
+ressub = resdf.query("taus == '(6, 1)' & upsamp < 5").astype({"upsamp": int}).copy()
 cmap = plt.get_cmap("tab10").colors
 palette = {
     "cnmf_smth": cmap[0],
@@ -320,7 +322,7 @@ resdf = (
 )
 ressub = resdf.query(
     "ncell == 'None' & method != 'gt' & use_all == False & tau_init == 'None' & iter != 10"
-)
+).copy()
 row_lab_map = {"f1": "f1 Score", "dhm0": r"$\text{DHM}_r$", "dhm1": r"$\text{DHM}_d$"}
 col_lab_map = {"cnmf": "Vanilla CNMF", "minian-bin": "InDeCa"}
 ressub["row_lab"] = ressub["metric"].map(row_lab_map)
@@ -348,3 +350,59 @@ g.map_dataframe(
 g.set_ylabels("")
 g.set_titles(row_template="{row_name}", col_template="{col_name}")
 g.figure.savefig(fig_path, bbox_inches="tight")
+
+
+# %% make pipeline-comp figure
+def xlab(row):
+    if row["method"] == "cnmf":
+        return "CNMF\nThreshold\n{}".format(row["qthres"])
+    else:
+        lab = "InDeCa"
+        if row["use_all"]:
+            lab += "\n+\nShared\nkernel"
+        if row["tau_init"] != "None":
+            lab += "\n+\nInitial\nconstants"
+        return lab
+
+
+fig_path = FIG_PATH_PN / "pipeline-comp.svg"
+res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
+res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
+id_vars = [
+    "dsname",
+    "ncell",
+    "method",
+    "use_all",
+    "tau_init",
+    "unit_id",
+    "iter",
+    "qthres",
+    "test_id",
+    "upsamp",
+]
+val_vals = ["f1", "dhm0", "dhm1"]
+resdf = (
+    pd.concat([res_bin, res_cnmf], ignore_index=True)
+    .drop_duplicates()
+    .fillna("None")
+    .melt(
+        id_vars=id_vars,
+        value_vars=val_vals,
+        var_name="metric",
+        value_name="value",
+    )
+    .drop_duplicates()
+)
+ressub = resdf.query(
+    "ncell == 'None' & method != 'gt' & iter in (10, 'None') & metric == 'f1'"
+).copy()
+ressub["xlab"] = ressub.apply(xlab, axis="columns")
+ressub = ressub.sort_values("xlab")
+fig, ax = plt.subplots(figsize=(8, 2.5))
+ax = sns.boxplot(ressub, x="xlab", y="value", hue="xlab", fill=False, showfliers=False)
+ax = sns.swarmplot(
+    ressub, x="xlab", y="value", hue="xlab", edgecolor="auto", linewidth=1
+)
+ax.set_xlabel("")
+ax.set_ylabel("f1 Score")
+fig.savefig(fig_path, bbox_inches="tight")
