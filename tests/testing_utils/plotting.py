@@ -249,7 +249,16 @@ def plot_agg_boxswarm(
     return g
 
 
-def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwargs):
+def plot_pipeline_iter(
+    data,
+    color,
+    dhm0=None,
+    dhm1=None,
+    aggregate=True,
+    swarm_kws={"linewidth": 1},
+    box_kws=dict(),
+    **kwargs,
+):
     ax = plt.gca()
     mthd = data["method"].unique().item()
     met = data["metric"].unique().item()
@@ -263,6 +272,7 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
     elif aggregate and use_all:
         data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
     if mthd == "minian-bin":
+        data = data.astype({"iter": int})
         sns.swarmplot(
             data,
             x="iter",
@@ -270,12 +280,15 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
             ax=ax,
             color=color,
             edgecolor="auto",
-            warn_thresh=0.8,
-            linewidth=1,
-            **kwargs,
+            warn_thresh=0.9,
+            **swarm_kws,
         )
         sns.lineplot(data, x="iter", y="value", ax=ax, color=color, **kwargs)
+        ax.set_xlabel("Iteration")
     elif mthd == "cnmf":
+        data = data.astype({"qthres": float})
+        if met != "f1":
+            data["value"] = data["value"].where(data["qthres"] == 0.5)
         sns.swarmplot(
             data,
             x="qthres",
@@ -283,13 +296,20 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
             ax=ax,
             color=color,
             edgecolor="auto",
-            warn_thresh=0.8,
-            linewidth=1,
-            **kwargs,
+            warn_thresh=0.9,
+            **swarm_kws,
         )
         sns.boxplot(
-            data, x="qthres", y="value", color=color, saturation=0.5, ax=ax, **kwargs
+            data,
+            x="qthres",
+            y="value",
+            color=color,
+            ax=ax,
+            fill=False,
+            showfliers=False,
+            **box_kws,
         )
+        ax.set_xlabel("Threshold (quantile)")
 
 
 def move_yax_right(ax):

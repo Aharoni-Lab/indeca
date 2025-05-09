@@ -288,3 +288,63 @@ fig = GridSpec(
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "ar.svg")
+
+# %% make pipeline-iter figure
+fig_path = FIG_PATH_PN / "pipeline-iter.svg"
+res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
+res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
+id_vars = [
+    "dsname",
+    "ncell",
+    "method",
+    "use_all",
+    "tau_init",
+    "unit_id",
+    "iter",
+    "qthres",
+    "test_id",
+    "upsamp",
+]
+val_vals = ["f1", "dhm0", "dhm1"]
+resdf = (
+    pd.concat([res_bin, res_cnmf], ignore_index=True)
+    .drop_duplicates()
+    .fillna("None")
+    .melt(
+        id_vars=id_vars,
+        value_vars=val_vals,
+        var_name="metric",
+        value_name="value",
+    )
+    .drop_duplicates()
+)
+ressub = resdf.query(
+    "ncell == 'None' & method != 'gt' & use_all == False & tau_init == 'None' & iter != 10"
+)
+row_lab_map = {"f1": "f1 Score", "dhm0": r"$\text{DHM}_r$", "dhm1": r"$\text{DHM}_d$"}
+col_lab_map = {"cnmf": "Vanilla CNMF", "minian-bin": "InDeCa"}
+ressub["row_lab"] = ressub["metric"].map(row_lab_map)
+ressub["col_lab"] = ressub["method"].map(col_lab_map)
+row_ord = [row_lab_map[r] for r in ["dhm0", "dhm1", "f1"]]
+col_ord = [col_lab_map[c] for c in ["cnmf", "minian-bin"]]
+g = sns.FacetGrid(
+    ressub,
+    height=1.5,
+    aspect=2.5,
+    row="row_lab",
+    col="col_lab",
+    sharey="row",
+    sharex="col",
+    hue="col_lab",
+    row_order=row_ord,
+    col_order=col_ord,
+    hue_order=col_ord,
+    margin_titles=True,
+    gridspec_kws={"width_ratios": [1, 2]},
+)
+g.map_dataframe(
+    plot_pipeline_iter, aggregate=False, swarm_kws={"s": 3.5, "linewidth": 0.8}
+)
+g.set_ylabels("")
+g.set_titles(row_template="{row_name}", col_template="{col_name}")
+g.figure.savefig(fig_path, bbox_inches="tight")
