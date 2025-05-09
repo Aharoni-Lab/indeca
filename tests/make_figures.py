@@ -140,7 +140,7 @@ fig.save(FIG_PATH_FIG / "deconv.svg")
 
 # %% ar-dhm
 fig_path = FIG_PATH_PN / "ar-dhm.svg"
-fig_w, fig_h = 4, 3.5
+fig_w, fig_h = 4, 3.8
 with sns.axes_style("white"):
     fig, axs = plt.subplots(2, 1, figsize=(fig_w, fig_h))
 end = 65
@@ -277,3 +277,14 @@ g.set_titles(
 for lab in g._legend.texts:
     lab.set_text(lab_map[lab.get_text()])
 g.figure.savefig(fig_path, bbox_inches="tight")
+
+# %% make ar figure
+pns = {
+    "A": (FIG_PATH_PN / "ar-dhm.svg", (0, 0)),
+    "B": (FIG_PATH_PN / "ar-full.svg", (0, 1)),
+}
+fig = GridSpec(
+    param_text=PNLAB_PARAM, wsep=7, hsep=0, halign="center", valign="top", **pns
+)
+fig.tile()
+fig.save(FIG_PATH_FIG / "ar.svg")
