@@ -14,13 +14,21 @@ from testing_utils.plotting import (
     plot_pipeline_iter,
 )
 
+from minian_bin.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
+
 IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
 FIG_PATH_PN = Path(__file__).parent / "output" / "figs" / "print" / "panels"
 FIG_PATH_FIG = Path(__file__).parent / "output" / "figs" / "print" / "figures"
 COLORS = {"annotation": "#566573"}
 PNLAB_PARAM = {"size": 11, "weight": "bold"}
 sns.set_theme(
-    context="paper", style="darkgrid", rc={"xtick.major.pad": -2, "ytick.major.pad": -2}
+    context="paper",
+    style="darkgrid",
+    rc={
+        "xtick.major.pad": -2,
+        "ytick.major.pad": -2,
+        "text.latex.preamble": r"\usepackage{amsmath}",
+    },
 )
 FIG_PATH_PN.mkdir(parents=True, exist_ok=True)
 FIG_PATH_FIG.mkdir(parents=True, exist_ok=True)
@@ -129,3 +137,79 @@ fig = GridSpec(
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "deconv.svg")
+
+# %% ar-dhm
+fig_path = FIG_PATH_PN / "ar-dhm.svg"
+fig_w, fig_h = 4, 3.5
+with sns.axes_style("white"):
+    fig, axs = plt.subplots(2, 1, figsize=(fig_w, fig_h))
+end = 65
+for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
+    # ar process
+    ar, t, pulse = ar_pulse(theta1, theta2, end)
+    t_plt = np.linspace(0, end, 1000)
+    # exp form
+    is_biexp, tconst, coefs = AR2exp(theta1, theta2)
+    tau_d, tau_r = AR2tau(theta1, theta2)
+    exp_form = eval_exp(t, is_biexp, tconst, coefs)
+    exp_plt = eval_exp(t_plt, is_biexp, tconst, coefs)
+    (dhm0, dhm1), t_max = find_dhm(is_biexp, tconst, coefs)
+    assert np.isclose(ar, exp_form).all()
+    # plotting
+    axs[iplt].plot(t_plt, exp_plt, lw=2, color="grey")
+    axs[iplt].axvline(
+        t_max, lw=1.5, ls="--", color="grey", label="Maximum" if iplt == 0 else None
+    )
+    axs[iplt].axvline(
+        dhm0,
+        lw=1.5,
+        ls=":",
+        color="red",
+        label=r"$\text{DHM}_r$" if iplt == 0 else None,
+    )
+    axs[iplt].axvline(
+        dhm1,
+        lw=1.5,
+        ls=":",
+        color="blue",
+        label=r"$\text{DHM}_d$" if iplt == 0 else None,
+    )
+    axs[iplt].yaxis.set_visible(False)
+    axs[iplt].text(
+        0.6 if iplt == 0 else 0.5,
+        0.93,
+        "$AR(2)$\n"
+        "coefficients:\n"
+        r"$"
+        r"\begin{aligned}"
+        rf"\gamma_1 &= {theta1:.2f}\\"
+        rf"\gamma_2 &= {theta2:.2f}\\"
+        r"\end{aligned}"
+        r"$",
+        ha="center",
+        va="top",
+        transform=axs[iplt].transAxes,
+        usetex=True,
+    )
+    axs[iplt].text(
+        0.86 if iplt == 0 else 0.82,
+        0.93,
+        "bi-exponential\n"
+        "coefficients:\n"
+        r"$"
+        r"\begin{aligned}"
+        rf"\tau_d &= {tau_d:.2f}\\"
+        rf"\tau_r &= {tau_r:.2f}\\"
+        r"\end{aligned}"
+        r"$",
+        ha="center",
+        va="top",
+        transform=axs[iplt].transAxes,
+        usetex=True,
+    )
+    if iplt == 0:
+        axs[iplt].tick_params(axis="x", labelbottom=False)
+    else:
+        axs[iplt].set_xlabel("Timesteps")
+fig.legend(loc="upper center", ncol=3)
+fig.savefig(fig_path, bbox_inches="tight")
