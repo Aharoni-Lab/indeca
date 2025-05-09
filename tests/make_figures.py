@@ -35,7 +35,7 @@ FIG_PATH_FIG.mkdir(parents=True, exist_ok=True)
 
 
 # %% deconv-thres
-fig_w, fig_h = 5, 2.2
+fig_w, fig_h = 6, 2.2
 fig_path = FIG_PATH_PN / "deconv-thres.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_thres")
 ressub = (
@@ -47,7 +47,7 @@ fig = plt.figure(figsize=(fig_w, fig_h))
 fig = plot_met_ROC_thres(
     ressub,
     fig=fig,
-    grid_kws={"width_ratios": [1.6, 1]},
+    grid_kws={"width_ratios": [2, 1]},
     log_err=False,
     annt_color=COLORS["annotation"],
     annt_lw=2,
@@ -65,7 +65,7 @@ g = plot_agg_boxswarm(
     col="upsamp_y",
     x="ns_lev",
     y="f1",
-    facet_kws={"margin_titles": True, "height": 2, "aspect": 1},
+    facet_kws={"margin_titles": True, "height": 1.5, "aspect": 1.3},
     swarm_kws={"size": 3.5, "linewidth": 1},
     box_kws={"fill": False},
 )
@@ -115,7 +115,7 @@ g = plot_agg_boxswarm(
     col="ns_lev",
     x="label",
     y="f1",
-    facet_kws={"height": 1.8, "aspect": 1.3, "margin_titles": True},
+    facet_kws={"height": 1.5, "aspect": 1.3, "margin_titles": True},
     swarm_kws={"size": 3.5, "linewidth": 1},
     box_kws={"fill": False},
 )
@@ -131,11 +131,11 @@ g.figure.savefig(fig_path, bbox_inches="tight")
 # %% make deconv figure
 pns = {
     "A": (FIG_PATH_PN / "deconv-thres.svg", (0, 0)),
-    "B": (FIG_PATH_PN / "deconv-upsamp.svg", (0, 1), (3, 1)),
-    "C": (FIG_PATH_PN / "deconv-full.svg", (1, 0), (2, 1)),
+    "B": (FIG_PATH_PN / "deconv-upsamp.svg", (1, 0)),
+    "C": (FIG_PATH_PN / "deconv-full.svg", (2, 0)),
 }
 fig = GridSpec(
-    param_text=PNLAB_PARAM, wsep=5, hsep=0, halign="center", valign="top", **pns
+    param_text=PNLAB_PARAM, wsep=0, hsep=5, halign="left", valign="top", **pns
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "deconv.svg")
