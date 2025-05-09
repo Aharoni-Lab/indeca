@@ -142,10 +142,10 @@ fig.save(FIG_PATH_FIG / "deconv.svg")
 
 # %% ar-dhm
 fig_path = FIG_PATH_PN / "ar-dhm.svg"
-fig_w, fig_h = 4, 3.8
+fig_w, fig_h = 6, 2
 with sns.axes_style("white"):
-    fig, axs = plt.subplots(2, 1, figsize=(fig_w, fig_h))
-end = 65
+    fig, axs = plt.subplots(1, 2, figsize=(fig_w, fig_h))
+end = 60
 for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
     # ar process
     ar, t, pulse = ar_pulse(theta1, theta2, end)
@@ -178,7 +178,7 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
     )
     axs[iplt].yaxis.set_visible(False)
     axs[iplt].text(
-        0.6 if iplt == 0 else 0.5,
+        0.54 if iplt == 0 else 0.42,
         0.93,
         "$AR(2)$\n"
         "coefficients:\n"
@@ -194,7 +194,7 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
         usetex=True,
     )
     axs[iplt].text(
-        0.86 if iplt == 0 else 0.82,
+        0.84 if iplt == 0 else 0.78,
         0.93,
         "bi-exponential\n"
         "coefficients:\n"
@@ -209,11 +209,9 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
         transform=axs[iplt].transAxes,
         usetex=True,
     )
-    if iplt == 0:
-        axs[iplt].tick_params(axis="x", labelbottom=False)
-    else:
-        axs[iplt].set_xlabel("Timesteps")
-fig.legend(loc="upper center", ncol=3)
+    axs[iplt].set_xlabel("Timesteps")
+fig.tight_layout()
+fig.legend(loc="center left", bbox_to_anchor=(0.98, 0.5))
 fig.savefig(fig_path, bbox_inches="tight")
 
 
@@ -258,15 +256,15 @@ lab_map = {
     "solve_fit": "InDeCa",
     "solve_fit-all": "InDeCa /w \nshared kernel",
 }
-g = sns.FacetGrid(ressub, row="upsamp", col="ns_lev", height=2, margin_titles=True)
+g = sns.FacetGrid(ressub, row="upsamp", col="ns_lev", height=1.5, margin_titles=True)
 g.map_dataframe(
     AR_scatter,
     x="dhm0",
     y="dhm1",
     zorder={"cnmf_smth": 1, "cnmf_raw": 1, "solve_fit": 2, "solve_fit-all": 3},
     palette=palette,
-    lw=0.5,
-    s=8,
+    lw=0.4,
+    s=6,
     annt_color=COLORS["annotation"],
 )
 g.add_legend()
@@ -283,10 +281,10 @@ g.figure.savefig(fig_path, bbox_inches="tight")
 # %% make ar figure
 pns = {
     "A": (FIG_PATH_PN / "ar-dhm.svg", (0, 0)),
-    "B": (FIG_PATH_PN / "ar-full.svg", (0, 1)),
+    "B": (FIG_PATH_PN / "ar-full.svg", (1, 0)),
 }
 fig = GridSpec(
-    param_text=PNLAB_PARAM, wsep=7, hsep=0, halign="center", valign="top", **pns
+    param_text=PNLAB_PARAM, wsep=0, hsep=5, halign="left", valign="top", **pns
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "ar.svg")
