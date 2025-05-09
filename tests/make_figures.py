@@ -406,3 +406,14 @@ ax = sns.swarmplot(
 ax.set_xlabel("")
 ax.set_ylabel("f1 Score")
 fig.savefig(fig_path, bbox_inches="tight")
+
+# %% make pipeline figure
+pns = {
+    "A": (FIG_PATH_PN / "pipeline-iter.svg", (0, 0)),
+    "B": (FIG_PATH_PN / "pipeline-comp.svg", (1, 0)),
+}
+fig = GridSpec(
+    param_text=PNLAB_PARAM, wsep=0, hsep=5, halign="left", valign="top", **pns
+)
+fig.tile()
+fig.save(FIG_PATH_FIG / "pipeline.svg")
