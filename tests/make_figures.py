@@ -213,3 +213,67 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
         axs[iplt].set_xlabel("Timesteps")
 fig.legend(loc="upper center", ncol=3)
 fig.savefig(fig_path, bbox_inches="tight")
+
+
+# %% ar-full
+def AR_scatter(
+    data, color, x, y, palette, zorder, annt_color="gray", annt_lw=1, **kwargs
+):
+    ax = plt.gca()
+    data = data.copy()
+    res_gt = data[data["method"] == "truth"]
+    x_gt = res_gt[x].unique().item()
+    y_gt = res_gt[y].unique().item()
+    ax.axhline(y_gt, c=annt_color, lw=annt_lw, ls=":", zorder=0)
+    ax.axvline(x_gt, c=annt_color, lw=annt_lw, ls=":", zorder=0)
+    data["method"] = data["method"] + data["unit"].map(
+        lambda u: "-all" if u == "all" else ""
+    )
+    for (mthd, isreal), subdf in data[data["method"] != "truth-all"].groupby(
+        ["method", "isreal"], observed=True
+    ):
+        mk_kws = (
+            {"ec": None, "fc": palette[mthd]}
+            if isreal
+            else {"ec": palette[mthd], "fc": "none"}
+        )
+        ax.scatter(subdf[x], subdf[y], label=mthd, **mk_kws, **kwargs)
+
+
+fig_path = FIG_PATH_PN / "ar-full.svg"
+resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_fit_h_num")
+ressub = resdf.query("taus == '(6, 1)' & upsamp < 5").astype({"upsamp": int})
+cmap = plt.get_cmap("tab10").colors
+palette = {
+    "cnmf_smth": cmap[0],
+    "cnmf_raw": cmap[1],
+    "solve_fit": cmap[2],
+    "solve_fit-all": cmap[3],
+}
+lab_map = {
+    "cnmf_smth": "Direct /w \nSmoothing",
+    "cnmf_raw": "Direct",
+    "solve_fit": "InDeCa",
+    "solve_fit-all": "InDeCa /w \nshared kernel",
+}
+g = sns.FacetGrid(ressub, row="upsamp", col="ns_lev", height=2, margin_titles=True)
+g.map_dataframe(
+    AR_scatter,
+    x="dhm0",
+    y="dhm1",
+    zorder={"cnmf_smth": 1, "cnmf_raw": 1, "solve_fit": 2, "solve_fit-all": 3},
+    palette=palette,
+    lw=0.5,
+    s=8,
+    annt_color=COLORS["annotation"],
+)
+g.add_legend()
+g.set_xlabels(r"$\text{DHM}_r$")
+g.set_ylabels(r"$\text{DHM}_d$")
+g.set_titles(
+    row_template="Upsampling $k$ = {row_name}",
+    col_template="Noise level: {col_name}",
+)
+for lab in g._legend.texts:
+    lab.set_text(lab_map[lab.get_text()])
+g.figure.savefig(fig_path, bbox_inches="tight")
