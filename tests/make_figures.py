@@ -406,8 +406,8 @@ row_ord = [row_lab_map[r] for r in ["dhm0", "dhm1"]]
 col_ord = [col_lab_map[c] for c in ["cnmf", "minian-bin"]]
 g = sns.FacetGrid(
     ressub,
-    height=1.5,
-    aspect=2,
+    height=1.3,
+    aspect=3 / 1.3,
     row="row_lab",
     col="col_lab",
     sharey="row",
@@ -419,12 +419,16 @@ g = sns.FacetGrid(
     margin_titles=True,
     gridspec_kws={"width_ratios": [1, 4]},
 )
-g.map_dataframe(plot_iter, swarm_kws={"s": 3.5, "linewidth": 0.8})
+g.map_dataframe(
+    plot_iter, swarm_kws={"s": 3.5, "linewidth": 0.8}, box_kws={"width": 0.4}
+)
 g.set_titles(row_template="", col_template="{col_name}")
 for ax in g.axes.flat:
     tt = ax.get_title()
-    if tt:
+    if tt == "InDeCa":
         ax.set_title(tt, pad=25)
+    else:
+        ax.set_title(tt, pad=15)
 fig = g.figure
 fig.align_ylabels()
 fig.legend(
@@ -435,6 +439,7 @@ fig.legend(
     bbox_to_anchor=(0.6, 1.01),
     ncol=2,
 )
+fig.subplots_adjust(hspace=0.08, wspace=0.02)
 fig.savefig(fig_path, bbox_inches="tight")
 
 
