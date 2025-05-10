@@ -217,7 +217,7 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, scal, h_len=60, norm="l1", smth_penalty=0, ignore_len=0, up_factor=1):
+def solve_h(y, s, scal, h_len=60, norm="l2", smth_penalty=0, ignore_len=0, up_factor=1):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
@@ -313,7 +313,7 @@ def solve_fit_h(
     return lams, ps, h, h_fit, metric_df, h_df
 
 
-def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l1", up_factor=1):
+def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1):
     h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
     try:
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
