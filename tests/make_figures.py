@@ -305,7 +305,66 @@ fig = GridSpec(
 fig.tile()
 fig.save(FIG_PATH_FIG / "ar.svg")
 
+
 # %% make pipeline-iter figure
+def plot_iter(data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dict()):
+    ax = plt.gca()
+    mthd = data["method"].unique().item()
+    met = data["metric"].unique().item()
+    if mthd == "minian-bin":
+        data = data.astype({"iter": int})
+        dat_all = data[data["use_all"]]
+        dat_ind = data[~data["use_all"]]
+        swm = sns.swarmplot(
+            dat_ind,
+            x="iter",
+            y="value",
+            ax=ax,
+            color=color,
+            edgecolor="auto",
+            warn_thresh=0.9,
+            **swarm_kws,
+        )
+        lns = sns.lineplot(
+            dat_all,
+            x="iter",
+            y="value",
+            ax=ax,
+            color=color,
+            estimator=None,
+            errorbar=None,
+            units="unit_id",
+            zorder=3,
+            **line_kws,
+        )
+        leg_handles["Independent kernel"] = swm.collections[0]
+        leg_handles["Shared kernel"] = lns.lines[0]
+        ax.set_xlabel("Iteration")
+    elif mthd == "cnmf":
+        data = data.astype({"qthres": float})
+        data["value"] = data["value"].where(data["qthres"] == 0.5)
+        sns.swarmplot(
+            data,
+            y="value",
+            ax=ax,
+            color=color,
+            edgecolor="auto",
+            warn_thresh=0.9,
+            **swarm_kws,
+        )
+        sns.boxplot(
+            data,
+            y="value",
+            color=color,
+            ax=ax,
+            fill=False,
+            showfliers=False,
+            **box_kws,
+        )
+        ax.set_xlabel("Final output")
+        ax.set_ylabel({"dhm0": r"$\text{DHM}_r$", "dhm1": r"$\text{DHM}_d$"}[met])
+
+
 fig_path = FIG_PATH_PN / "pipeline-iter.svg"
 res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
 res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
@@ -335,18 +394,20 @@ resdf = (
     .drop_duplicates()
 )
 ressub = resdf.query(
-    "ncell == 'None' & method != 'gt' & use_all == False & tau_init == 'None' & iter != 10"
+    "ncell == 'None' & method != 'gt'"
+    "& tau_init == 'None' & iter != 10 & metric != 'f1'"
 ).copy()
 row_lab_map = {"f1": "f1 Score", "dhm0": r"$\text{DHM}_r$", "dhm1": r"$\text{DHM}_d$"}
 col_lab_map = {"cnmf": "Vanilla CNMF", "minian-bin": "InDeCa"}
+leg_handles = dict()
 ressub["row_lab"] = ressub["metric"].map(row_lab_map)
 ressub["col_lab"] = ressub["method"].map(col_lab_map)
-row_ord = [row_lab_map[r] for r in ["dhm0", "dhm1", "f1"]]
+row_ord = [row_lab_map[r] for r in ["dhm0", "dhm1"]]
 col_ord = [col_lab_map[c] for c in ["cnmf", "minian-bin"]]
 g = sns.FacetGrid(
     ressub,
     height=1.5,
-    aspect=2.5,
+    aspect=2,
     row="row_lab",
     col="col_lab",
     sharey="row",
@@ -356,14 +417,25 @@ g = sns.FacetGrid(
     col_order=col_ord,
     hue_order=col_ord,
     margin_titles=True,
-    gridspec_kws={"width_ratios": [1, 2]},
+    gridspec_kws={"width_ratios": [1, 4]},
 )
-g.map_dataframe(
-    plot_pipeline_iter, aggregate=False, swarm_kws={"s": 3.5, "linewidth": 0.8}
+g.map_dataframe(plot_iter, swarm_kws={"s": 3.5, "linewidth": 0.8})
+g.set_titles(row_template="", col_template="{col_name}")
+for ax in g.axes.flat:
+    tt = ax.get_title()
+    if tt:
+        ax.set_title(tt, pad=25)
+fig = g.figure
+fig.align_ylabels()
+fig.legend(
+    handles=list(leg_handles.values()),
+    labels=list(leg_handles.keys()),
+    title="",
+    loc="upper center",
+    bbox_to_anchor=(0.6, 1.01),
+    ncol=2,
 )
-g.set_ylabels("")
-g.set_titles(row_template="{row_name}", col_template="{col_name}")
-g.figure.savefig(fig_path, bbox_inches="tight")
+fig.savefig(fig_path, bbox_inches="tight")
 
 
 # %% make pipeline-comp figure
