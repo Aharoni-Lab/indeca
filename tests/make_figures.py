@@ -55,27 +55,43 @@ fig = plot_met_ROC_thres(
 fig.tight_layout(h_pad=0.2, w_pad=0.8)
 fig.savefig(fig_path, bbox_inches="tight")
 
+
 # %% deconv-upsamp
+def upsamp_heatmap(data, color, **kwargs):
+    ax = plt.gca()
+    data_pvt = (
+        data.groupby(["upsamp_y", "upsamp"])["f1"]
+        .mean()
+        .reset_index()
+        .pivot(index="upsamp_y", columns="upsamp", values="f1")
+    )
+    sns.heatmap(data_pvt, ax=ax, **kwargs)
+
+
 fig_path = FIG_PATH_PN / "deconv-upsamp.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_solve_thres").drop_duplicates()
 ressub = resdf.query("taus=='(6, 1)'").copy()
-g = plot_agg_boxswarm(
-    ressub,
-    row="upsamp",
-    col="upsamp_y",
-    x="ns_lev",
-    y="f1",
-    facet_kws={"margin_titles": True, "height": 1.5, "aspect": 1.3},
-    swarm_kws={"size": 3.5, "linewidth": 1},
-    box_kws={"fill": False},
+vmin, vmax = 0.48, 1.02
+g = sns.FacetGrid(ressub, col="ns_lev", margin_titles=True, height=1.8, aspect=0.8)
+g.map_dataframe(
+    upsamp_heatmap,
+    vmin=vmin,
+    vmax=vmax,
+    square=True,
+    cbar=False,
+    linewidths=0.1,
+    linecolor=COLORS["annotation"],
 )
-g.set_xlabels("Noise Level")
-g.set_ylabels("f1 Score")
-g.set_titles(
-    row_template="Upsampling $k$ = {row_name}",
-    col_template="Data downsampling: {col_name}",
-)
-g.set(ylim=(0.75, 1.02))
+g.set_xlabels("Upsampling $k$")
+g.set_ylabels("Data downsampling")
+g.set_titles(col_template="Noise level: {col_name}")
+fig = g.figure
+cbar_ax = fig.add_axes([0.95, 0.25, 0.02, 0.6])
+cm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=vmin, vmax=vmax))
+cbar = fig.colorbar(cm, cax=cbar_ax, ticks=[0.5, 0.75, 1.0])
+cbar.set_label("f1 Score", rotation=270, va="bottom")
+cbar_ax.tick_params(size=0, pad=2)
+fig.tight_layout(rect=[0, 0, 0.95, 1])
 g.figure.savefig(fig_path, bbox_inches="tight")
 
 
