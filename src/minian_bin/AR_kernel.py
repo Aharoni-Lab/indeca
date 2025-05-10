@@ -242,14 +242,14 @@ def solve_h(y, s, scal, h_len=60, norm="l1", smth_penalty=0, ignore_len=0, up_fa
         conv_term = cp.vstack([R @ cp.convolve(ss, h)[:T] for ss in s])
     else:
         conv_term = R @ cp.convolve(s, h)[:T]
-    norm_ord = {"l1": 1, "l2": 2}[norm]
-    obj = cp.Minimize(
-        cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, norm_ord)
-        + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
-    )
+    if norm == "l1":
+        err_term = cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, 1)
+    elif norm == "l2":
+        err_term = cp.sum_squares(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b)
+    obj = cp.Minimize(err_term + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1))
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
-    prob.solve()
+    prob.solve(solver=cp.CLARABEL)
     return np.concatenate([h.value, np.zeros(T - h_len - 1)])
 
 
