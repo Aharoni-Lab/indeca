@@ -95,8 +95,14 @@ class TestDeconvBin:
         list(range(3))
         + [pytest.param(i, marks=pytest.mark.slow) for i in range(3, 15)],
     )
-    @pytest.mark.parametrize("upsamp", [1, 2, 5])
-    @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
+    @pytest.mark.parametrize(
+        "upsamp",
+        [1, 2, 3] + [pytest.param(i, marks=pytest.mark.slow) for i in range(4, 11)],
+    )
+    @pytest.mark.parametrize(
+        "upsamp_y",
+        [1, 2, 3] + [pytest.param(i, marks=pytest.mark.slow) for i in range(4, 11)],
+    )
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
     def test_solve_thres(
         self, taus, rand_seed, upsamp, upsamp_y, ns_lev, test_fig_path_html, results_bag
