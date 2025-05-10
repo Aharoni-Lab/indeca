@@ -35,7 +35,7 @@ FIG_PATH_FIG.mkdir(parents=True, exist_ok=True)
 
 
 # %% deconv-thres
-fig_w, fig_h = 6, 2.2
+fig_w, fig_h = 5.8, 2.2
 fig_path = FIG_PATH_PN / "deconv-thres.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_thres")
 ressub = (
@@ -52,6 +52,7 @@ fig = plot_met_ROC_thres(
     annt_color=COLORS["annotation"],
     annt_lw=2,
 )
+fig.align_ylabels()
 fig.tight_layout(h_pad=0.2, w_pad=0.8)
 fig.savefig(fig_path, bbox_inches="tight")
 
@@ -72,7 +73,7 @@ fig_path = FIG_PATH_PN / "deconv-upsamp.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_solve_thres").drop_duplicates()
 ressub = resdf.query("taus=='(6, 1)'").copy()
 vmin, vmax = 0.48, 1.02
-g = sns.FacetGrid(ressub, col="ns_lev", margin_titles=True, height=1.8, aspect=0.8)
+g = sns.FacetGrid(ressub, col="ns_lev", margin_titles=True, height=2, aspect=0.9)
 g.map_dataframe(
     upsamp_heatmap,
     vmin=vmin,
@@ -139,9 +140,10 @@ g.tick_params(axis="x", rotation=45)
 g.set_xlabels("")
 g.set_ylabels("f1 Score")
 g.set_titles(
-    row_template="Upsampling $k$ = {row_name}",
+    row_template="Upsampling $k$: {row_name}",
     col_template="Noise level: {col_name}",
 )
+g.figure.tight_layout(h_pad=0.6, w_pad=0.4)
 g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make deconv figure
