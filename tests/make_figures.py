@@ -450,7 +450,9 @@ def xlab(row):
     else:
         lab = "InDeCa"
         if row["use_all"]:
-            lab += "\n+\nShared\nkernel"
+            lab += " /w\nShared\nkernel"
+        else:
+            lab += " /w\nIndependent\nkernel"
         if row["tau_init"] != "None":
             lab += "\n+\nInitial\nconstants"
         return lab
@@ -485,14 +487,16 @@ resdf = (
     .drop_duplicates()
 )
 ressub = resdf.query(
-    "ncell == 'None' & method != 'gt' & iter in (10, 'None') & metric == 'f1'"
+    "ncell == 'None' & method != 'gt' & iter in (10, 'None') & metric == 'f1' & tau_init == 'None'"
 ).copy()
 ressub["xlab"] = ressub.apply(xlab, axis="columns")
 ressub = ressub.sort_values("xlab")
-fig, ax = plt.subplots(figsize=(8, 2.5))
-ax = sns.boxplot(ressub, x="xlab", y="value", hue="xlab", fill=False, showfliers=False)
+fig, ax = plt.subplots(figsize=(6.4, 2))
+ax = sns.boxplot(
+    ressub, x="xlab", y="value", hue="xlab", width=0.5, fill=False, showfliers=False
+)
 ax = sns.swarmplot(
-    ressub, x="xlab", y="value", hue="xlab", edgecolor="auto", linewidth=1
+    ressub, x="xlab", y="value", hue="xlab", edgecolor="auto", linewidth=1, s=4
 )
 ax.set_xlabel("")
 ax.set_ylabel("f1 Score")
@@ -504,7 +508,7 @@ pns = {
     "B": (FIG_PATH_PN / "pipeline-comp.svg", (1, 0)),
 }
 fig = GridSpec(
-    param_text=PNLAB_PARAM, wsep=0, hsep=5, halign="left", valign="top", **pns
+    param_text=PNLAB_PARAM, wsep=0, hsep=0, halign="left", valign="top", **pns
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "pipeline.svg")
