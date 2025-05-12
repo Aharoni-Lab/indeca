@@ -170,6 +170,7 @@ def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
             "reversing coefficients"
         )
         tau_d, tau_r = tau_r, tau_d
+        p = p[::-1]
     return (
         -1 / np.array([tau_d, tau_r]),
         p,
