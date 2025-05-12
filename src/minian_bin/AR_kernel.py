@@ -133,6 +133,7 @@ def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
             bounds=(0, np.inf),
             sigma=y_weight,
             absolute_sigma=True,
+            max_nfev=5000,
             # loss="huber",
             # f_scale=1e-2,
             # tr_solver="exact",
