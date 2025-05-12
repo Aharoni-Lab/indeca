@@ -260,7 +260,11 @@ def AR_scatter(
 
 fig_path = FIG_PATH_PN / "ar-full.svg"
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_fit_h_num")
-ressub = resdf.query("taus == '(6, 1)' & upsamp < 5").astype({"upsamp": int}).copy()
+ressub = (
+    resdf.query("taus == '(6, 1)' & upsamp < 5 & rand_seed == 2")
+    .astype({"upsamp": int})
+    .copy()
+)
 cmap = plt.get_cmap("tab10").colors
 palette = {
     "cnmf_smth": cmap[0],
@@ -282,7 +286,7 @@ g.map_dataframe(
     zorder={"cnmf_smth": 1, "cnmf_raw": 1, "solve_fit": 2, "solve_fit-all": 3},
     palette=palette,
     lw=0.4,
-    s=6,
+    s=5,
     annt_color=COLORS["annotation"],
 )
 g.add_legend()
