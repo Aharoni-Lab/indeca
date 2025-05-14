@@ -15,6 +15,12 @@ def make_svg_panel(label, im_path, param_text, im_scale=1, fix_mpl=True, sh=None
     lab = Text(label, **param_text)
     tsize = param_text["size"]
     if sh is None:
+        x_sh, y_sh = 0, 0
+    elif sh == "left":
+        x_sh, y_sh = 1 * tsize, 0
+    elif sh == "top":
+        x_sh, y_sh = 0, 1 * tsize
+    elif sh == "dodge":
         x_sh, y_sh = 0.6 * tsize, 1 * tsize
     else:
         x_sh, y_sh = sh
@@ -61,14 +67,18 @@ class GridSpec(Panel):
             edat = ele[0]
             row, col = ele[1]
             try:
-                ew, eh = ele[0].width, ele[0].height
-            except AttributeError:
-                edat = make_svg_panel(ename, edat, param_text)
-                ew, eh = edat.width, edat.height
-            try:
                 rspan, cspan = ele[2]
             except IndexError:
                 rspan, cspan = 1, 1
+            try:
+                sh = ele[3]
+            except IndexError:
+                sh = None
+            try:
+                ew, eh = ele[0].width, ele[0].height
+            except AttributeError:
+                edat = make_svg_panel(ename, edat, param_text, sh=sh)
+                ew, eh = edat.width, edat.height
             ele_df.append(
                 {
                     "name": ename,
@@ -77,6 +87,7 @@ class GridSpec(Panel):
                     "col": col,
                     "rowspan": rspan,
                     "colspan": cspan,
+                    "sh": sh,
                     "height": eh,
                     "width": ew,
                 }
