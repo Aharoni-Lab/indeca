@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Rectangle
 from testing_utils.compose import GridSpec
 from testing_utils.misc import load_agg_result
 from testing_utils.plotting import (
@@ -16,20 +17,48 @@ from testing_utils.plotting import (
 
 from minian_bin.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
 
+tab20c = plt.get_cmap("tab20c").colors
+dark2 = plt.get_cmap("Dark2").colors
+
 IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
 FIG_PATH_PN = Path(__file__).parent / "output" / "figs" / "print" / "panels"
 FIG_PATH_FIG = Path(__file__).parent / "output" / "figs" / "print" / "figures"
-COLORS = {"annotation": "#566573"}
+COLORS = {
+    "annotation": "#566573",
+    "annotation_maj": dark2[0],
+    "annotation_min": dark2[2],
+    "indeca_maj": tab20c[4],
+    "indeca_min": tab20c[6],
+    "indeca0": tab20c[4],
+    "indeca1": tab20c[5],
+    "indeca2": tab20c[6],
+    "indeca3": tab20c[7],
+    "cnmf_maj": tab20c[0],
+    "cnmf_min": tab20c[1],
+    "cnmf0": tab20c[0],
+    "cnmf1": tab20c[1],
+    "cnmf2": tab20c[2],
+    "cnmf3": tab20c[3],
+}
 PNLAB_PARAM = {"size": 11, "weight": "bold"}
-sns.set_theme(
-    context="paper",
-    style="darkgrid",
-    rc={
-        "xtick.major.pad": -2,
-        "ytick.major.pad": -2,
-        "text.latex.preamble": r"\usepackage{amsmath}",
-    },
-)
+RC_PARAM = {
+    "xtick.major.pad": -2,
+    "ytick.major.pad": -2,
+    "axes.labelpad": 1,
+    "text.latex.preamble": r"\usepackage{amsmath}",
+    "legend.frameon": True,
+    "legend.fancybox": True,
+    "legend.framealpha": 0.8,
+    "legend.facecolor": (
+        0.9176470588235294,
+        0.9176470588235294,
+        0.9490196078431372,
+    ),
+    "legend.edgecolor": (0.8, 0.8, 0.8),
+    "legend.borderaxespad": 0.5,
+    "legend.handletextpad": 0.8,
+}
+sns.set_theme(context="paper", style="darkgrid", rc=RC_PARAM)
 FIG_PATH_PN.mkdir(parents=True, exist_ok=True)
 FIG_PATH_FIG.mkdir(parents=True, exist_ok=True)
 
@@ -67,6 +96,11 @@ def upsamp_heatmap(data, color, **kwargs):
         .pivot(index="upsamp_y", columns="upsamp", values="f1")
     )
     sns.heatmap(data_pvt, ax=ax, **kwargs)
+    for i in range(len(data_pvt)):
+        rect = Rectangle(
+            (i, i), 1, 1, fill=False, edgecolor=COLORS["annotation"], linewidth=1
+        )
+        ax.add_patch(rect)
 
 
 fig_path = FIG_PATH_PN / "deconv-upsamp.svg"
@@ -85,14 +119,14 @@ g.map_dataframe(
 )
 g.set_xlabels("Upsampling $k$")
 g.set_ylabels("Data downsampling")
-g.set_titles(col_template="Noise level: {col_name}")
+g.set_titles(col_template="Noise (A.U.): {col_name}")
 fig = g.figure
 cbar_ax = fig.add_axes([0.95, 0.25, 0.02, 0.6])
 cm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=vmin, vmax=vmax))
 cbar = fig.colorbar(cm, cax=cbar_ax, ticks=[0.5, 0.75, 1.0])
-cbar.set_label("f1 Score", rotation=270, va="bottom")
+cbar.set_label("F1 score", rotation=270, va="bottom")
 cbar_ax.tick_params(size=0, pad=2)
-fig.tight_layout(rect=[0, 0, 0.95, 1])
+fig.tight_layout(rect=[0, 0, 0.98, 1])
 g.figure.savefig(fig_path, bbox_inches="tight")
 
 
@@ -113,7 +147,7 @@ def agg_result(
     # raw threshold results
     for th in samp_thres:
         th_idx = np.argmin((res_raw["thres"] - th).abs())
-        res_agg.append(sel_thres(res_raw, th_idx, "thres {:.2f}".format(th), met_cols))
+        res_agg.append(sel_thres(res_raw, th_idx, "Thres {:.2f}".format(th), met_cols))
     # opt threshold with scaling
     opt_idx_scl = res_nopn["opt_idx"].unique().item()
     res_agg.append(sel_thres(res_nopn, opt_idx_scl, "InDeCa", met_cols))
@@ -126,6 +160,12 @@ grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
 resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_penal").drop_duplicates()
 resagg = resdf.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
 ressub = resagg.query("tau_d == 6 & tau_r == 1").copy()
+palette = {
+    "Thres 0.25": COLORS["cnmf0"],
+    "Thres 0.50": COLORS["cnmf1"],
+    "Thres 0.75": COLORS["cnmf2"],
+    "InDeCa": COLORS["indeca_maj"],
+}
 g = plot_agg_boxswarm(
     ressub,
     row="upsamp",
@@ -133,15 +173,15 @@ g = plot_agg_boxswarm(
     x="label",
     y="f1",
     facet_kws={"height": 1.5, "aspect": 1.3, "margin_titles": True},
-    swarm_kws={"size": 3.5, "linewidth": 1},
-    box_kws={"fill": False},
+    swarm_kws={"size": 3.5, "linewidth": 1, "palette": palette},
+    box_kws={"width": 0.5, "fill": False, "palette": palette},
 )
 g.tick_params(axis="x", rotation=45)
 g.set_xlabels("")
-g.set_ylabels("f1 Score")
+g.set_ylabels("F1 score")
 g.set_titles(
     row_template="Upsampling $k$: {row_name}",
-    col_template="Noise level: {col_name}",
+    col_template="Noise (A.U.): {col_name}",
 )
 g.figure.tight_layout(h_pad=0.6, w_pad=0.4)
 g.figure.savefig(fig_path, bbox_inches="tight")
@@ -153,14 +193,14 @@ pns = {
     "C": (FIG_PATH_PN / "deconv-full.svg", (2, 0)),
 }
 fig = GridSpec(
-    param_text=PNLAB_PARAM, wsep=0, hsep=5, halign="left", valign="top", **pns
+    param_text=PNLAB_PARAM, wsep=0, hsep=0, halign="left", valign="top", **pns
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "deconv.svg")
 
 # %% ar-dhm
 fig_path = FIG_PATH_PN / "ar-dhm.svg"
-fig_w, fig_h = 6, 2
+fig_w, fig_h = 6.8, 2
 with sns.axes_style("white"):
     fig, axs = plt.subplots(1, 2, figsize=(fig_w, fig_h))
 end = 60
@@ -178,20 +218,24 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
     # plotting
     axs[iplt].plot(t_plt, exp_plt, lw=2, color="grey")
     axs[iplt].axvline(
-        t_max, lw=1.5, ls="--", color="grey", label="Maximum" if iplt == 0 else None
+        t_max,
+        lw=1.5,
+        ls="--",
+        color=COLORS["annotation"],
+        label="Maximum" if iplt == 0 else None,
     )
     axs[iplt].axvline(
         dhm0,
         lw=1.5,
         ls=":",
-        color="red",
+        color=COLORS["annotation_maj"],
         label=r"$\text{DHM}_r$" if iplt == 0 else None,
     )
     axs[iplt].axvline(
         dhm1,
         lw=1.5,
         ls=":",
-        color="blue",
+        color=COLORS["annotation_min"],
         label=r"$\text{DHM}_d$" if iplt == 0 else None,
     )
     axs[iplt].yaxis.set_visible(False)
@@ -229,7 +273,9 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
     )
     axs[iplt].set_xlabel("Timesteps")
 fig.tight_layout()
-fig.legend(loc="center left", bbox_to_anchor=(0.98, 0.5))
+fig.legend(
+    loc="center left", bbox_to_anchor=(1.01, 0.5), bbox_transform=axs[-1].transAxes
+)
 fig.savefig(fig_path, bbox_inches="tight")
 
 
@@ -265,20 +311,21 @@ ressub = (
     .astype({"upsamp": int})
     .copy()
 )
-cmap = plt.get_cmap("tab10").colors
 palette = {
-    "cnmf_smth": cmap[0],
-    "cnmf_raw": cmap[1],
-    "solve_fit": cmap[2],
-    "solve_fit-all": cmap[3],
+    "cnmf_smth": COLORS["cnmf_min"],
+    "cnmf_raw": COLORS["cnmf_maj"],
+    "solve_fit": COLORS["indeca_min"],
+    "solve_fit-all": COLORS["indeca_maj"],
 }
 lab_map = {
-    "cnmf_smth": "Direct /w \nSmoothing",
+    "cnmf_smth": "Direct /w \nsmoothing",
     "cnmf_raw": "Direct",
     "solve_fit": "InDeCa",
     "solve_fit-all": "InDeCa /w \nshared kernel",
 }
-g = sns.FacetGrid(ressub, row="upsamp", col="ns_lev", height=1.5, margin_titles=True)
+g = sns.FacetGrid(
+    ressub, row="upsamp", col="ns_lev", height=1.5, aspect=1.15, margin_titles=True
+)
 g.map_dataframe(
     AR_scatter,
     x="dhm0",
@@ -286,15 +333,25 @@ g.map_dataframe(
     zorder={"cnmf_smth": 1, "cnmf_raw": 1, "solve_fit": 2, "solve_fit-all": 3},
     palette=palette,
     lw=0.4,
-    s=5,
+    s=4.5,
     annt_color=COLORS["annotation"],
 )
-g.add_legend()
-g.set_xlabels(r"$\text{DHM}_r$")
-g.set_ylabels(r"$\text{DHM}_d$")
+g.add_legend(
+    handletextpad=RC_PARAM["legend.handletextpad"],
+    borderaxespad=RC_PARAM["legend.borderaxespad"],
+    handlelength=0.2,
+    facecolor=RC_PARAM["legend.facecolor"],
+    edgecolor=RC_PARAM["legend.edgecolor"],
+    frameon=RC_PARAM["legend.frameon"],
+    fancybox=RC_PARAM["legend.fancybox"],
+    framealpha=RC_PARAM["legend.framealpha"],
+    bbox_to_anchor=(1.02, 0.5),
+)
+g.set_xlabels(r"$\text{DHM}_r$ (timesteps)")
+g.set_ylabels(r"$\text{DHM}_d$" + "\n(timesteps)")
 g.set_titles(
-    row_template="Upsampling $k$ = {row_name}",
-    col_template="Noise level: {col_name}",
+    row_template="Upsampling $k$: {row_name}",
+    col_template="Noise level (A.U.): {col_name}",
 )
 for lab in g._legend.texts:
     lab.set_text(lab_map[lab.get_text()])
@@ -302,18 +359,20 @@ g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make ar figure
 pns = {
-    "A": (FIG_PATH_PN / "ar-dhm.svg", (0, 0)),
+    "A": (FIG_PATH_PN / "ar-dhm.svg", (0, 0), (1, 1), "left"),
     "B": (FIG_PATH_PN / "ar-full.svg", (1, 0)),
 }
 fig = GridSpec(
-    param_text=PNLAB_PARAM, wsep=0, hsep=5, halign="left", valign="top", **pns
+    param_text=PNLAB_PARAM, wsep=0, hsep=0, halign="left", valign="top", **pns
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "ar.svg")
 
 
 # %% make pipeline-iter figure
-def plot_iter(data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dict()):
+def plot_iter(
+    data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dict(), palette=None
+):
     ax = plt.gca()
     mthd = data["method"].unique().item()
     met = data["metric"].unique().item()
@@ -326,7 +385,7 @@ def plot_iter(data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dic
             x="iter",
             y="value",
             ax=ax,
-            color=color,
+            color=color if palette is None else palette["indeca-ind"],
             edgecolor="auto",
             warn_thresh=0.9,
             **swarm_kws,
@@ -336,7 +395,7 @@ def plot_iter(data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dic
             x="iter",
             y="value",
             ax=ax,
-            color=color,
+            color=color if palette is None else palette["indeca-shared"],
             estimator=None,
             errorbar=None,
             units="unit_id",
@@ -353,7 +412,7 @@ def plot_iter(data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dic
             data,
             y="value",
             ax=ax,
-            color=color,
+            color=color if palette is None else palette["cnmf"],
             edgecolor="auto",
             warn_thresh=0.9,
             **swarm_kws,
@@ -361,14 +420,16 @@ def plot_iter(data, color, label, swarm_kws=dict(), line_kws=dict(), box_kws=dic
         sns.boxplot(
             data,
             y="value",
-            color=color,
+            color=color if palette is None else palette["cnmf"],
             ax=ax,
             fill=False,
             showfliers=False,
             **box_kws,
         )
         ax.set_xlabel("Final output")
-        ax.set_ylabel({"dhm0": r"$\text{DHM}_r$", "dhm1": r"$\text{DHM}_d$"}[met])
+        ax.set_ylabel(
+            {"dhm0": r"$\text{DHM}_r$ (sec)", "dhm1": r"$\text{DHM}_d$ (sec)"}[met]
+        )
 
 
 fig_path = FIG_PATH_PN / "pipeline-iter.svg"
@@ -403,13 +464,22 @@ ressub = resdf.query(
     "ncell == 'None' & method != 'gt'"
     "& tau_init == 'None' & iter != 10 & metric != 'f1'"
 ).copy()
-row_lab_map = {"f1": "f1 Score", "dhm0": r"$\text{DHM}_r$", "dhm1": r"$\text{DHM}_d$"}
-col_lab_map = {"cnmf": "Vanilla CNMF", "minian-bin": "InDeCa"}
+row_lab_map = {
+    "f1": "f1 Score",
+    "dhm0": r"$\text{DHM}_r$",
+    "dhm1": r"$\text{DHM}_d$",
+}
+col_lab_map = {"cnmf": "CNMF", "minian-bin": "InDeCa"}
 leg_handles = dict()
 ressub["row_lab"] = ressub["metric"].map(row_lab_map)
 ressub["col_lab"] = ressub["method"].map(col_lab_map)
 row_ord = [row_lab_map[r] for r in ["dhm0", "dhm1"]]
 col_ord = [col_lab_map[c] for c in ["cnmf", "minian-bin"]]
+palette = {
+    "cnmf": COLORS["cnmf_maj"],
+    "indeca-ind": COLORS["indeca_min"],
+    "indeca-shared": COLORS["indeca_maj"],
+}
 g = sns.FacetGrid(
     ressub,
     height=1.3,
@@ -426,7 +496,10 @@ g = sns.FacetGrid(
     gridspec_kws={"width_ratios": [1, 4]},
 )
 g.map_dataframe(
-    plot_iter, swarm_kws={"s": 3.5, "linewidth": 0.8}, box_kws={"width": 0.4}
+    plot_iter,
+    swarm_kws={"s": 3, "linewidth": 0.6},
+    box_kws={"width": 0.4},
+    palette=palette,
 )
 g.set_titles(row_template="", col_template="{col_name}")
 for ax in g.axes.flat:
@@ -452,15 +525,15 @@ fig.savefig(fig_path, bbox_inches="tight")
 # %% make pipeline-comp figure
 def xlab(row):
     if row["method"] == "cnmf":
-        return "CNMF\nThreshold\n{}".format(row["qthres"])
+        return "CNMF\nthreshold\n{}".format(row["qthres"])
     else:
         lab = "InDeCa"
         if row["use_all"]:
-            lab += " /w\nShared\nkernel"
+            lab += " /w\nshared\nkernel"
         else:
-            lab += " /w\nIndependent\nkernel"
+            lab += " /w\nindependent\nkernel"
         if row["tau_init"] != "None":
-            lab += "\n+\nInitial\nconstants"
+            lab += "\n+\ninitial\nconstants"
         return lab
 
 
@@ -497,15 +570,36 @@ ressub = resdf.query(
 ).copy()
 ressub["xlab"] = ressub.apply(xlab, axis="columns")
 ressub = ressub.sort_values("xlab")
+palette = {
+    "CNMF\nthreshold\n0.25": COLORS["cnmf0"],
+    "CNMF\nthreshold\n0.5": COLORS["cnmf1"],
+    "CNMF\nthreshold\n0.75": COLORS["cnmf2"],
+    "InDeCa /w\nindependent\nkernel": COLORS["indeca_min"],
+    "InDeCa /w\nshared\nkernel": COLORS["indeca_maj"],
+}
 fig, ax = plt.subplots(figsize=(6.4, 2))
 ax = sns.boxplot(
-    ressub, x="xlab", y="value", hue="xlab", width=0.5, fill=False, showfliers=False
+    ressub,
+    x="xlab",
+    y="value",
+    hue="xlab",
+    width=0.5,
+    fill=False,
+    palette=palette,
+    showfliers=False,
 )
 ax = sns.swarmplot(
-    ressub, x="xlab", y="value", hue="xlab", edgecolor="auto", linewidth=1, s=4
+    ressub,
+    x="xlab",
+    y="value",
+    hue="xlab",
+    edgecolor="auto",
+    palette=palette,
+    linewidth=1,
+    s=4,
 )
 ax.set_xlabel("")
-ax.set_ylabel("f1 Score")
+ax.set_ylabel("F1 score")
 fig.savefig(fig_path, bbox_inches="tight")
 
 # %% make pipeline figure

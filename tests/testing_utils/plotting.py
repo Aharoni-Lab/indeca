@@ -114,8 +114,8 @@ def plot_met_ROC_thres(
             ax_err.set_xticklabels([])
             ax_err.set_xlabel("")
         else:
-            ax_err.set_xlabel("Threshold")
-        ax_err.set_ylabel("Error")
+            ax_err.set_xlabel("Threshold (A.U)")
+        ax_err.set_ylabel("Error\n(A.U.)")
         if grad_color:
             ax_err.plot(th, grpdf["objs"], alpha=0)
             colored_line(x=th, y=grpdf["objs"], c=th, ax=ax_err, linewidths=lw)
@@ -127,8 +127,8 @@ def plot_met_ROC_thres(
             ax_scl.set_xticklabels([])
             ax_scl.set_xlabel("")
         else:
-            ax_scl.set_xlabel("Threshold")
-        ax_scl.set_ylabel("Scale")
+            ax_scl.set_xlabel("Threshold (A.U)")
+        ax_scl.set_ylabel("Scale\n(A.U.)")
         if grad_color:
             ax_scl.plot(th, grpdf["scals"], alpha=0)
             colored_line(x=th, y=grpdf["scals"], c=th, ax=ax_scl, linewidths=lw)
@@ -136,8 +136,8 @@ def plot_met_ROC_thres(
             ax_scl.plot(th, grpdf["scals"], ls=cur_ls)
         if oidx is not None:
             ax_scl.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
-        ax_f1.set_xlabel("Threshold")
-        ax_f1.set_ylabel("f1 Score")
+        ax_f1.set_xlabel("Threshold (A.U)")
+        ax_f1.set_ylabel("F1\nscore")
         if grad_color:
             ax_f1.plot(th, grpdf["f1"], alpha=0)
             colored_line(x=th, y=grpdf["f1"], c=th, ax=ax_f1, linewidths=lw)
@@ -147,6 +147,7 @@ def plot_met_ROC_thres(
             ax_f1.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
         ax_roc.set_xlabel("Precision")
         ax_roc.set_ylabel("Recall")
+        ax_roc.plot([1.05], [1.05], alpha=0)  # extend datalim
         if grad_color:
             ax_roc.plot(grpdf["prec"], grpdf["recall"], alpha=0)
             colored_line(
@@ -232,7 +233,6 @@ def plot_agg_boxswarm(
         y=y,
         hue=hue,
         showfliers=False,
-        palette="tab10",
         **box_kws,
     )
     g.map_dataframe(
@@ -240,7 +240,6 @@ def plot_agg_boxswarm(
         x=x,
         y=y,
         hue=hue,
-        palette="tab10",
         edgecolor="auto",
         warn_thresh=0.9,
         **swarm_kws,
