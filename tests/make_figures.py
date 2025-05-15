@@ -10,6 +10,7 @@ from matplotlib.patches import Rectangle
 from testing_utils.compose import GridSpec
 from testing_utils.misc import load_agg_result
 from testing_utils.plotting import (
+    agg_annot_group,
     plot_agg_boxswarm,
     plot_met_ROC_thres,
     plot_pipeline_iter,
@@ -173,8 +174,9 @@ g = plot_agg_boxswarm(
     x="label",
     y="f1",
     facet_kws={"height": 1.5, "aspect": 1.3, "margin_titles": True},
-    swarm_kws={"size": 3.5, "linewidth": 1, "palette": palette},
+    swarm_kws={"size": 3, "linewidth": 0.8, "palette": palette},
     box_kws={"width": 0.5, "fill": False, "palette": palette},
+    annt_group={"InDeCa": ["Thres 0.25", "Thres 0.50", "Thres 0.75"]},
 )
 g.tick_params(axis="x", rotation=45)
 g.set_xlabels("")
@@ -183,7 +185,7 @@ g.set_titles(
     row_template="Upsampling $k$: {row_name}",
     col_template="Noise (A.U.): {col_name}",
 )
-g.figure.tight_layout(h_pad=0.6, w_pad=0.4)
+g.figure.tight_layout(h_pad=0.3, w_pad=0.4)
 g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make deconv figure
@@ -597,6 +599,23 @@ ax = sns.swarmplot(
     palette=palette,
     linewidth=1,
     s=4,
+)
+agg_annot_group(
+    ressub,
+    x="xlab",
+    y="value",
+    group={
+        "InDeCa /w\nindependent\nkernel": [
+            "CNMF\nthreshold\n0.25",
+            "CNMF\nthreshold\n0.5",
+            "CNMF\nthreshold\n0.75",
+        ],
+        "InDeCa /w\nshared\nkernel": [
+            "CNMF\nthreshold\n0.25",
+            "CNMF\nthreshold\n0.5",
+            "CNMF\nthreshold\n0.75",
+        ],
+    },
 )
 ax.set_xlabel("")
 ax.set_ylabel("F1 score")
