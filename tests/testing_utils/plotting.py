@@ -3,6 +3,7 @@ import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import seaborn as sns
 from matplotlib.collections import LineCollection
@@ -267,12 +268,24 @@ def agg_annot_group(data, group, x, y, color=None):
     ax = plt.gca()
     for xlabA, Blabs in group.items():
         datA = data.loc[data[x] == xlabA, y]
-        pval = np.nan
+        pval_df = []
         for xlabB in Blabs:
             datB = data.loc[data[x] == xlabB, y]
             res = wilcoxon(datA, datB)
-            if np.isnan(pval) or res.pvalue > pval:
-                pval = res.pvalue
+            pval_df.append(
+                pd.DataFrame(
+                    [
+                        {
+                            "labA": xlabA,
+                            "labB": xlabB,
+                            "stat": res.statistic,
+                            "pval": res.pvalue,
+                        }
+                    ]
+                )
+            )
+        pval_df = pd.concat(pval_df)
+        pval = pval_df["pval"].max()
         y_sh = 0.08
         if pval < 1e-4:
             text = "****"
