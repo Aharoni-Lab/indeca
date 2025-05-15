@@ -5,7 +5,7 @@
 groups = ["default", "pytest-xdist[psutil]", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:ff0e858078efe8da82d78b9c2a65abe263f629c25d4b102e1138979261f26051"
+content_hash = "sha256:67df821ca5a68692ae4f66f1a8e9a47a555d3c6673f1487b49ba6ad7118e9654"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -1800,6 +1800,23 @@ dependencies = [
 files = [
     {file = "sparse-0.15.5-py2.py3-none-any.whl", hash = "sha256:cf608731f8564916443427bca323fe118e8c25a712ddf02dbe7673a961139706"},
     {file = "sparse-0.15.5.tar.gz", hash = "sha256:4c76ce0c96f5cd5c31b7e79e650f0022424c2b16f05f10049e9c6381ee4be266"},
+]
+
+[[package]]
+name = "statannotations"
+version = "0.7.2"
+requires_python = ">=3.8"
+summary = "add statistical significance or custom annotations on seaborn plots. Based on statannot 0.2.3"
+dependencies = [
+    "matplotlib>=2.2.2",
+    "numpy>=1.12.1",
+    "pandas>=0.23.0",
+    "scipy>=1.1.0",
+    "seaborn>=0.9.0",
+]
+files = [
+    {file = "statannotations-0.7.2-py3-none-any.whl", hash = "sha256:61cd63c9bcdffe37dad30bb2a33aa6aa03f28df9636eda8deae1548f91be8580"},
+    {file = "statannotations-0.7.2.tar.gz", hash = "sha256:a93e428682d66c9fca5a399d5bd3fe7c9cef0500f53840c6f5362526b4501e93"},
 ]
 
 [[package]]
