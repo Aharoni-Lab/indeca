@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 import seaborn as sns
 from matplotlib.collections import LineCollection
 from matplotlib.gridspec import GridSpec
+from scipy.stats import wilcoxon
+from statannotations.Annotator import Annotator
 
 
 def plot_traces(tr_dict, **kwargs):
@@ -223,6 +225,8 @@ def plot_agg_boxswarm(
     facet_kws=dict(),
     box_kws={"saturation": 0.5},
     swarm_kws={"size": 5, "linewidth": 1.2},
+    annt_pairs=None,
+    annt_group=None,
 ):
     if hue is None:
         hue = x
@@ -244,8 +248,52 @@ def plot_agg_boxswarm(
         warn_thresh=0.9,
         **swarm_kws,
     )
+    if annt_pairs is not None:
+        g.map_dataframe(agg_annot, x=x, y=y, pairs=annt_pairs)
+    if annt_group is not None:
+        g.map_dataframe(agg_annot_group, x=x, y=y, group=annt_group)
     g.tight_layout()
     return g
+
+
+def agg_annot(data, pairs, x, y, color=None, **kwargs):
+    ax = plt.gca()
+    annt = Annotator(ax, pairs, data=data, x=x, y=y)
+    annt.configure(test="Wilcoxon", text_format="star", loc="outside", line_width=0)
+    annt.apply_and_annotate()
+
+
+def agg_annot_group(data, group, x, y, color=None):
+    ax = plt.gca()
+    for xlabA, Blabs in group.items():
+        datA = data.loc[data[x] == xlabA, y]
+        pval = np.nan
+        for xlabB in Blabs:
+            datB = data.loc[data[x] == xlabB, y]
+            res = wilcoxon(datA, datB)
+            if np.isnan(pval) or res.pvalue > pval:
+                pval = res.pvalue
+        y_sh = 0.08
+        if pval < 1e-4:
+            text = "****"
+        elif pval < 1e-3:
+            text = "***"
+        elif pval < 1e-2:
+            text = "**"
+        elif pval < 5e-2:
+            text = "*"
+        else:
+            text = "ns"
+            y_sh = 0.04
+        yloc = datA.max() * 1.15
+        ax.plot([xlabA], [yloc], alpha=0)
+        ax.text(
+            x=xlabA,
+            y=yloc - y_sh * datA.max(),
+            s=text,
+            ha="center",
+            va="center",
+        )
 
 
 def plot_pipeline_iter(
