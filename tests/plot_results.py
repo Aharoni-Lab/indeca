@@ -9,8 +9,8 @@ import seaborn as sns
 from testing_utils.misc import load_agg_result
 from testing_utils.plotting import plot_agg_boxswarm, plot_pipeline_iter
 
-IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg_results"
-FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
+IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
+FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg"
 
 
 # %% plot pipeline realds results

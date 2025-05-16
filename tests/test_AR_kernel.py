@@ -90,6 +90,7 @@ class TestDemoSolveFit:
             )
             tau_fit = -1 / lams / upsamp
             dhm_fit, _ = find_dhm(True, tau_fit, ps)
+            assert dhm_fit[0] > 0 and dhm_fit[1] > 0
             res_df.append(
                 pd.DataFrame(
                     [

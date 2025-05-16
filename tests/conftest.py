@@ -16,7 +16,7 @@ from minian_bin.simulation import AR2tau, ar_trace, tau2AR
 from .testing_utils.io import download_realds, load_gt_ds
 from .testing_utils.misc import get_upsamp_scale
 
-AGG_RES_DIR = "tests/output/data/agg_results"
+AGG_RES_DIR = "tests/output/data/agg"
 TEST_DATA_DIR = "tests/data"
 
 
@@ -46,7 +46,7 @@ def output_data_dir(request):
 @pytest.fixture
 def func_figs_dir(request, output_figs_dir):
     test_func = request.function.__name__
-    fig_dir = os.path.join(output_figs_dir, test_func)
+    fig_dir = os.path.join(output_figs_dir, "func", test_func)
     os.makedirs(fig_dir, exist_ok=True)
     return fig_dir
 
@@ -54,7 +54,7 @@ def func_figs_dir(request, output_figs_dir):
 @pytest.fixture
 def func_data_dir(request, output_data_dir):
     test_func = request.function.__name__
-    dat_dir = os.path.join(output_data_dir, "debug_results", test_func)
+    dat_dir = os.path.join(output_data_dir, "func", test_func)
     os.makedirs(dat_dir, exist_ok=True)
     return dat_dir
 

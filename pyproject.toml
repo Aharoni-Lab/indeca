@@ -55,6 +55,8 @@ test = [
     "pytest-repeat>=0.9.3",
     "pytest-harvest>=1.10.5",
     "pytest-runtime-xfail>=1.0.3",
+    "svgutils>=0.3.4",
+    "statannotations>=0.7.2",
 ]
 
 [tool.black]

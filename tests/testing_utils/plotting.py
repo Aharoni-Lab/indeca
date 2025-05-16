@@ -3,10 +3,13 @@ import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import seaborn as sns
 from matplotlib.collections import LineCollection
 from matplotlib.gridspec import GridSpec
+from scipy.stats import wilcoxon
+from statannotations.Annotator import Annotator
 
 
 def plot_traces(tr_dict, **kwargs):
@@ -79,17 +82,28 @@ def colored_line(x, y, c, ax, **lc_kwargs):
     return ax.add_collection(lc)
 
 
-def plot_met_ROC_thres(metdf, grad_color: bool = True):
+def plot_met_ROC_thres(
+    metdf,
+    grad_color: bool = True,
+    fig=None,
+    lw=2,
+    grid_kws=dict(),
+    trim_xlabs=True,
+    log_err=True,
+    annt_color="gray",
+    annt_lw=1,
+):
     if "group" not in metdf.columns:
         metdf["group"] = ""
-    fig = plt.figure(constrained_layout=True, figsize=(8, 4))
-    gs = GridSpec(3, 2, figure=fig)
+    if fig is None:
+        fig = plt.figure(constrained_layout=True, figsize=(8, 4))
+    gs = GridSpec(3, 2, figure=fig, **grid_kws)
     ax_err = fig.add_subplot(gs[0, 0])
     ax_scl = fig.add_subplot(gs[1, 0])
     ax_f1 = fig.add_subplot(gs[2, 0])
     ax_roc = fig.add_subplot(gs[:, 1])
-    ax_roc.invert_xaxis()
-    lw = 2
+    ax_roc = move_yax_right(ax_roc)
+    ax_roc.set_aspect("equal", adjustable="datalim")
     ls = ["solid"] if grad_color else ["dotted", "dashed", "dashdot"]
     for (grp, grpdf), cur_ls in zip(metdf.groupby("group"), itt.cycle(ls)):
         try:
@@ -97,36 +111,46 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
         except ValueError:
             oidx = None
         th = np.array(grpdf["thres"])
-        ax_err.set_yscale("log")
-        ax_err.set_xlabel("Threshold")
-        ax_err.set_ylabel("Error")
+        if log_err:
+            ax_err.set_yscale("log")
+        if trim_xlabs:
+            ax_err.set_xticklabels([])
+            ax_err.set_xlabel("")
+        else:
+            ax_err.set_xlabel("Threshold (A.U)")
+        ax_err.set_ylabel("Error\n(A.U.)")
         if grad_color:
             ax_err.plot(th, grpdf["objs"], alpha=0)
             colored_line(x=th, y=grpdf["objs"], c=th, ax=ax_err, linewidths=lw)
         else:
             ax_err.plot(th, grpdf["objs"], ls=cur_ls)
         if oidx is not None:
-            ax_err.axvline(th[oidx], ls="dotted", color="gray")
-        ax_scl.set_xlabel("Threshold")
-        ax_scl.set_ylabel("Scale")
+            ax_err.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
+        if trim_xlabs:
+            ax_scl.set_xticklabels([])
+            ax_scl.set_xlabel("")
+        else:
+            ax_scl.set_xlabel("Threshold (A.U)")
+        ax_scl.set_ylabel("Scale\n(A.U.)")
         if grad_color:
             ax_scl.plot(th, grpdf["scals"], alpha=0)
             colored_line(x=th, y=grpdf["scals"], c=th, ax=ax_scl, linewidths=lw)
         else:
             ax_scl.plot(th, grpdf["scals"], ls=cur_ls)
         if oidx is not None:
-            ax_scl.axvline(th[oidx], ls="dotted", color="gray")
-        ax_f1.set_xlabel("Threshold")
-        ax_f1.set_ylabel("f1 Score")
+            ax_scl.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
+        ax_f1.set_xlabel("Threshold (A.U)")
+        ax_f1.set_ylabel("F1\nscore")
         if grad_color:
             ax_f1.plot(th, grpdf["f1"], alpha=0)
             colored_line(x=th, y=grpdf["f1"], c=th, ax=ax_f1, linewidths=lw)
         else:
             ax_f1.plot(th, grpdf["f1"], ls=cur_ls)
         if oidx is not None:
-            ax_f1.axvline(th[oidx], ls="dotted", color="gray")
+            ax_f1.axvline(th[oidx], ls="dotted", lw=annt_lw, color=annt_color)
         ax_roc.set_xlabel("Precision")
         ax_roc.set_ylabel("Recall")
+        ax_roc.plot([1.05], [1.05], alpha=0)  # extend datalim
         if grad_color:
             ax_roc.plot(grpdf["prec"], grpdf["recall"], alpha=0)
             colored_line(
@@ -139,10 +163,12 @@ def plot_met_ROC_thres(metdf, grad_color: bool = True):
                 grpdf["prec"].iloc[oidx],
                 grpdf["recall"].iloc[oidx],
                 marker="x",
-                color="gray",
-                markersize=15,
+                color=annt_color,
+                lw=annt_lw,
+                markersize=12,
             )
-    fig.legend()
+    if metdf["group"].nunique() > 1:
+        fig.legend()
     return fig
 
 
@@ -191,7 +217,17 @@ def plot_met_ROC_scale(metdf, iterdf, opt_scale, grad_color: bool = True):
 
 
 def plot_agg_boxswarm(
-    dat, row, col, x, y, hue=None, facet_kws=dict(), box_kws=dict(), swarm_kws=dict()
+    dat,
+    row,
+    col,
+    x,
+    y,
+    hue=None,
+    facet_kws=dict(),
+    box_kws={"saturation": 0.5},
+    swarm_kws={"size": 5, "linewidth": 1.2},
+    annt_pairs=None,
+    annt_group=None,
 ):
     if hue is None:
         hue = x
@@ -201,9 +237,7 @@ def plot_agg_boxswarm(
         x=x,
         y=y,
         hue=hue,
-        saturation=0.5,
         showfliers=False,
-        palette="tab10",
         **box_kws,
     )
     g.map_dataframe(
@@ -212,17 +246,79 @@ def plot_agg_boxswarm(
         y=y,
         hue=hue,
         edgecolor="auto",
-        palette="tab10",
-        size=5,
-        linewidth=1.2,
         warn_thresh=0.9,
         **swarm_kws,
     )
+    if annt_pairs is not None:
+        g.map_dataframe(agg_annot, x=x, y=y, pairs=annt_pairs)
+    if annt_group is not None:
+        g.map_dataframe(agg_annot_group, x=x, y=y, group=annt_group)
     g.tight_layout()
     return g
 
 
-def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwargs):
+def agg_annot(data, pairs, x, y, color=None, **kwargs):
+    ax = plt.gca()
+    annt = Annotator(ax, pairs, data=data, x=x, y=y)
+    annt.configure(test="Wilcoxon", text_format="star", loc="outside", line_width=0)
+    annt.apply_and_annotate()
+
+
+def agg_annot_group(data, group, x, y, color=None):
+    ax = plt.gca()
+    for xlabA, Blabs in group.items():
+        datA = data.loc[data[x] == xlabA, y]
+        pval_df = []
+        for xlabB in Blabs:
+            datB = data.loc[data[x] == xlabB, y]
+            res = wilcoxon(datA, datB)
+            pval_df.append(
+                pd.DataFrame(
+                    [
+                        {
+                            "labA": xlabA,
+                            "labB": xlabB,
+                            "stat": res.statistic,
+                            "pval": res.pvalue,
+                        }
+                    ]
+                )
+            )
+        pval_df = pd.concat(pval_df)
+        pval = pval_df["pval"].max()
+        y_sh = 0.08
+        if pval < 1e-4:
+            text = "****"
+        elif pval < 1e-3:
+            text = "***"
+        elif pval < 1e-2:
+            text = "**"
+        elif pval < 5e-2:
+            text = "*"
+        else:
+            text = "ns"
+            y_sh = 0.04
+        yloc = datA.max() * 1.15
+        ax.plot([xlabA], [yloc], alpha=0)
+        ax.text(
+            x=xlabA,
+            y=yloc - y_sh * datA.max(),
+            s=text,
+            ha="center",
+            va="center",
+        )
+
+
+def plot_pipeline_iter(
+    data,
+    color,
+    dhm0=None,
+    dhm1=None,
+    aggregate=True,
+    swarm_kws={"linewidth": 1},
+    box_kws=dict(),
+    **kwargs,
+):
     ax = plt.gca()
     mthd = data["method"].unique().item()
     met = data["metric"].unique().item()
@@ -236,6 +332,7 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
     elif aggregate and use_all:
         data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
     if mthd == "minian-bin":
+        data = data.astype({"iter": int})
         sns.swarmplot(
             data,
             x="iter",
@@ -243,12 +340,15 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
             ax=ax,
             color=color,
             edgecolor="auto",
-            warn_thresh=0.8,
-            linewidth=1,
-            **kwargs,
+            warn_thresh=0.9,
+            **swarm_kws,
         )
         sns.lineplot(data, x="iter", y="value", ax=ax, color=color, **kwargs)
+        ax.set_xlabel("Iteration")
     elif mthd == "cnmf":
+        data = data.astype({"qthres": float})
+        if met != "f1":
+            data["value"] = data["value"].where(data["qthres"] == 0.5)
         sns.swarmplot(
             data,
             x="qthres",
@@ -256,10 +356,28 @@ def plot_pipeline_iter(data, color, dhm0=None, dhm1=None, aggregate=True, **kwar
             ax=ax,
             color=color,
             edgecolor="auto",
-            warn_thresh=0.8,
-            linewidth=1,
-            **kwargs,
+            warn_thresh=0.9,
+            **swarm_kws,
         )
         sns.boxplot(
-            data, x="qthres", y="value", color=color, saturation=0.5, ax=ax, **kwargs
+            data,
+            x="qthres",
+            y="value",
+            color=color,
+            ax=ax,
+            fill=False,
+            showfliers=False,
+            **box_kws,
         )
+        ax.set_xlabel("Threshold (quantile)")
+
+
+def move_yax_right(ax):
+    # ax.yaxis.tick_right()
+    ax.yaxis.set_tick_params(labelright=True, labelleft=False)
+    ax.yaxis.set_label_position("right")
+    ax.yaxis.label.set_rotation(270)
+    ax.yaxis.label.set_verticalalignment("bottom")
+    ax.spines["right"].set_position(("outward", 0))
+    ax.spines["right"].set_visible(True)
+    return ax

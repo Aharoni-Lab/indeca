@@ -90,9 +90,19 @@ class TestDeconvBin:
         assert np.isclose(s_org, s_msk, atol=eq_atol).all()
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
-    @pytest.mark.parametrize("rand_seed", np.arange(3))
-    @pytest.mark.parametrize("upsamp", [1, 2, 5])
-    @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
+    @pytest.mark.parametrize(
+        "rand_seed",
+        list(range(3))
+        + [pytest.param(i, marks=pytest.mark.slow) for i in range(3, 15)],
+    )
+    @pytest.mark.parametrize(
+        "upsamp",
+        [1, 2, 3] + [pytest.param(i, marks=pytest.mark.slow) for i in range(4, 11)],
+    )
+    @pytest.mark.parametrize(
+        "upsamp_y",
+        [1, 2, 3] + [pytest.param(i, marks=pytest.mark.slow) for i in range(4, 11)],
+    )
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
     def test_solve_thres(
         self, taus, rand_seed, upsamp, upsamp_y, ns_lev, test_fig_path_html, results_bag
@@ -106,12 +116,12 @@ class TestDeconvBin:
             ns_lev=ns_lev,
         )
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
-            scaling=False, return_intm=True
+            scaling=False, return_intm=True, pks_polish=True
         )
         s_direct = intm[0]
         s_bin = s_bin.astype(float)
         mdist, f1, precs, recall = assignment_distance(
-            s_ref=s_org, s_slv=s_bin, tdist_thres=5
+            s_ref=s_org, s_slv=s_bin, tdist_thres=5, include_range=(0, len(s_org) - 5)
         )
         # plotting
         fig = go.Figure()
@@ -232,8 +242,8 @@ class TestDeconvBin:
             penal=penalty,
             err_weighting=err_weighting,
         )
-        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
-            return_met=True, obj_crit=obj_crit
+        opt_s, opt_c, cur_scl, cur_obj, err_rel, nnz, cur_penal, iterdf = (
+            deconv.solve_scale(return_met=True, obj_crit=obj_crit)
         )
         deconv.update(update_weighting=True)
         err_wt = deconv.err_wt.squeeze()
@@ -301,6 +311,7 @@ class TestDemoDeconv:
         ns_lev,
         thres_scaling,
         test_fig_path_svg,
+        results_bag,
     ):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
@@ -310,13 +321,15 @@ class TestDemoDeconv:
             scaling=thres_scaling, return_intm=True
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
-        # plotting
+        # save results
         metdf = compute_metrics(
             s_org,
             svals,
             {"objs": objs, "scals": scals, "thres": thres, "opt_idx": opt_idx},
             tdist_thres=3,
         )
+        results_bag.data = metdf
+        # plotting
         fig = plot_met_ROC_thres(metdf)
         fig.savefig(test_fig_path_svg)
 

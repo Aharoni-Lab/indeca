@@ -41,7 +41,7 @@ def pipeline_bin(
     deconv_reset_scl=True,
     ar_use_all=True,
     ar_kn_len=100,
-    ar_norm="l1",
+    ar_norm="l2",
     da_client=None,
     spawn_dashboard=True,
 ):

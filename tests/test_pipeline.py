@@ -94,7 +94,10 @@ class TestPipeline:
         for uid in range(Y.shape[0]):
             for i_iter, sbin in enumerate(S_bin_iter):
                 sb = sbin[uid, :]
-                tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+                try:
+                    tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+                except KeyError:
+                    tau_d, tau_r = np.nan, np.nan
                 try:
                     (dhm0, dhm1), _ = find_dhm(
                         True, np.array([tau_d, tau_r]) / upsamp, np.array([1, -1])
@@ -161,7 +164,6 @@ class TestPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
-            tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
             fig.add_traces(
                 plot_traces(
                     {
