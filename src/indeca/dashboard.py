@@ -47,7 +47,7 @@ class Dashboard:
         self._make_pane_cells()
         self._make_pane_iters()
         self.pn_main = pn.Column(self.pn_iters, self.pn_cells)
-        self.dash = pn.template.MaterialTemplate(title="Minian-bin Dashboard")
+        self.dash = pn.template.MaterialTemplate(title="indeca Dashboard")
         self.dash.main.append(self.pn_main)
         self.sv = pn.serve(self.dash, port=port, threaded=True)
 

@@ -331,7 +331,7 @@ def plot_pipeline_iter(
         data = data.groupby(["qthres", "test_id"])["value"].median().reset_index()
     elif aggregate and use_all:
         data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
-    if mthd == "minian-bin":
+    if mthd == "indeca":
         data = data.astype({"iter": int})
         sns.swarmplot(
             data,

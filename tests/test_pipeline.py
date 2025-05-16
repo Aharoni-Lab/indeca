@@ -7,8 +7,8 @@ import pytest
 import xarray as xr
 from plotly.subplots import make_subplots
 
-from minian_bin.pipeline import pipeline_bin
-from minian_bin.simulation import find_dhm
+from indeca.pipeline import pipeline_bin
+from indeca.simulation import find_dhm
 
 from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
@@ -111,7 +111,7 @@ class TestPipeline:
                     pd.DataFrame(
                         [
                             {
-                                "method": "minian-bin",
+                                "method": "indeca",
                                 "unit_id": uid,
                                 "iter": i_iter,
                                 "mdist": mdist,
@@ -182,7 +182,7 @@ class TestPipeline:
         # assertion
         if ns_lev == 0:
             f1_last = res_df.set_index(["method", "iter"]).loc[
-                ("minian-bin", niter - 1), "f1"
+                ("indeca", niter - 1), "f1"
             ]
             assert f1_last.min() == 1
 
@@ -275,7 +275,7 @@ class TestDemoPipeline:
                     pd.DataFrame(
                         [
                             {
-                                "method": "minian-bin",
+                                "method": "indeca",
                                 "use_all": ar_use_all,
                                 "unit_id": uid,
                                 "iter": i_iter,

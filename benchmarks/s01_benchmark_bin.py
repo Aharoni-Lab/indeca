@@ -7,7 +7,6 @@ import plotly.express as px
 import seaborn as sns
 import xarray as xr
 from distributed import LocalCluster
-from tests.testing_utils.cnmf import solve_deconv
 from routine.utils import (
     compute_ROC,
     norm_per_cell,
@@ -17,8 +16,9 @@ from routine.utils import (
 )
 from tqdm.auto import tqdm
 
-from minian_bin.AR_kernel import estimate_coefs
-from minian_bin.deconv import construct_G, construct_R, max_thres
+from indeca.AR_kernel import estimate_coefs
+from indeca.deconv import construct_G, construct_R, max_thres
+from tests.testing_utils.cnmf import solve_deconv
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-ar-samp.nc",
@@ -176,13 +176,13 @@ if __name__ == "__main__":
                 th_min=th_range[0],
                 th_max=th_range[1],
                 ds=PARAM_UPSAMP,
-                metadata={"method": "minian-bin-scal", "dataset": "upsamp-down"},
+                metadata={"method": "indeca-scal", "dataset": "upsamp-down"},
                 use_warp=True,
             )
             metS_bin = compute_ROC(
                 updt_ds["S-bin"].coarsen({"frame": PARAM_UPSAMP}).sum(),
                 true_ds["S"].dropna("frame", how="all"),
-                metadata={"method": "minian-bin", "dataset": "upsamp-down"},
+                metadata={"method": "indeca", "dataset": "upsamp-down"},
                 use_warp=True,
             )
             metS_up = compute_ROC(
@@ -199,12 +199,12 @@ if __name__ == "__main__":
                 nthres=nthres,
                 th_min=th_range[0],
                 th_max=th_range[1],
-                metadata={"method": "minian-bin-scal", "dataset": "upsamp"},
+                metadata={"method": "indeca-scal", "dataset": "upsamp"},
             )
             metS_up_bin = compute_ROC(
                 updt_ds["S-bin"],
                 true_ds["S_true"],
-                metadata={"method": "minian-bin", "dataset": "upsamp"},
+                metadata={"method": "indeca", "dataset": "upsamp"},
             )
             met_df.extend(
                 [metS, metS_bin, metS_up, metS_up_bin, metS_bin_scal, metS_up_bin_scal]
@@ -224,12 +224,12 @@ if __name__ == "__main__":
                 nthres=nthres,
                 th_min=th_range[0],
                 th_max=th_range[1],
-                metadata={"method": "minian-bin-scal", "dataset": "org"},
+                metadata={"method": "indeca-scal", "dataset": "org"},
             )
             metS_bin = compute_ROC(
                 updt_ds["S-bin"],
                 true_ds["S"],
-                metadata={"method": "minian-bin", "dataset": "org"},
+                metadata={"method": "indeca", "dataset": "org"},
             )
             met_df.extend([metS, metS_bin_scal, metS_bin])
     met_df = pd.concat(met_df, ignore_index=True)
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     met_sub = met_df[
         np.logical_or(
             met_df["thres"].isin(np.linspace(0.1, 0.9, 9)),
-            met_df["method"] == "minian-bin",
+            met_df["method"] == "indeca",
         )
     ].astype({"thres": str})
     g = sns.FacetGrid(met_sub, col="dataset", sharex=False, sharey=False)
@@ -269,7 +269,7 @@ if __name__ == "__main__":
     met_sub = met_df[
         np.logical_or(
             met_df["thres"].isin(np.linspace(0.1, 0.9, 9)),
-            met_df["method"] == "minian-bin",
+            met_df["method"] == "indeca",
         )
     ].astype({"thres": str})
     g = sns.catplot(
@@ -370,7 +370,7 @@ if __name__ == "__main__":
                 s.rename("S_th{:.1f}".format(th))
                 for s, th in zip(*max_thres(S, 3, return_thres=True))
             ]
-        met_sub = met_df.loc["minian-bin", up_type]
+        met_sub = met_df.loc["indeca", up_type]
         cur_uids = met_sub.sort_values("f1", ascending=False)["unit_id"]
         plt_trs.extend([Y_solve, C_gt, S_gt, S, S_bin, S_bin_scal])
         for met_grp, exp_set in {

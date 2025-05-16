@@ -6,7 +6,7 @@ import xarray as xr
 from dask.distributed import Client, LocalCluster
 from tests.testing_utils.cnmf import pipeline_cnmf
 
-from minian_bin.pipeline import pipeline_bin
+from indeca.pipeline import pipeline_bin
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",

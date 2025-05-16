@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from minian_bin.utils import norm, scal_lstsq, scal_like, enumerated_product
+from indeca.utils import norm, scal_lstsq, scal_like, enumerated_product
 
 
 class TestNormalization:

@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 
-from minian_bin.simulation import generate_data
+from indeca.simulation import generate_data
 
 OUT_PATH = "./intermediate/simulated/"
 PARAM_TAU_D = 6

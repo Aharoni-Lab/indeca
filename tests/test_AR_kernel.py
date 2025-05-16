@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from minian_bin.AR_kernel import estimate_coefs, solve_fit_h_num
-from minian_bin.simulation import AR2exp, AR2tau, exp_pulse, find_dhm, tau2AR
+from indeca.AR_kernel import estimate_coefs, solve_fit_h_num
+from indeca.simulation import AR2exp, AR2tau, exp_pulse, find_dhm, tau2AR
 
 from .conftest import fixt_y
 
@@ -108,7 +108,7 @@ class TestDemoSolveFit:
                     ]
                 )
             )
-        # minian-bin method
+        # indeca method
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
             Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, s_len=60 * upsamp
         )

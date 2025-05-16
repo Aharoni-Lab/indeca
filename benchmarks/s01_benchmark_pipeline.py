@@ -1,4 +1,4 @@
-# %% This lays out a potential workflow for the general use of minian-bin.
+# %% This lays out a potential workflow for the general use of indeca.
 # Workflow is:
 # 0. Handle imports and definitions
 # 1. Generate or inport dataset at normal FPS and upsampled for calcium imaging
@@ -20,11 +20,11 @@ import plotly.graph_objects as go
 import xarray as xr
 from dask.distributed import Client, LocalCluster
 from plotly.subplots import make_subplots
-from tests.testing_utils.cnmf import pipeline_cnmf
 from routine.utils import compute_ROC
 
-from minian_bin.pipeline import pipeline_bin
-from minian_bin.simulation import exp_pulse
+from indeca.pipeline import pipeline_bin
+from indeca.simulation import exp_pulse
+from tests.testing_utils.cnmf import pipeline_cnmf
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",
@@ -325,8 +325,8 @@ import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
-from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv
+from indeca.simulation import ar_pulse, exp_pulse, tau2AR
+from indeca.update_bin import max_thres, scal_lstsq, solve_deconv
 
 uid = 0
 iiter = 0
@@ -422,9 +422,9 @@ import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
-from minian_bin.AR_kernel import solve_fit_h
-from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
+from indeca.AR_kernel import solve_fit_h
+from indeca.simulation import ar_pulse, exp_pulse, tau2AR
+from indeca.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
 
 uid = 0
 iiter = 0

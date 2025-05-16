@@ -10,8 +10,8 @@ import pytest
 import xarray as xr
 from pytest_harvest import get_session_results_df, get_xdist_worker_id, is_main_process
 
-from minian_bin.deconv import DeconvBin
-from minian_bin.simulation import AR2tau, ar_trace, tau2AR
+from indeca.deconv import DeconvBin
+from indeca.simulation import AR2tau, ar_trace, tau2AR
 
 from .testing_utils.io import download_realds, load_gt_ds
 from .testing_utils.misc import get_upsamp_scale
