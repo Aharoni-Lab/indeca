@@ -76,11 +76,11 @@ fig_path = FIG_PATH / "pipeline"
 fig_path.mkdir(parents=True, exist_ok=True)
 result = load_agg_result(IN_RES_PATH / "test_pipeline")
 if result is not None:
-    result = result.drop_duplicates()
+    result = result.drop_duplicates().rename(columns={"ar_use_all": "use_all"})
     id_vars = [
         "method",
         "use_all",
-        "penalty",
+        "err_weighting",
         "unit_id",
         "iter",
         "qthres",
@@ -106,9 +106,7 @@ if result is not None:
         res_sub["col_lab"] = (
             res_sub["method"]
             + "|"
-            + res_sub["penalty"]
-            .fillna("no_penal")
-            .replace({"": "no_penal", "l1": "l1"})
+            + res_sub["err_weighting"].fillna("None")
             + "|"
             + res_sub["use_all"].map(lambda u: "all" if u else "individual")
         )
