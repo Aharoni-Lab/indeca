@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from minian_bin.simulation import (
+from indeca.simulation import (
     AR2exp,
     AR2tau,
     apply_arcoef,

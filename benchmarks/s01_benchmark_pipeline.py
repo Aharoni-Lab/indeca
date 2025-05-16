@@ -23,8 +23,8 @@ from plotly.subplots import make_subplots
 from tests.testing_utils.cnmf import pipeline_cnmf
 from routine.utils import compute_ROC
 
-from minian_bin.pipeline import pipeline_bin
-from minian_bin.simulation import exp_pulse
+from indeca.pipeline import pipeline_bin
+from indeca.simulation import exp_pulse
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",
@@ -325,8 +325,8 @@ import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
-from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv
+from indeca.simulation import ar_pulse, exp_pulse, tau2AR
+from indeca.update_bin import max_thres, scal_lstsq, solve_deconv
 
 uid = 0
 iiter = 0
@@ -422,9 +422,9 @@ import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
-from minian_bin.AR_kernel import solve_fit_h
-from minian_bin.simulation import ar_pulse, exp_pulse, tau2AR
-from minian_bin.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
+from indeca.AR_kernel import solve_fit_h
+from indeca.simulation import ar_pulse, exp_pulse, tau2AR
+from indeca.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
 
 uid = 0
 iiter = 0

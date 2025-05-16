@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from minian_bin.logging_config import get_module_logger, log_dir, set_package_log_level
+from indeca.logging_config import get_module_logger, log_dir, set_package_log_level
 
 
 class TestLoggingConfig:

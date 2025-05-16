@@ -17,8 +17,8 @@ from routine.utils import (
 )
 from tqdm.auto import tqdm
 
-from minian_bin.AR_kernel import estimate_coefs
-from minian_bin.deconv import construct_G, construct_R, max_thres
+from indeca.AR_kernel import estimate_coefs
+from indeca.deconv import construct_G, construct_R, max_thres
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-ar-samp.nc",

@@ -9,9 +9,9 @@ import seaborn as sns
 import xarray as xr
 from tqdm.auto import tqdm
 
-from minian_bin.simulation import exp_pulse
-from minian_bin.AR_kernel import fit_sumexp_gd, fit_sumexp_iter, solve_fit_h_num
-from minian_bin.utils import norm, scal_lstsq
+from indeca.simulation import exp_pulse
+from indeca.AR_kernel import fit_sumexp_gd, fit_sumexp_iter, solve_fit_h_num
+from indeca.utils import norm, scal_lstsq
 
 FIG_PATH = "./figs/dbg_ar"
 INT_PATH = "./intermediate/dbg_ar"
@@ -147,7 +147,7 @@ import plotly.express as px
 from scipy.signal import medfilt
 from statsmodels.robust import norms
 
-from minian_bin.simulation import exp_pulse
+from indeca.simulation import exp_pulse
 
 h = np.load("h.npy")[1:]
 p = 1 / (np.exp(-1 / 6) - np.exp(-1))

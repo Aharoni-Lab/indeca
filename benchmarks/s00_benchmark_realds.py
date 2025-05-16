@@ -14,9 +14,9 @@ from plotly.subplots import make_subplots
 from tests.testing_utils.io import download_realds, load_gt_ds
 from routine.utils import compute_ROC
 
-from minian_bin import set_package_log_level
-from minian_bin.deconv import construct_R
-from minian_bin.pipeline import pipeline_bin
+from indeca import set_package_log_level
+from indeca.deconv import construct_R
+from indeca.pipeline import pipeline_bin
 
 
 # Configure logging for the benchmark script

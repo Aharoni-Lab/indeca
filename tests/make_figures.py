@@ -16,7 +16,7 @@ from testing_utils.plotting import (
     plot_pipeline_iter,
 )
 
-from minian_bin.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
+from indeca.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
 
 tab20c = plt.get_cmap("tab20c").colors
 dark2 = plt.get_cmap("Dark2").colors

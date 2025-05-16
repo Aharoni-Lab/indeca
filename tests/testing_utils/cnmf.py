@@ -2,9 +2,9 @@ import cvxpy as cp
 import numpy as np
 import scipy.sparse as sps
 
-from minian_bin.AR_kernel import estimate_coefs
-from minian_bin.deconv import construct_G, construct_R
-from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
+from indeca.AR_kernel import estimate_coefs
+from indeca.deconv import construct_G, construct_R
+from indeca.simulation import AR2tau, exp_pulse, tau2AR
 
 
 def pipeline_cnmf(

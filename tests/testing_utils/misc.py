@@ -2,9 +2,9 @@ import os
 
 import pandas as pd
 
-from minian_bin.deconv import construct_R
-from minian_bin.simulation import ar_pulse, tau2AR
-from minian_bin.utils import scal_lstsq
+from indeca.deconv import construct_R
+from indeca.simulation import ar_pulse, tau2AR
+from indeca.utils import scal_lstsq
 
 
 def load_agg_result(res_path):

@@ -7,8 +7,8 @@ import pytest
 import xarray as xr
 from plotly.subplots import make_subplots
 
-from minian_bin.pipeline import pipeline_bin
-from minian_bin.simulation import find_dhm
+from indeca.pipeline import pipeline_bin
+from indeca.simulation import find_dhm
 
 from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf

@@ -12,8 +12,8 @@ from dtaidistance import dtw
 from scipy.spatial.distance import cdist
 from sklearn.metrics.pairwise import cosine_similarity
 
-from minian_bin.deconv import max_thres
-from minian_bin.utils import norm
+from indeca.deconv import max_thres
+from indeca.utils import norm
 
 
 def dilate1d(a, kernel):

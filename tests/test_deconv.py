@@ -3,8 +3,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from minian_bin.AR_kernel import AR2tau, tau2AR
-from minian_bin.deconv import DeconvBin
+from indeca.AR_kernel import AR2tau, tau2AR
+from indeca.deconv import DeconvBin
 
 from .conftest import fixt_deconv, fixt_realds, fixt_y
 from .testing_utils.metrics import (

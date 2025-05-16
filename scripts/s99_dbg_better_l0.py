@@ -16,17 +16,17 @@ from scipy.special import huber
 from tqdm.auto import tqdm
 
 from benchmarks.benchmark_utils import compute_ROC
-from minian_bin.deconv import DeconvBin
-from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
-from minian_bin.update_bin import (
+from indeca.deconv import DeconvBin
+from indeca.simulation import AR2tau, exp_pulse, tau2AR
+from indeca.update_bin import (
     max_thres,
     prob_deconv,
     prob_deconv_osqp,
     solve_deconv,
     solve_deconv_l0,
 )
-from minian_bin.pipeline import pipeline_bin, pipeline_cnmf
-from minian_bin.utils import scal_lstsq
+from indeca.pipeline import pipeline_bin, pipeline_cnmf
+from indeca.utils import scal_lstsq
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",

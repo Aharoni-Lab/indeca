@@ -2,7 +2,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from minian_bin.simulation import (
+from indeca.simulation import (
     AR2exp,
     AR2tau,
     apply_arcoef,
@@ -14,7 +14,7 @@ from minian_bin.simulation import (
     markov_fire,
     tau2AR,
 )
-from minian_bin.AR_kernel import construct_G, fit_sumexp, fit_sumexp_split, solve_fit_h
+from indeca.AR_kernel import construct_G, fit_sumexp, fit_sumexp_split, solve_fit_h
 
 # %% verify AR2tau
 end = 60
