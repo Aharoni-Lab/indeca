@@ -25,7 +25,8 @@ def pipeline_bin(
     return_iter=False,
     max_iters=50,
     n_best=3,
-    err_atol=1e-1,
+    use_rel_err=True,
+    err_atol=1e-4,
     err_rtol=5e-2,
     est_noise_freq=0.4,
     est_use_smooth=True,
@@ -36,9 +37,11 @@ def pipeline_bin(
     deconv_penal="l1",
     deconv_backend="osqp",
     deconv_err_weighting=None,
+    deconv_use_base=True,
+    deconv_reset_scl=True,
     ar_use_all=True,
     ar_kn_len=100,
-    ar_norm="l1",
+    ar_norm="l2",
     da_client=None,
     spawn_dashboard=True,
 ):
@@ -79,8 +82,12 @@ def pipeline_bin(
     # 1. estimate initial guess at convolution kernel
     if tau_init is not None:
         logger.debug(f"Using provided tau_init: {tau_init}")
+        theta = tau2AR(tau_init[0], tau_init[1])
+        _, _, pp = AR2tau(theta[0], theta[1], solve_amp=True)
+        ps = np.array([pp, -pp])
         theta = np.tile(tau2AR(tau_init[0], tau_init[1]), (ncell, 1))
         tau = np.tile(tau_init, (ncell, 1))
+        ps = np.tile(ps, (ncell, 1))
     else:
         logger.debug("Computing initial tau values")
         theta = np.empty((ncell, p))
@@ -116,8 +123,11 @@ def pipeline_bin(
             "tau_d",
             "tau_r",
             "err",
+            "err_rel",
+            "nnz",
             "scale",
             "best_idx",
+            "obj",
         ]
     )
     if da_client is not None:
@@ -133,6 +143,7 @@ def pipeline_bin(
                     nthres=deconv_nthres,
                     norm=deconv_norm,
                     penal=deconv_penal,
+                    use_base=deconv_use_base,
                     err_weighting=deconv_err_weighting,
                     atol=deconv_atol,
                     backend=deconv_backend,
@@ -158,6 +169,7 @@ def pipeline_bin(
                 nthres=deconv_nthres,
                 norm=deconv_norm,
                 penal=deconv_penal,
+                use_base=deconv_use_base,
                 err_weighting=deconv_err_weighting,
                 atol=deconv_atol,
                 backend=deconv_backend,
@@ -175,10 +187,13 @@ def pipeline_bin(
         ):
             if da_client is not None:
                 r = da_client.submit(
-                    lambda d: d.solve_scale(reset_scale=i_iter <= 1), dcv[icell]
+                    lambda d: d.solve_scale(
+                        reset_scale=i_iter <= 1 or deconv_reset_scl
+                    ),
+                    dcv[icell],
                 )
             else:
-                r = dcv[icell].solve_scale(reset_scale=i_iter <= 1)
+                r = dcv[icell].solve_scale(reset_scale=i_iter <= 1 or deconv_reset_scl)
             res.append(r)
         if da_client is not None:
             res = da_client.gather(res)
@@ -186,7 +201,9 @@ def pipeline_bin(
         C = np.stack([r[1].squeeze() for r in res], axis=0)
         scale = np.array([r[2] for r in res])
         err = np.array([r[3] for r in res])
-        penal = np.array([r[4] for r in res])
+        err_rel = np.array([r[4] for r in res])
+        nnz = np.array([r[5] for r in res])
+        penal = np.array([r[6] for r in res])
         logger.debug(
             f"Iteration {i_iter} stats - Mean error: {err.mean():.4f}, Mean scale: {scale.mean():.4f}"
         )
@@ -200,15 +217,18 @@ def pipeline_bin(
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
                 "err": err,
+                "err_rel": err_rel,
                 "scale": scale,
                 "penal": penal,
+                "nnz": nnz,
+                "obj": err_rel if use_rel_err else err,
             }
         )
         if dashboard is not None:
             dashboard.update(
                 tau_d=cur_metric["tau_d"].squeeze(),
                 tau_r=cur_metric["tau_r"].squeeze(),
-                err=cur_metric["err"].squeeze(),
+                err=cur_metric["obj"].squeeze(),
                 scale=cur_metric["scale"].squeeze(),
             )
             dashboard.set_iter(min(i_iter + 1, max_iters - 1))
@@ -224,11 +244,15 @@ def pipeline_bin(
             h_fit_ls.append(np.full(T * up_factor, np.nan))
         # 2.3 update AR
         metric_df = metric_df.set_index(["iter", "cell"])
-        if n_best is not None and i_iter > n_best:
+        if n_best is not None and i_iter >= n_best:
             S_best = np.empty_like(S)
             scal_best = np.empty_like(scale)
-            for icell, cell_met in metric_df.loc[1:, :].groupby("cell", sort=True):
-                cell_met = cell_met.reset_index().sort_values("err", ascending=True)
+            if tau_init is not None:
+                metric_best = metric_df
+            else:
+                metric_best = metric_df.loc[1:, :]
+            for icell, cell_met in metric_best.groupby("cell", sort=True):
+                cell_met = cell_met.reset_index().sort_values("obj", ascending=True)
                 cur_idx = np.array(cell_met["iter"][:n_best])
                 metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
                     cur_idx.astype(str)
@@ -236,7 +260,7 @@ def pipeline_bin(
                 S_best[icell, :] = np.sum(
                     np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                 ) > (n_best / 2)
-                scal_best[icell] = np.median([scal_ls[i][icell] for i in cur_idx])
+                scal_best[icell] = np.mean([scal_ls[i][icell] for i in cur_idx])
         else:
             S_best = S
             scal_best = scale
@@ -261,10 +285,10 @@ def pipeline_bin(
             for idx, d in enumerate(dcv):
                 if da_client is not None:
                     da_client.submit(
-                        lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal), d
+                        lambda dd: dd.update(tau=cur_tau, scale=scal_best[idx]), d
                     )
                 else:
-                    d.update(tau=cur_tau, scale_mul=ar_scal)
+                    d.update(tau=cur_tau, scale=scal_best[idx])
             logger.debug(
                 f"Updating AR parameters for all cells: tau:{tau}, ar_scal: {ar_scal}"
             )
@@ -273,7 +297,13 @@ def pipeline_bin(
             tau = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
                 lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-                    y, s, scal_best, N=p, s_len=ar_kn_len, norm=ar_norm
+                    y,
+                    s,
+                    scal_best[icell],
+                    N=p,
+                    s_len=ar_kn_len,
+                    norm=ar_norm,
+                    up_factor=up_factor,
                 )
                 if dashboard is not None:
                     dashboard.update(uid=icell, h=h, h_fit=h_fit)
@@ -281,25 +311,25 @@ def pipeline_bin(
                 tau[icell, :] = cur_tau
                 if da_client is not None:
                     da_client.submit(
-                        lambda dd: dd.update(tau=cur_tau, scale_mul=ar_scal),
+                        lambda dd: dd.update(tau=cur_tau, scale=scal_best[icell]),
                         dcv[icell],
                     )
                 else:
-                    dcv[icell].update(tau=cur_tau, scale_mul=ar_scal)
+                    dcv[icell].update(tau=cur_tau, scale=scal_best[icell])
                 logger.debug(
                     f"Updating AR parameters for cell {icell}: tau:{tau}, ar_scal: {ar_scal}"
                 )
         # 2.4 check convergence
         metric_prev = metric_df[metric_df["iter"] < i_iter].dropna(
-            subset=["err", "scale"]
+            subset=["obj", "scale"]
         )
         metric_last = metric_df[metric_df["iter"] == i_iter - 1].dropna(
-            subset=["err", "scale"]
+            subset=["obj", "scale"]
         )
         if len(metric_prev) > 0:
-            err_cur = cur_metric.set_index("cell")["err"]
-            err_last = metric_last.set_index("cell")["err"]
-            err_best = metric_prev.groupby("cell")["err"].min()
+            err_cur = cur_metric.set_index("cell")["obj"]
+            err_last = metric_last.set_index("cell")["obj"]
+            err_best = metric_prev.groupby("cell")["obj"].min()
             # converged by err
             if (np.abs(err_cur - err_last) < err_atol).all():
                 logger.info("Converged: absolute error tolerance reached")
@@ -311,13 +341,13 @@ def pipeline_bin(
             # converged by s
             S_best = np.empty((ncell, T * up_factor))
             for uid, udf in metric_prev.groupby("cell"):
-                best_iter = udf.set_index("iter")["err"].idxmin()
+                best_iter = udf.set_index("iter")["obj"].idxmin()
                 S_best[uid, :] = S_ls[best_iter][uid, :]
             if np.abs(S - S_best).sum() < 1:
                 logger.info("Converged: spike pattern stabilized")
                 break
             # trapped
-            err_all = metric_prev.pivot(columns="iter", index="cell", values="err")
+            err_all = metric_prev.pivot(columns="iter", index="cell", values="obj")
             diff_all = np.abs(err_cur.values.reshape((-1, 1)) - err_all.values)
             if (diff_all.min(axis=1) < err_atol).all():
                 logger.warning("Solution trapped in local optimal err")
@@ -333,10 +363,12 @@ def pipeline_bin(
     opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
     for icell in range(ncell):
         opt_idx = metric_df.loc[
-            metric_df[metric_df["cell"] == icell]["err"].idxmin(), "iter"
+            metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
         ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
+    C_ls.append(opt_C)
+    S_ls.append(opt_S)
     if dashboard is not None:
         dashboard.stop()
     logger.info("Pipeline completed successfully")

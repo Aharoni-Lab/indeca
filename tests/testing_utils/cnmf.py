@@ -3,6 +3,7 @@ import numpy as np
 import scipy.sparse as sps
 
 from minian_bin.AR_kernel import estimate_coefs
+from minian_bin.deconv import construct_G, construct_R
 from minian_bin.simulation import AR2tau, exp_pulse, tau2AR
 
 
@@ -44,9 +45,6 @@ def pipeline_cnmf(
         ps = np.tile([1, -1], (ncell, 1))
     C_cnmf, S_cnmf = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
     # 2 cnmf algorithm
-    prob = prob_deconv(
-        T, coef_len=p if ar_mode else ar_kn_len, ar_mode=ar_mode, use_base=True, R=R
-    )
     for icell, y in enumerate(Y):
         if ar_mode:
             cur_coef = g[icell]
@@ -58,18 +56,10 @@ def pipeline_cnmf(
                 p_d=ps[icell, 0],
                 p_r=ps[icell, 1],
             )[0]
-        c, s, _ = solve_deconv(y, prob, coef=cur_coef, l1_penal=sps_penal * tn[icell])
+        c, s, _ = solve_deconv_prob(y=y, coef=cur_coef, l1_penal=sps_penal * tn[icell])
         C_cnmf[icell, :] = c.squeeze()
         S_cnmf[icell, :] = s.squeeze()
     return C_cnmf, S_cnmf, tau
-
-
-def construct_R(T: int, up_factor: int):
-    rs_vec = np.zeros(T * up_factor)
-    rs_vec[:up_factor] = 1
-    return sps.coo_matrix(
-        np.stack([np.roll(rs_vec, up_factor * i) for i in range(T)], axis=0)
-    )
 
 
 def prob_deconv(
@@ -78,7 +68,7 @@ def prob_deconv(
     ar_mode: bool = True,
     use_base: bool = False,
     R: np.ndarray = None,
-    norm: str = "l1",
+    norm: str = "l2",
     amp_constraint: bool = False,
     mixin: bool = False,
 ):
@@ -114,7 +104,7 @@ def prob_deconv(
                 cp.diag(cp.promote(-coef[i], (T - i - 1,)), -i - 1)
                 for i in range(coef_len)
             ]
-        ) + np.eye(T)
+        ) + sps.eye(T)
         cons = [s == G @ c]
     else:
         H = sum([cp.diag(cp.promote(coef[i], (T - i,)), -i) for i in range(coef_len)])
@@ -155,5 +145,54 @@ def solve_deconv(
     prob.solve(solver=solver, warm_start=warm_start)
     if return_obj:
         return c.value, s.value, b.value, prob.data_dict["err_term"].value
+    else:
+        return c.value, s.value, b.value
+
+
+def solve_deconv_prob(
+    y: np.ndarray,
+    coef: np.ndarray,
+    l1_penal: float = 0,
+    scale: float = 1,
+    ar_mode: bool = True,
+    use_base: bool = False,
+    R: np.ndarray = None,
+    norm: str = "l2",
+    amp_constraint: bool = False,
+    mixin: bool = False,
+    return_obj: bool = False,
+    solver="CLARABEL",
+    warm_start=False,
+):
+    if R is None:
+        T = len(y)
+        R = sps.eye(T)
+    else:
+        T = R.shape[1]
+    y = y.reshape((-1, 1))
+    c = cp.Variable((T, 1), nonneg=True, name="c")
+    s = cp.Variable((T, 1), nonneg=True, name="s", boolean=mixin)
+    if use_base:
+        b = cp.Variable(nonneg=True, name="b")
+    else:
+        b = cp.Constant(value=0, name="b")
+    if norm == "l1":
+        err_term = cp.sum(cp.abs(y - scale * R @ c - b))
+    elif norm == "l2":
+        err_term = cp.sum_squares(y - scale * R @ c - b)
+    elif norm == "huber":
+        err_term = cp.sum(cp.huber(y - scale * R @ c - b))
+    obj = cp.Minimize(err_term + l1_penal * cp.norm(s, 1))
+    if ar_mode:
+        G = construct_G(coef, T)
+        cons = [s == G @ c]
+    else:
+        raise NotImplementedError
+    if amp_constraint:
+        cons.append(s <= 1)
+    prob = cp.Problem(obj, cons)
+    prob.solve(solver=solver, warm_start=warm_start)
+    if return_obj:
+        return c.value, s.value, b.value, err_term.value
     else:
         return c.value, s.value, b.value

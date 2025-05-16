@@ -3,13 +3,16 @@ import pandas as pd
 import plotly.graph_objects as go
 import pytest
 
-from .conftest import fixt_deconv
+from minian_bin.AR_kernel import AR2tau, tau2AR
+from minian_bin.deconv import DeconvBin
+
+from .conftest import fixt_deconv, fixt_realds, fixt_y
 from .testing_utils.metrics import (
     assignment_distance,
     compute_metrics,
     df_assign_metadata,
 )
-from .testing_utils.plotting import plot_met_ROC, plot_traces
+from .testing_utils.plotting import plot_met_ROC_scale, plot_met_ROC_thres, plot_traces
 
 
 class TestDeconvBin:
@@ -87,9 +90,19 @@ class TestDeconvBin:
         assert np.isclose(s_org, s_msk, atol=eq_atol).all()
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
-    @pytest.mark.parametrize("rand_seed", np.arange(3))
-    @pytest.mark.parametrize("upsamp", [1, 2, 5])
-    @pytest.mark.parametrize("upsamp_y", [1, 2, 5])
+    @pytest.mark.parametrize(
+        "rand_seed",
+        list(range(3))
+        + [pytest.param(i, marks=pytest.mark.slow) for i in range(3, 15)],
+    )
+    @pytest.mark.parametrize(
+        "upsamp",
+        [1, 2, 3] + [pytest.param(i, marks=pytest.mark.slow) for i in range(4, 11)],
+    )
+    @pytest.mark.parametrize(
+        "upsamp_y",
+        [1, 2, 3] + [pytest.param(i, marks=pytest.mark.slow) for i in range(4, 11)],
+    )
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
     def test_solve_thres(
         self, taus, rand_seed, upsamp, upsamp_y, ns_lev, test_fig_path_html, results_bag
@@ -103,12 +116,12 @@ class TestDeconvBin:
             ns_lev=ns_lev,
         )
         s_bin, c_bin, scl, err, intm = deconv.solve_thres(
-            scaling=False, return_intm=True
+            scaling=False, return_intm=True, pks_polish=True
         )
         s_direct = intm[0]
         s_bin = s_bin.astype(float)
         mdist, f1, precs, recall = assignment_distance(
-            s_ref=s_org, s_slv=s_bin, tdist_thres=5
+            s_ref=s_org, s_slv=s_bin, tdist_thres=5, include_range=(0, len(s_org) - 5)
         )
         # plotting
         fig = go.Figure()
@@ -197,6 +210,98 @@ class TestDeconvBin:
         # assert
         assert (s_bin == s).all()
 
+    @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
+    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
+    @pytest.mark.parametrize("rand_seed", np.arange(3))
+    @pytest.mark.parametrize("penalty", [None])
+    @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
+    @pytest.mark.parametrize("obj_crit", [None])
+    def test_solve_scale(
+        self,
+        taus,
+        upsamp,
+        ns_lev,
+        rand_seed,
+        penalty,
+        err_weighting,
+        obj_crit,
+        test_fig_path_svg,
+        test_fig_path_html,
+    ):
+        # act
+        y, c_true, c_org, s_true, s_org, scale = fixt_y(
+            taus=taus, upsamp=upsamp, rand_seed=rand_seed, ns_lev=ns_lev
+        )
+        taus_up = np.array(taus) * upsamp
+        _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
+        deconv = DeconvBin(
+            y=y,
+            tau=taus,
+            ps=(p, -p),
+            penal=penalty,
+            err_weighting=err_weighting,
+        )
+        (
+            opt_s,
+            opt_c,
+            cur_scl,
+            cur_obj,
+            err_rel,
+            nnz,
+            cur_penal,
+            iterdf,
+        ) = deconv.solve_scale(return_met=True, obj_crit=obj_crit)
+        deconv.update(update_weighting=True)
+        err_wt = deconv.err_wt.squeeze()
+        deconv.update(update_weighting=True, clear_weighting=True, scale=1)
+        deconv._reset_mask()
+        deconv._reset_cache()
+        s_free, b_free = deconv.solve(amp_constraint=False)
+        scl_ub = np.ptp(s_free)
+        res_df = []
+        for scl in np.linspace(0, scl_ub, 100)[1:]:
+            deconv.update(scale=scl)
+            sbin, cbin, _, _ = deconv.solve_thres(scaling=False, obj_crit=obj_crit)
+            deconv.err_wt = err_wt
+            obj = deconv._compute_err(s=sbin, obj_crit=obj_crit)
+            deconv.err_wt = np.ones_like(err_wt)
+            mdist, f1, prec, rec = assignment_distance(
+                s_ref=s_true, s_slv=sbin, tdist_thres=3
+            )
+            res_df.append(
+                pd.DataFrame(
+                    [
+                        {
+                            "scale": scl,
+                            "objs": obj,
+                            "mdist": mdist,
+                            "f1": f1,
+                            "prec": prec,
+                            "recall": rec,
+                        }
+                    ]
+                )
+            )
+        res_df = pd.concat(res_df, ignore_index=True)
+        # plotting
+        fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
+        fig.savefig(test_fig_path_svg)
+        fig = go.Figure()
+        fig.add_traces(
+            plot_traces(
+                {
+                    "y": y.squeeze(),
+                    "s_true": s_true.squeeze(),
+                    "c_true": c_true.squeeze(),
+                    "opt_s": opt_s.squeeze(),
+                    "opt_c": opt_c.squeeze(),
+                    "err_wt": err_wt,
+                }
+            )
+        )
+        fig.write_html(test_fig_path_html)
+
 
 @pytest.mark.slow
 class TestDemoDeconv:
@@ -213,6 +318,7 @@ class TestDemoDeconv:
         ns_lev,
         thres_scaling,
         test_fig_path_svg,
+        results_bag,
     ):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
@@ -222,14 +328,16 @@ class TestDemoDeconv:
             scaling=thres_scaling, return_intm=True
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
-        # plotting
+        # save results
         metdf = compute_metrics(
             s_org,
             svals,
             {"objs": objs, "scals": scals, "thres": thres, "opt_idx": opt_idx},
             tdist_thres=3,
         )
-        fig = plot_met_ROC(metdf)
+        results_bag.data = metdf
+        # plotting
+        fig = plot_met_ROC_thres(metdf)
         fig.savefig(test_fig_path_svg)
 
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
@@ -289,8 +397,102 @@ class TestDemoDeconv:
         )
         results_bag.data = metdf
         # plotting
-        fig = plot_met_ROC(metdf, grad_color=False)
+        fig = plot_met_ROC_thres(metdf, grad_color=False)
         fig.savefig(test_fig_path_svg)
         # assertion
         if ns_lev == 0 and upsamp == 1:
             assert (cur_svals[oidx][:-1] == s[:-1]).all()
+
+    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("ar_kn_len", [100])
+    @pytest.mark.parametrize("est_noise_freq", [None])
+    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("taus", [(21.18, 7.23)])
+    @pytest.mark.parametrize("ncell", [1])
+    @pytest.mark.parametrize("nfm", [None])
+    @pytest.mark.parametrize("penalty", [None])
+    @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
+    @pytest.mark.parametrize("obj_crit", [None])
+    def test_demo_solve_scale_realds(
+        self,
+        upsamp,
+        ar_kn_len,
+        est_noise_freq,
+        est_add_lag,
+        dsname,
+        taus,
+        ncell,
+        nfm,
+        penalty,
+        err_weighting,
+        obj_crit,
+        test_fig_path_svg,
+        test_fig_path_html,
+    ):
+        # act
+        Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell=ncell, nfm=nfm)
+        theta = tau2AR(taus[0], taus[1])
+        _, _, p = AR2tau(theta[0], theta[1], solve_amp=True)
+        deconv = DeconvBin(
+            y=Y.squeeze(),
+            tau=taus,
+            ps=(p, -p),
+            penal=penalty,
+            err_weighting=err_weighting,
+            use_base=True,
+        )
+        opt_s, opt_c, cur_scl, cur_obj, cur_penal, iterdf = deconv.solve_scale(
+            return_met=True, obj_crit=obj_crit
+        )
+        deconv.update(update_weighting=True)
+        err_wt = deconv.err_wt.squeeze()
+        deconv.update(update_weighting=True, clear_weighting=True, scale=1)
+        deconv._reset_mask()
+        deconv._reset_cache()
+        s_free, b_free = deconv.solve(amp_constraint=False)
+        scl_ub = np.ptp(s_free)
+        res_df = []
+        for scl in np.linspace(0, scl_ub, 100)[1:]:
+            deconv.update(scale=scl)
+            sbin, cbin, _, _ = deconv.solve_thres(scaling=False, obj_crit=obj_crit)
+            deconv.err_wt = err_wt
+            obj = deconv._compute_err(s=sbin, obj_crit=obj_crit)
+            deconv.err_wt = np.ones_like(err_wt)
+            sb_idx = np.where(sbin)[0] / upsamp
+            t_sb = np.interp(sb_idx, fluo_df["frame"], fluo_df["fluo_time"])
+            t_ap = ap_df["ap_time"]
+            mdist, f1, prec, rec = assignment_distance(
+                t_ref=np.atleast_1d(t_ap), t_slv=np.atleast_1d(t_sb), tdist_thres=1
+            )
+            res_df.append(
+                pd.DataFrame(
+                    [
+                        {
+                            "scale": scl,
+                            "objs": obj,
+                            "mdist": mdist,
+                            "f1": f1,
+                            "prec": prec,
+                            "recall": rec,
+                        }
+                    ]
+                )
+            )
+        res_df = pd.concat(res_df, ignore_index=True)
+        # plotting
+        fig = plot_met_ROC_scale(res_df, iterdf, cur_scl)
+        fig.savefig(test_fig_path_svg)
+        fig = go.Figure()
+        fig.add_traces(
+            plot_traces(
+                {
+                    "y": Y.squeeze(),
+                    "s_true": S_true.squeeze(),
+                    "opt_s": opt_s.squeeze(),
+                    "opt_c": opt_c.squeeze(),
+                    "err_wt": err_wt,
+                }
+            )
+        )
+        fig.write_html(test_fig_path_html)

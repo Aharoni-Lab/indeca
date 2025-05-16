@@ -1,6 +1,7 @@
 import os
 
 import fsspec
+import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 
@@ -39,26 +40,24 @@ def load_gt_mat(matfile, varname="CAttached"):
     return fluo_df, ap_df
 
 
-def load_gt_ds(ds_path, return_ap=False):
+def load_gt_ds(ds_path):
     fluo = []
     ap = []
     for icell, matfile in enumerate(
         filter(lambda fn: fn.endswith(".mat"), os.listdir(ds_path))
     ):
         fluo_df, ap_df = load_gt_mat(os.path.join(ds_path, matfile))
+        fps = int(np.around(1 / fluo_df["fluo_time"].diff()).median())
         fluo_df["unit_id"] = icell
         ap_df["unit_id"] = icell
+        fluo_df["fps"] = fps
+        ap_df["fps"] = fps
         fluo.append(fluo_df)
         ap.append(ap_df)
     fluo = pd.concat(fluo, ignore_index=True)
     ap = pd.concat(ap, ignore_index=True)
     Y = fluo.set_index(["unit_id", "frame"])["fluo_mean"].rename("Y").to_xarray()
-    if return_ap:
-        return Y, ap, fluo
-    else:
-        S_true = (
-            fluo.set_index(["unit_id", "frame"])["ap_count"]
-            .rename("S_true")
-            .to_xarray()
-        )
-        return Y, S_true
+    S_true = (
+        fluo.set_index(["unit_id", "frame"])["ap_count"].rename("S_true").to_xarray()
+    )
+    return Y, S_true, ap, fluo

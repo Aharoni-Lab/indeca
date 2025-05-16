@@ -7,65 +7,80 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from testing_utils.misc import load_agg_result
-from testing_utils.plotting import plot_agg_boxswarm
+from testing_utils.plotting import plot_agg_boxswarm, plot_pipeline_iter
 
-IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg_results"
-FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg_results"
+IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
+FIG_PATH = Path(__file__).parent / "output" / "figs" / "agg"
+
+
+# %% plot pipeline realds results
+fig_path = FIG_PATH / "pipeline_realds"
+fig_path.mkdir(parents=True, exist_ok=True)
+res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
+res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
+if res_bin is not None or res_cnmf is not None:
+    result = pd.concat([res_bin, res_cnmf], ignore_index=True)
+    result = result.drop_duplicates().fillna("None")
+    id_vars = [
+        "dsname",
+        "ncell",
+        "method",
+        "use_all",
+        "tau_init",
+        "unit_id",
+        "iter",
+        "qthres",
+        "test_id",
+        "upsamp",
+    ]
+    val_vals = ["f1", "dhm0", "dhm1"]
+    resdf = pd.melt(
+        result,
+        id_vars=id_vars,
+        value_vars=val_vals,
+        var_name="metric",
+        value_name="value",
+    ).drop_duplicates()
+    for (ds, ncell), res_sub in resdf.groupby(["dsname", "ncell"]):
+        res_sub = res_sub[res_sub["method"] != "gt"].copy()
+        res_sub["row_lab"] = res_sub["metric"]
+        res_sub["col_lab"] = (
+            res_sub["method"]
+            + "|"
+            + res_sub["use_all"].map(lambda u: "all" if u else "individual")
+            + "|"
+            + res_sub["tau_init"].map(lambda t: "no_init" if t == "None" else "init")
+        )
+        col_ord = sorted(res_sub["col_lab"].unique().tolist())
+        g = sns.FacetGrid(
+            res_sub,
+            height=2.5,
+            aspect=2,
+            row="row_lab",
+            col="col_lab",
+            sharey="row",
+            sharex="col",
+            hue="col_lab",
+            col_order=col_ord,
+            hue_order=col_ord,
+            margin_titles=True,
+        )
+        g.map_dataframe(plot_pipeline_iter, aggregate=False)
+        g.add_legend()
+        g.figure.savefig(fig_path / "{}-{}.svg".format(ds, ncell))
+        plt.close(g.figure)
 
 
 # %% plot pipeline results
-def iter_plot(data, color, dhm0, dhm1, **kwargs):
-    ax = plt.gca()
-    mthd = data["method"].unique().item()
-    met = data["metric"].unique().item()
-    use_all = data["use_all"].unique().item()
-    if met == "dhm0":
-        ax.axhline(dhm0, color="grey", ls=":")
-    elif met == "dhm1":
-        ax.axhline(dhm1, color="grey", ls=":")
-    if mthd == "cnmf":
-        data = data.groupby(["qthres", "test_id"])["value"].median().reset_index()
-    elif use_all:
-        data = data.groupby(["iter", "test_id"])["value"].median().reset_index()
-    if mthd == "minian-bin":
-        sns.swarmplot(
-            data,
-            x="iter",
-            y="value",
-            ax=ax,
-            color=color,
-            edgecolor="auto",
-            warn_thresh=0.8,
-            linewidth=1,
-            **kwargs,
-        )
-        sns.lineplot(data, x="iter", y="value", ax=ax, color=color, **kwargs)
-    elif mthd == "cnmf":
-        sns.swarmplot(
-            data,
-            x="qthres",
-            y="value",
-            ax=ax,
-            color=color,
-            edgecolor="auto",
-            warn_thresh=0.8,
-            linewidth=1,
-            **kwargs,
-        )
-        sns.boxplot(
-            data, x="qthres", y="value", color=color, saturation=0.5, ax=ax, **kwargs
-        )
-
-
 fig_path = FIG_PATH / "pipeline"
 fig_path.mkdir(parents=True, exist_ok=True)
 result = load_agg_result(IN_RES_PATH / "test_pipeline")
 if result is not None:
-    result = result.drop_duplicates()
+    result = result.drop_duplicates().rename(columns={"ar_use_all": "use_all"})
     id_vars = [
         "method",
         "use_all",
-        "penalty",
+        "err_weighting",
         "unit_id",
         "iter",
         "qthres",
@@ -91,9 +106,7 @@ if result is not None:
         res_sub["col_lab"] = (
             res_sub["method"]
             + "|"
-            + res_sub["penalty"]
-            .fillna("no_penal")
-            .replace({"": "no_penal", "l1": "l1"})
+            + res_sub["err_weighting"].fillna("None")
             + "|"
             + res_sub["use_all"].map(lambda u: "all" if u else "individual")
         )
@@ -111,7 +124,7 @@ if result is not None:
             hue_order=col_ord,
             margin_titles=True,
         )
-        g.map_dataframe(iter_plot, dhm0=dhm0, dhm1=dhm1)
+        g.map_dataframe(plot_pipeline_iter, dhm0=dhm0, dhm1=dhm1)
         g.add_legend()
         g.figure.savefig(fig_path / "{}-{}-{}.svg".format(ns_lev, tau, upsamp))
         plt.close(g.figure)

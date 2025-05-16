@@ -133,6 +133,7 @@ def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
             bounds=(0, np.inf),
             sigma=y_weight,
             absolute_sigma=True,
+            max_nfev=5000,
             # loss="huber",
             # f_scale=1e-2,
             # tr_solver="exact",
@@ -169,6 +170,7 @@ def fit_sumexp_gd(y, x=None, y_weight=None, fit_amp=True, interp_factor=100):
             "reversing coefficients"
         )
         tau_d, tau_r = tau_r, tau_d
+        p = p[::-1]
     return (
         -1 / np.array([tau_d, tau_r]),
         p,
@@ -217,7 +219,7 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, scal, h_len=60, norm="l1", smth_penalty=0, ignore_len=0, up_factor=1):
+def solve_h(y, s, scal, h_len=60, norm="l2", smth_penalty=0, ignore_len=0, up_factor=1):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
@@ -242,14 +244,14 @@ def solve_h(y, s, scal, h_len=60, norm="l1", smth_penalty=0, ignore_len=0, up_fa
         conv_term = cp.vstack([R @ cp.convolve(ss, h)[:T] for ss in s])
     else:
         conv_term = R @ cp.convolve(s, h)[:T]
-    norm_ord = {"l1": 1, "l2": 2}[norm]
-    obj = cp.Minimize(
-        cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, norm_ord)
-        + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1)
-    )
+    if norm == "l1":
+        err_term = cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, 1)
+    elif norm == "l2":
+        err_term = cp.sum_squares(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b)
+    obj = cp.Minimize(err_term + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1))
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
-    prob.solve()
+    prob.solve(solver=cp.CLARABEL)
     return np.concatenate([h.value, np.zeros(T - h_len - 1)])
 
 
@@ -313,7 +315,7 @@ def solve_fit_h(
     return lams, ps, h, h_fit, metric_df, h_df
 
 
-def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l1", up_factor=1):
+def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1):
     h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
     try:
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms

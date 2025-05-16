@@ -198,8 +198,10 @@ class DeconvBin:
             self.yspec = self._get_stft_spec(y)
         if y is not None:
             self.huber_k = 0.5 * np.std(y)
+            self.err_total = self._res_err(y)
         else:
             self.huber_k = 0
+            self.err_total = 0
         self._update_R()
         # setup cvxpy
         if self.backend == "cvxpy":
@@ -276,6 +278,8 @@ class DeconvBin:
                 self.coef = coef
             self.c = np.zeros(self.T * upsamp)
             self.s = np.zeros(self.T * upsamp)
+            self.s_bin = None
+            self.b = 0
             self.l1_penal = l1_penal
             self.scale = scale
             self._update_Wt()
@@ -313,6 +317,8 @@ class DeconvBin:
         l1_penal: float = None,
         w: np.ndarray = None,
         update_weighting: bool = False,
+        clear_weighting: bool = False,
+        scale_coef: bool = False,
     ) -> None:
         logger.debug(
             f"Updating parameters - backend: {self.backend}, tau: {tau}, scale: {scale}, scale_mul: {scale_mul}, l0_penal: {l0_penal}, l1_penal: {l1_penal}"
@@ -335,6 +341,8 @@ class DeconvBin:
                 self.theta.value = theta_new
                 self._update_HG()
             if coef is not None:
+                if scale_coef:
+                    scale_mul = scal_lstsq(coef, self.coef).item()
                 self.coef.value = coef
                 self._update_HG()
             if scale is not None:
@@ -365,8 +373,11 @@ class DeconvBin:
                     kn_len=self.coef_len,
                 )
                 self.tau = tau
+                self.ps = np.array([p, -p])
                 self.theta = theta_new
             if coef is not None:
+                if scale_coef:
+                    scale_mul = scal_lstsq(coef, self.coef).item()
                 self.coef = coef
             if scale is not None:
                 self.scale = scale
@@ -383,9 +394,11 @@ class DeconvBin:
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
-                if self.err_weighting and update_weighting:
-                    self._update_Wt()
-                    updt_q0 = True
+            if self.err_weighting is not None and update_weighting:
+                self._update_Wt(clear=clear_weighting)
+                updt_P = True
+                updt_q0 = True
+                updt_q = True
             if self.norm == "huber":
                 if any((scale is not None, scale_mul is not None, updt_HG)):
                     self._update_A()
@@ -399,14 +412,14 @@ class DeconvBin:
                     self._update_bounds()
                     updt_bounds = True
             else:
-                if updt_HG:
+                if any((updt_HG, updt_A)):
                     A_before = self.A.copy()
                     self._update_A()
                     assert self.A.shape == A_before.shape
                     assert (self.A.nonzero()[0] == A_before.nonzero()[0]).all()
                     assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
                     updt_A = True
-                if any((scale is not None, scale_mul is not None, updt_HG)):
+                if any((scale is not None, scale_mul is not None, updt_HG, updt_P)):
                     P_before = self.P.copy()
                     self._update_P()
                     assert self.P.shape == P_before.shape
@@ -414,14 +427,26 @@ class DeconvBin:
                     assert (self.P.nonzero()[1] == P_before.nonzero()[1]).all()
                     updt_P = True
                 if any(
-                    (scale is not None, scale_mul is not None, y is not None, updt_HG)
+                    (
+                        scale is not None,
+                        scale_mul is not None,
+                        y is not None,
+                        updt_HG,
+                        updt_q0,
+                    )
                 ):
                     q0_before = self.q0.copy()
                     self._update_q0()
                     assert self.q0.shape == q0_before.shape
                     updt_q0 = True
                 if any(
-                    (w is not None, l0_penal is not None, l1_penal is not None, updt_q0)
+                    (
+                        w is not None,
+                        l0_penal is not None,
+                        l1_penal is not None,
+                        updt_q0,
+                        updt_q,
+                    )
                 ):
                     q_before = self.q.copy()
                     self._update_q()
@@ -436,7 +461,9 @@ class DeconvBin:
                 if updt_q:
                     self.prob_free.update_lin_cost(self.q)
                     self.prob.update_lin_cost(self.q)
-            elif self.backend in ["osqp", "cuosqp"]:
+            elif self.backend in ["osqp", "cuosqp"] and any(
+                (updt_P, updt_q, updt_A, updt_bounds)
+            ):
                 self.prob_free.update(
                     Px=self.P.copy().data if updt_P else None,
                     q=self.q.copy() if updt_q else None,
@@ -601,11 +628,12 @@ class DeconvBin:
         ignore_res: bool = False,
         return_intm: bool = False,
         pks_polish: bool = None,
+        obj_crit: str = None,
     ) -> Tuple[np.ndarray]:
         if self.backend == "cvxpy":
-            y = self.y.value.squeeze()
+            y = np.array(self.y.value.squeeze())
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-            y = self.y
+            y = np.array(self.y)
         opt_s, opt_b = self.solve(amp_constraint=amp_constraint, pks_polish=pks_polish)
         R = self.R.value if self.backend == "cvxpy" else self.R
         if ignore_res:
@@ -641,27 +669,45 @@ class DeconvBin:
         cvals = [self._compute_c(s) for s in svals]
         yfvals = [R @ c for c in cvals]
         if scaling:
-            scals = [scal_lstsq(yf, y - res - opt_b) for yf in yfvals]
+            scal_fit = [scal_lstsq(yf, y - res, fit_intercept=True) for yf in yfvals]
+            scals = [sf[0] for sf in scal_fit]
+            bs = [sf[1] for sf in scal_fit]
         else:
             scals = [self.scale] * len(yfvals)
+            bs = [(y - res - scl * yf).mean() for scl, yf in zip(scals, yfvals)]
         objs = [
-            self._compute_err(y_fit=scl * yf, res=res) for scl, yf in zip(scals, yfvals)
+            self._compute_err(s=ss, y_fit=scl * yf, res=res, b=bb, obj_crit=obj_crit)
+            for ss, scl, yf, bb in zip(svals, scals, yfvals, bs)
         ]
         scals = np.array(scals).clip(0, None)
         objs = np.where(scals > 0, objs, np.inf)
-        opt_idx = np.argmin(objs)
-        bin_s = svals[opt_idx]
-        err = self._compute_err(s=bin_s)
+        if obj_crit == "spk_diff":
+            err_null = self._compute_err(
+                s=np.zeros_like(opt_s), res=res, b=opt_b, obj_crit=obj_crit
+            )
+            objs_pad = np.array([err_null, *objs])
+            nspk = np.array([0] + [(ss > 0).sum() for ss in svals])
+            objs_diff = np.diff(objs_pad)
+            nspk_diff = np.diff(nspk)
+            merr_diff = objs_diff / nspk_diff
+            avg_err = (objs_pad.min() - err_null) / nspk.max()
+            opt_idx = np.max(np.where(merr_diff < avg_err))
+            objs = merr_diff
+        else:
+            opt_idx = np.argmin(objs)
+        s_bin = svals[opt_idx]
+        self.s_bin = s_bin
+        self.b = bs[opt_idx]
         if return_intm:
             return (
-                bin_s,
+                s_bin,
                 cvals[opt_idx],
                 scals[opt_idx],
-                err,
+                objs[opt_idx],
                 (opt_s, thres, svals, cvals, yfvals, scals, objs, opt_idx),
             )
         else:
-            return bin_s, cvals[opt_idx], scals[opt_idx], err
+            return s_bin, cvals[opt_idx], scals[opt_idx], objs[opt_idx]
 
     def solve_penal(
         self, masking=True, scaling=True, return_intm=False, pks_polish=None
@@ -748,7 +794,12 @@ class DeconvBin:
             return opt_s, opt_c, opt_scl, opt_obj, opt_penal
 
     def solve_scale(
-        self, reset_scale: bool = True, concur_penal: bool = False
+        self,
+        reset_scale: bool = True,
+        concur_penal: bool = False,
+        return_met: bool = False,
+        obj_crit: str = None,
+        early_stop: bool = True,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -759,16 +810,20 @@ class DeconvBin:
             self.update(scale=1)
             s_free, _ = self.solve(amp_constraint=False)
             self.update(scale=np.ptp(s_free))
+        else:
+            s_free = np.zeros(len(self.nzidx_s))
         metric_df = None
         for i in range(self.max_iter_scal):
             if concur_penal:
-                cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
-                    pks_polish=i > 0
+                cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(
+                    scaling=i > 0, pks_polish=i > 1 or not reset_scale
                 )
             else:
                 cur_penal = 0
-                cur_s, cur_c, cur_scl, cur_obj = self.solve_thres(
-                    scaling=True, pks_polish=i > 0
+                cur_s, cur_c, cur_scl, cur_obj_raw = self.solve_thres(
+                    scaling=i > 0,
+                    pks_polish=i > 1 or not reset_scale,
+                    obj_crit=obj_crit,
                 )
             if self.dashboard is not None:
                 pad_s = np.zeros(self.T)
@@ -792,11 +847,15 @@ class DeconvBin:
                 prev_scals = np.array(metric_df["scale"])
                 last_scal = prev_scals[-1]
                 last_obj = np.array(metric_df["obj"])[-1]
+            y_wt = np.array(self.y * self.err_wt)
+            err_tt = self._res_err(y_wt - y_wt.mean())
+            cur_obj = (cur_obj_raw - err_tt) / err_tt
             cur_met = pd.DataFrame(
                 [
                     {
                         "iter": i,
                         "scale": cur_scl,
+                        "obj_raw": cur_obj_raw,
                         "obj": cur_obj,
                         "penal": cur_penal,
                         "nnz": (cur_s > 0).sum(),
@@ -804,12 +863,15 @@ class DeconvBin:
                 ]
             )
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
+            if self.err_weighting == "adaptive" and i <= 1:
+                self.update(update_weighting=True)
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
                     np.abs(cur_obj - opt_obj) < self.rtol * opt_obj,
                     np.abs(cur_scl - last_scal) < self.atol,
                     np.abs(cur_obj - last_obj) < self.atol,
+                    early_stop and cur_obj > last_obj,
                 )
             ):
                 break
@@ -822,15 +884,24 @@ class DeconvBin:
                 self.update(scale=cur_scl)
         else:
             warnings.warn("max scale iterations reached")
-        opt_idx = max(metric_df["obj"].idxmin() - 1, 0)
-        self.update(scale=metric_df.loc[opt_idx, "scale"])
-        self._update_Wt(clear=True)
+        opt_idx = metric_df["obj"].idxmin()
+        self.update(update_weighting=True, clear_weighting=True)
         self._reset_cache()
         self._reset_mask()
-        cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(scaling=False)
+        self.update(scale=metric_df.loc[opt_idx, "scale"])
+        cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
+            scaling=False, masking=False
+        )
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
         opt_c[self.nzidx_c] = cur_c
+        nnz = int(opt_s.sum())
+        self.update(update_weighting=True)
+        y_wt = np.array(self.y * self.err_wt)
+        err_tt = self._res_err(y_wt - y_wt.mean())
+        err_cur = self._compute_err(s=opt_s)
+        err_rel = (err_cur - err_tt) / err_tt
+        self.update(update_weighting=True, clear_weighting=True)
         if self.dashboard is not None:
             self.dashboard.update(
                 uid=self.dashboard_uid,
@@ -840,7 +911,10 @@ class DeconvBin:
             )
         self._reset_cache()
         self._reset_mask()
-        return opt_s, opt_c, cur_scl, cur_obj, cur_penal
+        if return_met:
+            return opt_s, opt_c, cur_scl, cur_obj, err_rel, nnz, cur_penal, metric_df
+        else:
+            return opt_s, opt_c, cur_scl, cur_obj, err_rel, nnz, cur_penal
 
     def _setup_prob_osqp(self) -> None:
         logger.debug("Setting up OSQP problem")
@@ -1000,12 +1074,13 @@ class DeconvBin:
         c: np.ndarray = None,
         s: np.ndarray = None,
         res: np.ndarray = None,
+        obj_crit: str = None,
     ) -> float:
         if self.backend == "cvxpy":
             # TODO: add support
             raise NotImplementedError
         elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-            y = self.y
+            y = np.array(self.y)
         if res is not None:
             y = y - res
         if b is None:
@@ -1016,6 +1091,44 @@ class DeconvBin:
                 c = self._compute_c(s)
             y_fit = self.R @ c * self.scale
         r = y - y_fit
+        err = self._res_err(r)
+        if obj_crit in [None, "spk_diff"]:
+            return np.array(err).item()
+        else:
+            nspk = (s > 0).sum()
+            if obj_crit == "mean_spk":
+                err_total = self._res_err(y - y.mean())
+                return np.array((err - err_total) / nspk).item()
+            elif obj_crit in ["aic", "bic"]:
+                noise_model = "normal"
+                T = len(r)
+                if noise_model == "normal":
+                    mu = r.mean()
+                    sigma = ((r - mu) ** 2).sum() / T
+                    logL = -0.5 * (
+                        T * np.log(2 * np.pi * sigma)
+                        + 1 / sigma * ((r - mu) ** 2).sum()
+                    )
+                elif noise_model == "lognormal":
+                    ymin = y.min()
+                    logy = np.log(y - ymin + 1)
+                    logy_hat = np.log(y_fit - ymin + 1)
+                    logr = logy - logy_hat
+                    mu = np.mean(logr)
+                    sigma = ((logr - mu) ** 2).sum() / T
+                    logL = np.sum(
+                        -logy
+                        - (logr - mu) ** 2 / (2 * sigma)
+                        - 0.5 * np.log(2 * np.pi * sigma)
+                    )
+                if obj_crit == "aic":
+                    return np.array(2 * (nspk - logL)).item()
+                elif obj_crit == "bic":
+                    return np.array(nspk * np.log(T) - 2 * logL).item()
+            else:
+                raise ValueError("invalid objective criterion: {}".format(obj_crit))
+
+    def _res_err(self, r: np.ndarray):
         if self.err_wt is not None:
             r = self.err_wt * r
         if self.norm == "l1":
@@ -1092,6 +1205,15 @@ class DeconvBin:
                 with np.errstate(all="ignore"):
                     self.err_wt[i] = np.corrcoef(yseg, cseg)[0, 1].clip(0, 1)
             self.err_wt = np.nan_to_num(self.err_wt)
+        elif self.err_weighting == "adaptive":
+            if self.s_bin is not None:
+                # use a small number instead of 0 to preserve sparsity pattern of P
+                self.err_wt = np.full(self.y_len, 1e-10)
+                s_bin_R = self.R @ self.s_bin
+                for nzidx in np.where(s_bin_R > 0)[0]:
+                    self.err_wt[nzidx : nzidx + self.coef_len] = 1
+            else:
+                self.err_wt = np.ones(self.y_len)
         self.Wt = sps.diags(self.err_wt)
 
     def _update_HG(self) -> None:

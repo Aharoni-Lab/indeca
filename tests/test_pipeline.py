@@ -10,7 +10,7 @@ from plotly.subplots import make_subplots
 from minian_bin.pipeline import pipeline_bin
 from minian_bin.simulation import find_dhm
 
-from .conftest import fixt_y
+from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
 from .testing_utils.metrics import assignment_distance
 from .testing_utils.plotting import plot_traces
@@ -29,7 +29,8 @@ class TestPipeline:
     )
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("penalty", [None, "l1"])
+    @pytest.mark.parametrize("err_weighting", [None, "adaptive"])
+    @pytest.mark.parametrize("ar_use_all", [True, False])
     def test_pipeline(
         self,
         taus,
@@ -39,7 +40,8 @@ class TestPipeline:
         ncell,
         ar_kn_len,
         ns_lev,
-        penalty,
+        err_weighting,
+        ar_use_all,
         est_noise_freq,
         est_add_lag,
         results_bag,
@@ -75,8 +77,8 @@ class TestPipeline:
             upsamp,
             max_iters=max_iter,
             return_iter=True,
-            deconv_penal=penalty,
-            ar_use_all=True,
+            deconv_err_weighting=err_weighting,
+            ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
@@ -88,15 +90,14 @@ class TestPipeline:
         (dhm0, dhm1), _ = find_dhm(
             True, np.array([taus[0], taus[1]]), np.array([1, -1])
         )
-        res_df = [
-            pd.DataFrame(
-                [{"method": "gt", "use_all": True, "dhm0": dhm0, "dhm1": dhm1}]
-            )
-        ]
+        res_df = [pd.DataFrame([{"method": "gt", "dhm0": dhm0, "dhm1": dhm1}])]
         for uid in range(Y.shape[0]):
             for i_iter, sbin in enumerate(S_bin_iter):
                 sb = sbin[uid, :]
-                tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+                try:
+                    tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
+                except KeyError:
+                    tau_d, tau_r = np.nan, np.nan
                 try:
                     (dhm0, dhm1), _ = find_dhm(
                         True, np.array([tau_d, tau_r]) / upsamp, np.array([1, -1])
@@ -111,7 +112,6 @@ class TestPipeline:
                         [
                             {
                                 "method": "minian-bin",
-                                "use_all": Y.shape[0] > 1,
                                 "unit_id": uid,
                                 "iter": i_iter,
                                 "mdist": mdist,
@@ -142,7 +142,6 @@ class TestPipeline:
                         [
                             {
                                 "method": "cnmf",
-                                "use_all": Y.shape[0] > 1,
                                 "iter": "final",
                                 "unit_id": uid,
                                 "qthres": qthres,
@@ -165,7 +164,6 @@ class TestPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
-            tau_d, tau_r = iter_df.loc[(i_iter, uid), ["tau_d", "tau_r"]]
             fig.add_traces(
                 plot_traces(
                     {
@@ -192,26 +190,34 @@ class TestPipeline:
 @pytest.mark.slow
 class TestDemoPipeline:
     @pytest.mark.parametrize("upsamp", [1])
-    @pytest.mark.parametrize("max_iter", [5])
-    @pytest.mark.parametrize("ar_kn_len", [100])
+    @pytest.mark.parametrize("max_iter", [10])
+    @pytest.mark.parametrize("ar_kn_len", [150])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("fixt_realds", [{"subset_cell": (0, 5)}], indirect=True)
-    def test_demo_pipeline(
+    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("ncell", [1, 5, None])
+    @pytest.mark.parametrize("nfm", [None])
+    @pytest.mark.parametrize("penalty", [None])
+    @pytest.mark.parametrize("tau_init", [(21.18, 7.23), None])
+    @pytest.mark.parametrize("ar_use_all", [True, False])
+    def test_demo_pipeline_realds(
         self,
-        fixt_realds,
         upsamp,
         max_iter,
         ar_kn_len,
         est_noise_freq,
         est_add_lag,
+        dsname,
+        ncell,
+        nfm,
+        penalty,
+        tau_init,
+        ar_use_all,
         results_bag,
+        test_fig_path_html,
     ):
         # act
-        Y, ap_df, fluo_df = fixt_realds
-        C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
-            np.atleast_2d(Y), up_factor=1, est_noise_freq=0.06, sps_penal=0
-        )
+        Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
         (
             C_bin,
             S_bin,
@@ -224,8 +230,12 @@ class TestDemoPipeline:
             np.atleast_2d(Y),
             up_factor=upsamp,
             max_iters=max_iter,
+            tau_init=tau_init,
             return_iter=True,
-            ar_use_all=True,
+            deconv_use_base=True,
+            deconv_penal=penalty,
+            deconv_err_weighting="adaptive",
+            ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
@@ -238,7 +248,10 @@ class TestDemoPipeline:
         for i_iter, sbin in enumerate(S_bin_iter):
             for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
                 sb = sbin[iu, :]
-                tau_d, tau_r = iter_df.loc[(i_iter, iu), ["tau_d", "tau_r"]]
+                try:
+                    tau_d, tau_r = iter_df.loc[(i_iter, iu), ["tau_d", "tau_r"]]
+                except KeyError:
+                    tau_d, tau_r = np.nan, np.nan
                 try:
                     (dhm0, dhm1), _ = find_dhm(
                         True, np.array([tau_d, tau_r]), np.array([1, -1])
@@ -263,7 +276,7 @@ class TestDemoPipeline:
                         [
                             {
                                 "method": "minian-bin",
-                                "use_all": "unit_id" in Y.dims,
+                                "use_all": ar_use_all,
                                 "unit_id": uid,
                                 "iter": i_iter,
                                 "mdist": mdist,
@@ -276,6 +289,58 @@ class TestDemoPipeline:
                         ]
                     )
                 )
+        res_df = pd.concat(res_df, ignore_index=True)
+        results_bag.data = res_df
+        # plotting
+        niter = len(S_bin_iter)
+        ncell = Y.shape[0]
+        fig = make_subplots(rows=niter, cols=ncell)
+        for uid, i_iter in itt.product(range(ncell), range(niter)):
+            sb = S_bin_iter[i_iter][uid, :]
+            cb = C_bin_iter[i_iter][uid, :]
+            fig.add_traces(
+                plot_traces(
+                    {
+                        "y": Y[uid, :],
+                        "s_true": S_true[uid, :],
+                        "c_bin": cb,
+                        "s_bin": sb,
+                    }
+                ),
+                rows=i_iter + 1,
+                cols=uid + 1,
+            )
+        fig.update_layout(height=350 * niter, width=1200 * ncell)
+        fig.write_html(test_fig_path_html)
+
+    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("est_noise_freq", [None])
+    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("ncell", [1, 5, None])
+    @pytest.mark.parametrize("nfm", [None])
+    def test_demo_pipeline_realds_cnmf(
+        self,
+        upsamp,
+        est_noise_freq,
+        est_add_lag,
+        dsname,
+        ncell,
+        nfm,
+        results_bag,
+    ):
+        # act
+        Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
+        C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
+            np.atleast_2d(Y),
+            up_factor=upsamp,
+            est_noise_freq=est_noise_freq,
+            est_use_smooth=False,
+            est_add_lag=est_add_lag,
+            sps_penal=0,
+        )
+        # save results
+        res_df = []
         for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
             for qthres in [0.25, 0.5, 0.75]:
                 sb = S_cnmf[iu, :] > qthres
