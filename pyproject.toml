@@ -1,8 +1,8 @@
 [project]
-name = "minian-bin"
+name = "indeca"
 version = "0.1.0"
 description = ""
-authors = [{ name = "phildong", email = "" }]
+authors = [{ name = "phildong" }]
 dependencies = [
     "numpy<2",
     "pandas>=2.2.3",
