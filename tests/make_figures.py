@@ -378,7 +378,7 @@ def plot_iter(
     ax = plt.gca()
     mthd = data["method"].unique().item()
     met = data["metric"].unique().item()
-    if mthd == "minian-bin":
+    if mthd == "indeca":
         data = data.astype({"iter": int})
         dat_all = data[data["use_all"]]
         dat_ind = data[~data["use_all"]]
@@ -471,12 +471,12 @@ row_lab_map = {
     "dhm0": r"$\text{DHM}_r$",
     "dhm1": r"$\text{DHM}_d$",
 }
-col_lab_map = {"cnmf": "CNMF", "minian-bin": "InDeCa"}
+col_lab_map = {"cnmf": "CNMF", "indeca": "InDeCa"}
 leg_handles = dict()
 ressub["row_lab"] = ressub["metric"].map(row_lab_map)
 ressub["col_lab"] = ressub["method"].map(col_lab_map)
 row_ord = [row_lab_map[r] for r in ["dhm0", "dhm1"]]
-col_ord = [col_lab_map[c] for c in ["cnmf", "minian-bin"]]
+col_ord = [col_lab_map[c] for c in ["cnmf", "indeca"]]
 palette = {
     "cnmf": COLORS["cnmf_maj"],
     "indeca-ind": COLORS["indeca_min"],

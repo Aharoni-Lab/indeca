@@ -11,12 +11,12 @@ import plotly.graph_objects as go
 import xarray as xr
 from dask.distributed import Client, LocalCluster
 from plotly.subplots import make_subplots
-from tests.testing_utils.io import download_realds, load_gt_ds
 from routine.utils import compute_ROC
 
 from indeca import set_package_log_level
 from indeca.deconv import construct_R
 from indeca.pipeline import pipeline_bin
+from tests.testing_utils.io import download_realds, load_gt_ds
 
 
 # Configure logging for the benchmark script
@@ -59,7 +59,7 @@ def setup_benchmark_logging(level=logging.INFO):
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
-    # Set minian_bin package logging level
+    # Set indeca package logging level
     set_package_log_level(logging.DEBUG)  # Set to DEBUG to see all logging messages
 
     return logger
@@ -126,7 +126,7 @@ def setup_benchmark_logging(level=logging.INFO):
 
 # Set up logging
 logger = setup_benchmark_logging(logging.INFO)
-# Set minian_bin package logging level
+# Set indeca package logging level
 set_package_log_level(logging.DEBUG)  # Set to DEBUG to see all logging messages
 
 logger.info("Starting benchmark script")

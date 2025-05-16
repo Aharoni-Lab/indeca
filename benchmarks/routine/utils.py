@@ -184,8 +184,8 @@ def compute_ROC(S, S_true, metadata=None, **kwargs):
 
 def plot_ROC(data, color=None):
     ax = plt.gca()
-    met_thres = data[data["method"].isin(["CNMF", "minian-bin-scal"])]
-    met_bin = data[data["method"] == "minian-bin"]
+    met_thres = data[data["method"].isin(["CNMF", "indeca-scal"])]
+    met_bin = data[data["method"] == "indeca"]
     sns.lineplot(
         met_thres,
         x="false_pos",
@@ -212,7 +212,7 @@ def plot_ROC(data, color=None):
 def plot_ROC_scatter(data, color=None):
     ax = plt.gca()
     met_cnmf = data[data["method"] == "CNMF"]
-    met_bin = data[data["method"] == "minian-bin"]
+    met_bin = data[data["method"] == "indeca"]
     sns.scatterplot(met_cnmf, x="false_pos", y="true_pos", hue="thres", s=10, ax=ax)
     sns.scatterplot(
         met_bin, x="false_pos", y="true_pos", s=40, c="black", marker="x", ax=ax
@@ -222,7 +222,7 @@ def plot_ROC_scatter(data, color=None):
 
 def plot_corr(data, color=None):
     ax = plt.gca()
-    met_thres = data[data["method"].isin(["CNMF", "minian-bin-scal"])]
-    met_bin = data[data["method"] == "minian-bin"]
+    met_thres = data[data["method"].isin(["CNMF", "indeca-scal"])]
+    met_bin = data[data["method"] == "indeca"]
     sns.lineplot(met_thres, x="thres", y="corr", hue="method", ax=ax)
     ax.axhline(met_bin["corr"].item(), lw=2, alpha=0.8, color="black", ls=":")

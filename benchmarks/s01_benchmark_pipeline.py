@@ -1,4 +1,4 @@
-# %% This lays out a potential workflow for the general use of minian-bin.
+# %% This lays out a potential workflow for the general use of indeca.
 # Workflow is:
 # 0. Handle imports and definitions
 # 1. Generate or inport dataset at normal FPS and upsampled for calcium imaging
@@ -20,11 +20,11 @@ import plotly.graph_objects as go
 import xarray as xr
 from dask.distributed import Client, LocalCluster
 from plotly.subplots import make_subplots
-from tests.testing_utils.cnmf import pipeline_cnmf
 from routine.utils import compute_ROC
 
 from indeca.pipeline import pipeline_bin
 from indeca.simulation import exp_pulse
+from tests.testing_utils.cnmf import pipeline_cnmf
 
 IN_PATH = {
     "org": "./intermediate/simulated/simulated-samp.nc",

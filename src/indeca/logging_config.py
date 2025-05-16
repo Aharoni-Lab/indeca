@@ -4,15 +4,15 @@ from pathlib import Path
 from typing import Union
 
 """
-Internal logging configuration for minian_bin package.
+Internal logging configuration for indeca package.
 
-This module configures logging for the minian_bin package internals.
-By default, the package creates a 'logs' directory and writes logs to 'minian_bin.log'.
+This module configures logging for the indeca package internals.
+By default, the package creates a 'logs' directory and writes logs to 'indeca.log'.
 Users can control the logging level using set_package_log_level().
 
 Example:
     # In your application:
-    from minian_bin import set_package_log_level
+    from indeca import set_package_log_level
     set_package_log_level(logging.DEBUG)
 """
 
@@ -21,11 +21,11 @@ log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 
 # Create the package's root logger
-logger = logging.getLogger("minian_bin")
+logger = logging.getLogger("indeca")
 
 # Create handler for package logging
 file_handler = logging.handlers.RotatingFileHandler(
-    log_dir / "minian_bin.log", maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
+    log_dir / "indeca.log", maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
 )
 
 # Create formatter
@@ -47,7 +47,7 @@ logger.setLevel(logging.WARNING)  # Set default level to WARNING
 
 def set_package_log_level(level: Union[int, str]) -> None:
     """
-    Set the logging level for the minian_bin package.
+    Set the logging level for the indeca package.
     The default level is WARNING if this function is not called.
 
     Parameters
@@ -65,7 +65,7 @@ def set_package_log_level(level: Union[int, str]) -> None:
     logger.setLevel(level)
     # Add a test message to verify logging is working
     logger.info(
-        f"minian_bin logging initialized with level: "
+        f"indeca logging initialized with level: "
         f"{level if isinstance(level, str) else logging.getLevelName(level)}"
     )
     logger.debug(
@@ -76,7 +76,7 @@ def set_package_log_level(level: Union[int, str]) -> None:
 # Get a logger for a specific module within the package
 def get_module_logger(module_name: str) -> logging.Logger:
     """
-    Get a logger for a specific module within minian_bin.
+    Get a logger for a specific module within indeca.
     For internal package use only.
     Parameters
     ----------
@@ -87,4 +87,4 @@ def get_module_logger(module_name: str) -> logging.Logger:
     logging.Logger
         Logger instance for the module
     """
-    return logging.getLogger(f"minian_bin.{module_name}")
+    return logging.getLogger(f"indeca.{module_name}")

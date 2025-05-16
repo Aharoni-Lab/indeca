@@ -108,7 +108,7 @@ class TestDemoSolveFit:
                     ]
                 )
             )
-        # minian-bin method
+        # indeca method
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
             Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, s_len=60 * upsamp
         )

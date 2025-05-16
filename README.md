@@ -1,5 +1,5 @@
-# minian-bin
-repository of extended binary algorithms for minian
+# InDeCa
+repository of Interpretable Deconvolution for Calcium imaging.
 
 ## Development Guide
 
@@ -9,13 +9,13 @@ repository of extended binary algorithms for minian
    Either follow the [official guide](https://pdm-project.org/en/latest/#installation), or if you prefer to use conda, `conda install -c conda-forge pdm` into your `base` environment.
 1. Clone the repo and enter:
    ```bash
-   git clone https://github.com/Aharoni-Lab/minian-bin.git
-   cd minian-bin
+   git clone https://github.com/Aharoni-Lab/indeca.git
+   cd indeca
    ```
 1. If you want to use conda/mamba to handle dependencies, create a conda environment:
    ```
-   conda create -n minian_bin -c conda-forge python=3.12
-   conda activate minian_bin
+   conda create -n indeca -c conda-forge python=3.12
+   conda activate indeca
    ```
    Otherwise skip to next step
 1. `pdm install`
@@ -24,8 +24,8 @@ repository of extended binary algorithms for minian
 
 1. Install cuda-toolkit 11.8 into the environment:
    ```bash
-   mamba env create -n minian-bin-dev -f environment/cuda.yml
-   conda activate minian-bin-dev
+   mamba env create -n indeca-dev -f environment/cuda.yml
+   conda activate indeca-dev
    ```
 1. Obtain cuosqp source code:
    ```bash
