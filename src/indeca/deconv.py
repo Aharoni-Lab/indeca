@@ -390,15 +390,20 @@ class DeconvBin:
             if w is not None:
                 self._update_w(w)
             # update internal variables
-            updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds = [False] * 6
+            updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds, setup_prob = [
+                False
+            ] * 7
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
             if self.err_weighting is not None and update_weighting:
                 self._update_Wt(clear=clear_weighting)
-                updt_P = True
-                updt_q0 = True
-                updt_q = True
+                if self.err_weighting == "adaptive":
+                    setup_prob = True
+                else:
+                    updt_P = True
+                    updt_q0 = True
+                    updt_q = True
             if self.norm == "huber":
                 if any((scale is not None, scale_mul is not None, updt_HG)):
                     self._update_A()
@@ -462,22 +467,25 @@ class DeconvBin:
                     self.prob_free.update_lin_cost(self.q)
                     self.prob.update_lin_cost(self.q)
             elif self.backend in ["osqp", "cuosqp"] and any(
-                (updt_P, updt_q, updt_A, updt_bounds)
+                (updt_P, updt_q, updt_A, updt_bounds, setup_prob)
             ):
-                self.prob_free.update(
-                    Px=self.P.copy().data if updt_P else None,
-                    q=self.q.copy() if updt_q else None,
-                    Ax=self.A.copy().data if updt_A else None,
-                    l=self.lb.copy() if updt_bounds else None,
-                    u=self.ub_inf.copy() if updt_bounds else None,
-                )
-                self.prob.update(
-                    Px=self.P.copy().data if updt_P else None,
-                    q=self.q.copy() if updt_q else None,
-                    Ax=self.A.copy().data if updt_A else None,
-                    l=self.lb.copy() if updt_bounds else None,
-                    u=self.ub.copy() if updt_bounds else None,
-                )
+                if setup_prob:
+                    self._setup_prob_osqp()
+                else:
+                    self.prob_free.update(
+                        Px=self.P.copy().data if updt_P else None,
+                        q=self.q.copy() if updt_q else None,
+                        Ax=self.A.copy().data if updt_A else None,
+                        l=self.lb.copy() if updt_bounds else None,
+                        u=self.ub_inf.copy() if updt_bounds else None,
+                    )
+                    self.prob.update(
+                        Px=self.P.copy().data if updt_P else None,
+                        q=self.q.copy() if updt_q else None,
+                        Ax=self.A.copy().data if updt_A else None,
+                        l=self.lb.copy() if updt_bounds else None,
+                        u=self.ub.copy() if updt_bounds else None,
+                    )
             logger.debug("Optimization problem updated")
 
     def _cut_pks_labs(self, s, labs, pks):
@@ -1207,8 +1215,7 @@ class DeconvBin:
             self.err_wt = np.nan_to_num(self.err_wt)
         elif self.err_weighting == "adaptive":
             if self.s_bin is not None:
-                # use a small number instead of 0 to preserve sparsity pattern of P
-                self.err_wt = np.full(self.y_len, 1e-10)
+                self.err_wt = np.zeros(self.y_len)
                 s_bin_R = self.R @ self.s_bin
                 for nzidx in np.where(s_bin_R > 0)[0]:
                     self.err_wt[nzidx : nzidx + self.coef_len] = 1
