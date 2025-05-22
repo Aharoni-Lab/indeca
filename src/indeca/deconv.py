@@ -808,6 +808,7 @@ class DeconvBin:
         return_met: bool = False,
         obj_crit: str = None,
         early_stop: bool = True,
+        masking: bool = True,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -873,6 +874,8 @@ class DeconvBin:
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
             if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
+                if masking:
+                    self._update_mask(use_wt=True)
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
@@ -1159,11 +1162,14 @@ class DeconvBin:
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             self._setup_prob_osqp()
 
-    def _update_mask(self, amp_constraint: bool = True) -> None:
+    def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
         self._reset_mask()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            opt_s, _ = self.solve(amp_constraint)
-            nzidx_s = np.where(opt_s > self.delta_penal)[0]
+            if use_wt:
+                nzidx_s = np.where(self.err_wt)[0]
+            else:
+                opt_s, _ = self.solve(amp_constraint)
+                nzidx_s = np.where(opt_s > self.delta_penal)[0]
             if len(nzidx_s) == 0:
                 return
             self.nzidx_s = nzidx_s
@@ -1216,7 +1222,7 @@ class DeconvBin:
         elif self.err_weighting == "adaptive":
             if self.s_bin is not None:
                 self.err_wt = np.zeros(self.y_len)
-                s_bin_R = self.R @ self.s_bin
+                s_bin_R = self.R @ self._pad_s(self.s_bin)
                 for nzidx in np.where(s_bin_R > 0)[0]:
                     self.err_wt[nzidx : nzidx + self.coef_len] = 1
             else:
