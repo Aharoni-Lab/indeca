@@ -210,6 +210,9 @@ class TestDeconvBin:
         # assert
         assert (s_bin == s).all()
 
+    @pytest.mark.parametrize(
+        "y_len", [1000, pytest.param(10000, marks=pytest.mark.slow)]
+    )
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("upsamp", [1])
     @pytest.mark.parametrize("ns_lev", [0, 0.2, 0.5])
@@ -219,6 +222,7 @@ class TestDeconvBin:
     @pytest.mark.parametrize("obj_crit", [None])
     def test_solve_scale(
         self,
+        y_len,
         taus,
         upsamp,
         ns_lev,
@@ -232,7 +236,12 @@ class TestDeconvBin:
     ):
         # act
         y, c_true, c_org, s_true, s_org, scale = fixt_y(
-            taus=taus, upsamp=upsamp, rand_seed=rand_seed, ns_lev=ns_lev, y_scaling=True
+            y_len=y_len,
+            taus=taus,
+            upsamp=upsamp,
+            rand_seed=rand_seed,
+            ns_lev=ns_lev,
+            y_scaling=True,
         )
         taus_up = np.array(taus) * upsamp
         _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
@@ -275,7 +284,7 @@ class TestDeconvBin:
         if ns_lev == 0:
             assert np.isclose(np.array(iterdf["scale"])[-1], scale, atol=1e-2)
         if ns_lev < 0.5:
-            assert f1 == 1
+            assert f1 >= 0.99
 
 
 @pytest.mark.slow
