@@ -679,7 +679,7 @@ class DeconvBin:
                     np.inf,
                 )
         cvals = [self._compute_c(s) for s in svals]
-        yfvals = [R @ c for c in cvals]
+        yfvals = [np.array((R @ c).todense()).squeeze() for c in cvals]
         if scaling:
             scal_fit = [scal_lstsq(yf, y - res, fit_intercept=True) for yf in yfvals]
             scals = [sf[0] for sf in scal_fit]
@@ -709,17 +709,18 @@ class DeconvBin:
             opt_idx = np.argmin(objs)
         s_bin = svals[opt_idx]
         self.s_bin = s_bin
+        self.c_bin = np.array(cvals[opt_idx].todense()).squeeze()
         self.b = bs[opt_idx]
         if return_intm:
             return (
-                s_bin,
-                cvals[opt_idx],
+                self.s_bin,
+                self.c_bin,
                 scals[opt_idx],
                 objs[opt_idx],
                 (opt_s, thres, svals, cvals, yfvals, scals, objs, opt_idx),
             )
         else:
-            return s_bin, cvals[opt_idx], scals[opt_idx], objs[opt_idx]
+            return self.s_bin, self.c_bin, scals[opt_idx], objs[opt_idx]
 
     def solve_penal(
         self, masking=True, scaling=True, return_intm=False, pks_polish=None
@@ -1076,7 +1077,7 @@ class DeconvBin:
 
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         if s is not None:
-            return self.H @ s
+            return self.H @ sps.csc_matrix(s.reshape(-1, 1))
         else:
             if self.backend == "cvxpy":
                 return self.c.value.squeeze()
@@ -1105,7 +1106,7 @@ class DeconvBin:
         if y_fit is None:
             if c is None:
                 c = self._compute_c(s)
-            y_fit = self.R @ c * self.scale
+            y_fit = np.array((self.R @ c * self.scale).todense()).squeeze()
         r = y - y_fit
         err = self._res_err(r)
         if obj_crit in [None, "spk_diff"]:
