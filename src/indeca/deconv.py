@@ -111,6 +111,7 @@ class DeconvBin:
         nthres: int = 1000,
         err_weighting: str = None,
         masking_radius: int = None,
+        pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
@@ -194,6 +195,7 @@ class DeconvBin:
         self.x_cache = None
         self.err_weighting = err_weighting
         self.masking_r = masking_radius
+        self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
@@ -827,13 +829,14 @@ class DeconvBin:
         for i in range(self.max_iter_scal):
             if concur_penal:
                 cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(
-                    scaling=i > 0, pks_polish=i > 1 or not reset_scale
+                    scaling=i > 0,
+                    pks_polish=self.pks_polish and (i > 1 or not reset_scale),
                 )
             else:
                 cur_penal = 0
                 cur_s, cur_c, cur_scl, cur_obj_raw = self.solve_thres(
                     scaling=i > 0,
-                    pks_polish=i > 1 or not reset_scale,
+                    pks_polish=self.pks_polish and (i > 1 or not reset_scale),
                     obj_crit=obj_crit,
                 )
             if self.dashboard is not None:
@@ -903,7 +906,7 @@ class DeconvBin:
         self._reset_mask()
         self.update(scale=metric_df.loc[opt_idx, "scale"])
         cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
-            scaling=False, masking=False
+            scaling=False, masking=False, pks_polish=self.pks_polish
         )
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
