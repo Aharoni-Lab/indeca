@@ -110,6 +110,7 @@ class DeconvBin:
         backend: str = "osqp",
         nthres: int = 1000,
         err_weighting: str = None,
+        masking_radius: int = None,
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
@@ -192,6 +193,7 @@ class DeconvBin:
         self.nzidx_c = np.arange(self.T)
         self.x_cache = None
         self.err_weighting = err_weighting
+        self.masking_r = masking_radius
         self.err_wt = np.ones(self.y_len)
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
@@ -875,7 +877,7 @@ class DeconvBin:
             if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
                 if masking:
-                    self._update_mask(use_wt=True)
+                    self._update_mask(use_wt=self.masking_r is None)
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
@@ -1163,13 +1165,24 @@ class DeconvBin:
             self._setup_prob_osqp()
 
     def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
-        self._reset_mask()
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             if use_wt:
                 nzidx_s = np.where(self.err_wt)[0]
             else:
-                opt_s, _ = self.solve(amp_constraint)
-                nzidx_s = np.where(opt_s > self.delta_penal)[0]
+                if self.masking_r is not None:
+                    s_bin_R = self.R @ self._pad_s(self.s_bin)
+                    mask = np.zeros(self.y_len)
+                    for nzidx in np.where(s_bin_R > 0)[0]:
+                        mask[
+                            max(nzidx - self.masking_r, 0) : min(
+                                nzidx + self.masking_r, self.y_len
+                            )
+                        ] = 1
+                    nzidx_s = np.where(mask)[0]
+                else:
+                    self._reset_mask()
+                    opt_s, _ = self.solve(amp_constraint)
+                    nzidx_s = np.where(opt_s > self.delta_penal)[0]
             if len(nzidx_s) == 0:
                 return
             self.nzidx_s = nzidx_s

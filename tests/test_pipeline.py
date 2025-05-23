@@ -235,6 +235,7 @@ class TestDemoPipeline:
             deconv_use_base=True,
             deconv_penal=penalty,
             deconv_err_weighting="adaptive",
+            deconv_masking_radius=5,
             ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
