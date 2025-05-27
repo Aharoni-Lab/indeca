@@ -10,7 +10,7 @@ def download_realds(target_path, target_dataset, remote_path="Ground_truth/"):
     fs = fsspec.filesystem("github", org="HelmchenLabSoftware", repo="Cascade")
     fs.get(
         remote_path + target_dataset,
-        os.path.join(target_path, target_dataset),
+        target_path,
         recursive=True,
     )
 
