@@ -7,6 +7,7 @@ import pytest
 import xarray as xr
 from plotly.subplots import make_subplots
 
+from indeca.deconv import DeconvBin
 from indeca.pipeline import pipeline_bin
 from indeca.simulation import find_dhm
 
@@ -200,6 +201,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("penalty", [None])
     @pytest.mark.parametrize("tau_init", [(21.18, 7.23), None])
     @pytest.mark.parametrize("ar_use_all", [True, False])
+    @pytest.mark.line_profile.with_args(pipeline_bin, DeconvBin.solve_scale)
     def test_demo_pipeline_realds(
         self,
         upsamp,
@@ -321,6 +323,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
     @pytest.mark.parametrize("ncell", [1, 5, None])
     @pytest.mark.parametrize("nfm", [None])
+    @pytest.mark.line_profile.with_args(pipeline_cnmf)
     def test_demo_pipeline_realds_cnmf(
         self,
         upsamp,
