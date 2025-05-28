@@ -110,6 +110,8 @@ class DeconvBin:
         backend: str = "osqp",
         nthres: int = 1000,
         err_weighting: str = None,
+        masking_radius: int = None,
+        pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
         max_iter_l0: int = 30,
@@ -192,6 +194,8 @@ class DeconvBin:
         self.nzidx_c = np.arange(self.T)
         self.x_cache = None
         self.err_weighting = err_weighting
+        self.masking_r = masking_radius
+        self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
@@ -390,15 +394,20 @@ class DeconvBin:
             if w is not None:
                 self._update_w(w)
             # update internal variables
-            updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds = [False] * 6
+            updt_HG, updt_P, updt_A, updt_q0, updt_q, updt_bounds, setup_prob = [
+                False
+            ] * 7
             if coef is not None:
                 self._update_HG()
                 updt_HG = True
             if self.err_weighting is not None and update_weighting:
                 self._update_Wt(clear=clear_weighting)
-                updt_P = True
-                updt_q0 = True
-                updt_q = True
+                if self.err_weighting == "adaptive":
+                    setup_prob = True
+                else:
+                    updt_P = True
+                    updt_q0 = True
+                    updt_q = True
             if self.norm == "huber":
                 if any((scale is not None, scale_mul is not None, updt_HG)):
                     self._update_A()
@@ -462,22 +471,25 @@ class DeconvBin:
                     self.prob_free.update_lin_cost(self.q)
                     self.prob.update_lin_cost(self.q)
             elif self.backend in ["osqp", "cuosqp"] and any(
-                (updt_P, updt_q, updt_A, updt_bounds)
+                (updt_P, updt_q, updt_A, updt_bounds, setup_prob)
             ):
-                self.prob_free.update(
-                    Px=self.P.copy().data if updt_P else None,
-                    q=self.q.copy() if updt_q else None,
-                    Ax=self.A.copy().data if updt_A else None,
-                    l=self.lb.copy() if updt_bounds else None,
-                    u=self.ub_inf.copy() if updt_bounds else None,
-                )
-                self.prob.update(
-                    Px=self.P.copy().data if updt_P else None,
-                    q=self.q.copy() if updt_q else None,
-                    Ax=self.A.copy().data if updt_A else None,
-                    l=self.lb.copy() if updt_bounds else None,
-                    u=self.ub.copy() if updt_bounds else None,
-                )
+                if setup_prob:
+                    self._setup_prob_osqp()
+                else:
+                    self.prob_free.update(
+                        Px=self.P.copy().data if updt_P else None,
+                        q=self.q.copy() if updt_q else None,
+                        Ax=self.A.copy().data if updt_A else None,
+                        l=self.lb.copy() if updt_bounds else None,
+                        u=self.ub_inf.copy() if updt_bounds else None,
+                    )
+                    self.prob.update(
+                        Px=self.P.copy().data if updt_P else None,
+                        q=self.q.copy() if updt_q else None,
+                        Ax=self.A.copy().data if updt_A else None,
+                        l=self.lb.copy() if updt_bounds else None,
+                        u=self.ub.copy() if updt_bounds else None,
+                    )
             logger.debug("Optimization problem updated")
 
     def _cut_pks_labs(self, s, labs, pks):
@@ -667,7 +679,7 @@ class DeconvBin:
                     np.inf,
                 )
         cvals = [self._compute_c(s) for s in svals]
-        yfvals = [R @ c for c in cvals]
+        yfvals = [np.array((R @ c).todense()).squeeze() for c in cvals]
         if scaling:
             scal_fit = [scal_lstsq(yf, y - res, fit_intercept=True) for yf in yfvals]
             scals = [sf[0] for sf in scal_fit]
@@ -697,17 +709,18 @@ class DeconvBin:
             opt_idx = np.argmin(objs)
         s_bin = svals[opt_idx]
         self.s_bin = s_bin
+        self.c_bin = np.array(cvals[opt_idx].todense()).squeeze()
         self.b = bs[opt_idx]
         if return_intm:
             return (
-                s_bin,
-                cvals[opt_idx],
+                self.s_bin,
+                self.c_bin,
                 scals[opt_idx],
                 objs[opt_idx],
                 (opt_s, thres, svals, cvals, yfvals, scals, objs, opt_idx),
             )
         else:
-            return s_bin, cvals[opt_idx], scals[opt_idx], objs[opt_idx]
+            return self.s_bin, self.c_bin, scals[opt_idx], objs[opt_idx]
 
     def solve_penal(
         self, masking=True, scaling=True, return_intm=False, pks_polish=None
@@ -800,6 +813,7 @@ class DeconvBin:
         return_met: bool = False,
         obj_crit: str = None,
         early_stop: bool = True,
+        masking: bool = True,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -816,13 +830,14 @@ class DeconvBin:
         for i in range(self.max_iter_scal):
             if concur_penal:
                 cur_s, cur_c, cur_scl, cur_obj_raw, cur_penal = self.solve_penal(
-                    scaling=i > 0, pks_polish=i > 1 or not reset_scale
+                    scaling=i > 0,
+                    pks_polish=self.pks_polish and (i > 1 or not reset_scale),
                 )
             else:
                 cur_penal = 0
                 cur_s, cur_c, cur_scl, cur_obj_raw = self.solve_thres(
                     scaling=i > 0,
-                    pks_polish=i > 1 or not reset_scale,
+                    pks_polish=self.pks_polish and (i > 1 or not reset_scale),
                     obj_crit=obj_crit,
                 )
             if self.dashboard is not None:
@@ -865,6 +880,8 @@ class DeconvBin:
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
             if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
+                if masking:
+                    self._update_mask(use_wt=self.masking_r is None)
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
@@ -890,7 +907,7 @@ class DeconvBin:
         self._reset_mask()
         self.update(scale=metric_df.loc[opt_idx, "scale"])
         cur_s, cur_c, cur_scl, cur_obj, cur_penal = self.solve_penal(
-            scaling=False, masking=False
+            scaling=False, masking=False, pks_polish=self.pks_polish
         )
         opt_s, opt_c = np.zeros(self.T), np.zeros(self.T)
         opt_s[self.nzidx_s] = cur_s
@@ -975,7 +992,7 @@ class DeconvBin:
                 verbose=False,
                 polish=True,
                 warm_start=False,
-                adaptive_rho=False,
+                # adaptive_rho=False,
                 eps_abs=1e-6,
                 eps_rel=1e-6,
                 eps_prim_inf=1e-7,
@@ -997,7 +1014,7 @@ class DeconvBin:
                 verbose=False,
                 polish=True,
                 warm_start=False,
-                adaptive_rho=False,
+                # adaptive_rho=False,
                 eps_abs=1e-6,
                 eps_rel=1e-6,
                 eps_prim_inf=1e-7,
@@ -1060,7 +1077,7 @@ class DeconvBin:
 
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         if s is not None:
-            return self.H @ s
+            return self.H @ sps.csc_matrix(s.reshape(-1, 1))
         else:
             if self.backend == "cvxpy":
                 return self.c.value.squeeze()
@@ -1089,7 +1106,7 @@ class DeconvBin:
         if y_fit is None:
             if c is None:
                 c = self._compute_c(s)
-            y_fit = self.R @ c * self.scale
+            y_fit = np.array((self.R @ c * self.scale).todense()).squeeze()
         r = y - y_fit
         err = self._res_err(r)
         if obj_crit in [None, "spk_diff"]:
@@ -1151,11 +1168,25 @@ class DeconvBin:
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             self._setup_prob_osqp()
 
-    def _update_mask(self, amp_constraint: bool = True) -> None:
-        self._reset_mask()
+    def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
-            opt_s, _ = self.solve(amp_constraint)
-            nzidx_s = np.where(opt_s > self.delta_penal)[0]
+            if use_wt:
+                nzidx_s = np.where(self.err_wt)[0]
+            else:
+                if self.masking_r is not None:
+                    s_bin_R = self.R @ self._pad_s(self.s_bin)
+                    mask = np.zeros(self.y_len)
+                    for nzidx in np.where(s_bin_R > 0)[0]:
+                        mask[
+                            max(nzidx - self.masking_r, 0) : min(
+                                nzidx + self.masking_r, self.y_len
+                            )
+                        ] = 1
+                    nzidx_s = np.where(mask)[0]
+                else:
+                    self._reset_mask()
+                    opt_s, _ = self.solve(amp_constraint)
+                    nzidx_s = np.where(opt_s > self.delta_penal)[0]
             if len(nzidx_s) == 0:
                 return
             self.nzidx_s = nzidx_s
@@ -1207,9 +1238,8 @@ class DeconvBin:
             self.err_wt = np.nan_to_num(self.err_wt)
         elif self.err_weighting == "adaptive":
             if self.s_bin is not None:
-                # use a small number instead of 0 to preserve sparsity pattern of P
-                self.err_wt = np.full(self.y_len, 1e-10)
-                s_bin_R = self.R @ self.s_bin
+                self.err_wt = np.zeros(self.y_len)
+                s_bin_R = self.R @ self._pad_s(self.s_bin)
                 for nzidx in np.where(s_bin_R > 0)[0]:
                     self.err_wt[nzidx : nzidx + self.coef_len] = 1
             else:
