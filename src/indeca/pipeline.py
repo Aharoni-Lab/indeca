@@ -34,7 +34,7 @@ def pipeline_bin(
     deconv_nthres=1000,
     deconv_norm="l2",
     deconv_atol=1e-3,
-    deconv_penal="l1",
+    deconv_penal=None,
     deconv_backend="osqp",
     deconv_err_weighting=None,
     deconv_use_base=True,
