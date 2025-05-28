@@ -194,7 +194,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("ar_kn_len", [150])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("dsname", ["DS09-GCaMP6f-m-V1", "X-DS09-GCaMP6f-m-V1"])
     @pytest.mark.parametrize("ncell", [1, 5, None])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
@@ -316,7 +316,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("upsamp", [1])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("dsname", ["X-DS09-GCaMP6f-m-V1"])
+    @pytest.mark.parametrize("dsname", ["DS09-GCaMP6f-m-V1", "X-DS09-GCaMP6f-m-V1"])
     @pytest.mark.parametrize("ncell", [1, 5, None])
     @pytest.mark.parametrize("nfm", [None])
     def test_demo_pipeline_realds_cnmf(
