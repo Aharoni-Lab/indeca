@@ -179,7 +179,7 @@ def fixt_realds(dsname, ncell=None, nfm=None):
         fluo_df = fluo_df[fluo_df["fps"] == fps_keep].copy()
         uids = fluo_df["unit_id"].unique()
         Y = Y.sel(unit_id=uids).dropna("frame", how="all").fillna(0)
-        S_true = S_true.sel(unit_id=uids, frame=Y.coords["frame"])
+        S_true = S_true.sel(unit_id=uids, frame=Y.coords["frame"]).fillna(0)
     nfm_valid = Y.coords["frame"][Y.notnull().all("unit_id")].max().item() + 1
     if nfm is not None:
         nfm = min(nfm, nfm_valid)
