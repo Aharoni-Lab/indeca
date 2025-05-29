@@ -166,10 +166,7 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
 
 
 def fixt_realds(dsname, ncell=None, nfm=None):
-    if not os.path.exists(os.path.join(TEST_DATA_DIR, dsname)) or not os.listdir(
-        os.path.join(TEST_DATA_DIR, dsname)
-    ):
-        download_realds(TEST_DATA_DIR, dsname)
+    download_realds(TEST_DATA_DIR, dsname)
     Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(TEST_DATA_DIR, dsname))
     if fluo_df["fps"].nunique() > 1:
         warnings.warn("More than one fps found in dataset {}".format(dsname))

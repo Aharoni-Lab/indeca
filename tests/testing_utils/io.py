@@ -1,18 +1,38 @@
 import os
+import shutil
+from pathlib import Path
 
-import fsspec
+import git
 import numpy as np
 import pandas as pd
+from filelock import FileLock, Timeout
 from scipy.io import loadmat
 
+GIT_CACHE_PATH = ".cache/indeca"
 
-def download_realds(target_path, target_dataset, remote_path="Ground_truth/"):
-    fs = fsspec.filesystem("github", org="HelmchenLabSoftware", repo="Cascade")
-    fs.get(
-        remote_path + target_dataset,
-        target_path,
-        recursive=True,
-    )
+
+def download_realds(target_path, target_dataset: str = ""):
+    cache_path = Path.home() / GIT_CACHE_PATH / "cascade"
+    lock_path = Path.home() / GIT_CACHE_PATH / "cascade.lock"
+    lock = FileLock(str(lock_path), timeout=30)
+    try:
+        with lock:
+            if not os.path.exists(
+                os.path.join(target_path, target_dataset)
+            ) or not os.listdir(os.path.join(target_path, target_dataset)):
+                if not cache_path.exists():
+                    git.Repo.clone_from(
+                        "https://github.com/HelmchenLabSoftware/Cascade.git", cache_path
+                    )
+                src_path = cache_path / "Ground_truth" / target_dataset
+                dst_path = Path(target_path) / target_dataset
+                if not src_path.exists():
+                    raise FileNotFoundError(f"Folder {src_path} does not exist.")
+                if dst_path.exists():
+                    shutil.rmtree(dst_path)
+                shutil.copytree(src_path, dst_path)
+    except Timeout:
+        raise RuntimeError("Failed to acquire lock to download dataset")
 
 
 def load_gt_mat(matfile):
