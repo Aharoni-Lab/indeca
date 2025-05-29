@@ -14,7 +14,7 @@ from scipy.signal import ShortTimeFFT, find_peaks
 from scipy.special import huber
 
 from indeca.logging_config import get_module_logger
-from indeca.simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
+from indeca.simulation import AR2tau, ar_pulse, exp_pulse, solve_p, tau2AR
 from indeca.utils import scal_lstsq
 
 # Initialize logger for this module
@@ -332,7 +332,7 @@ class DeconvBin:
                 self.y.value = y
             if tau is not None:
                 theta_new = np.array(tau2AR(tau[0], tau[1]))
-                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                p = solve_p(tau[0], tau[1])
                 coef, _, _ = exp_pulse(
                     tau[0],
                     tau[1],
@@ -367,7 +367,7 @@ class DeconvBin:
                 self.y = y
             if tau is not None:
                 theta_new = np.array(tau2AR(tau[0], tau[1]))
-                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                p = solve_p(tau[0], tau[1])
                 coef, _, _ = exp_pulse(
                     tau[0],
                     tau[1],
