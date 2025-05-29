@@ -887,7 +887,7 @@ class DeconvBin:
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
                     np.abs(cur_obj - opt_obj) < self.rtol * opt_obj,
                     np.abs(cur_scl - last_scal) < self.atol,
-                    np.abs(cur_obj - last_obj) < self.atol,
+                    np.abs(cur_obj - last_obj) < self.atol * 1e-3,
                     early_stop and cur_obj > last_obj,
                 )
             ):
