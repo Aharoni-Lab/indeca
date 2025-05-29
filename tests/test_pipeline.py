@@ -196,11 +196,27 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("ar_kn_len", [150])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("dsname", ["DS09-GCaMP6f-m-V1", "X-DS09-GCaMP6f-m-V1"])
-    @pytest.mark.parametrize("ncell", [1, 5, None])
+    @pytest.mark.parametrize(
+        "dsname",
+        [
+            "DS01-OGB1-m-V1",
+            "DS06-GCaMP6f-zf-aDp",
+            "DS09-GCaMP6f-m-V1",
+            "DS14-GCaMP6s-m-V1",
+            "DS17-GCaMP5k-m-V1",
+            "DS18-R-CaMP-m-CA3",
+            "DS20-jRCaMP1a-m-V1",
+            "DS21-jGECO1a-m-V1",
+            "DS33-Interneurons2023-m-V1",
+            "DS40-GCaMP6s-spinal-cord-excitatory",
+            "DS41-GCaMP6s-spinal-cord-inhibitory",
+            "X-DS09-GCaMP6f-m-V1",
+        ],
+    )
+    @pytest.mark.parametrize("ncell", [1, None])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.parametrize("penalty", [None])
-    @pytest.mark.parametrize("tau_init", [(21.18, 7.23), None])
+    @pytest.mark.parametrize("tau_init", [None])
     @pytest.mark.parametrize("ar_use_all", [True, False])
     @pytest.mark.line_profile.with_args(pipeline_bin, DeconvBin.solve_scale)
     def test_demo_pipeline_realds(
@@ -321,8 +337,24 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("upsamp", [1])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [10])
-    @pytest.mark.parametrize("dsname", ["DS09-GCaMP6f-m-V1", "X-DS09-GCaMP6f-m-V1"])
-    @pytest.mark.parametrize("ncell", [1, 5, None])
+    @pytest.mark.parametrize(
+        "dsname",
+        [
+            "DS01-OGB1-m-V1",
+            "DS06-GCaMP6f-zf-aDp",
+            "DS09-GCaMP6f-m-V1",
+            "DS14-GCaMP6s-m-V1",
+            "DS17-GCaMP5k-m-V1",
+            "DS18-R-CaMP-m-CA3",
+            "DS20-jRCaMP1a-m-V1",
+            "DS21-jGECO1a-m-V1",
+            "DS33-Interneurons2023-m-V1",
+            "DS40-GCaMP6s-spinal-cord-excitatory",
+            "DS41-GCaMP6s-spinal-cord-inhibitory",
+            "X-DS09-GCaMP6f-m-V1",
+        ],
+    )
+    @pytest.mark.parametrize("ncell", [1, None])
     @pytest.mark.parametrize("nfm", [None])
     @pytest.mark.line_profile.with_args(pipeline_cnmf)
     def test_demo_pipeline_realds_cnmf(
