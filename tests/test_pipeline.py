@@ -193,20 +193,43 @@ class TestPipeline:
 class TestDemoPipeline:
     @pytest.mark.parametrize("upsamp", [1])
     @pytest.mark.parametrize("max_iter", [10])
-    @pytest.mark.parametrize("ar_kn_len", [150])
+    @pytest.mark.parametrize("ar_kn_len", [200])
     @pytest.mark.parametrize("est_noise_freq", [None])
-    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("est_add_lag", [200])
     @pytest.mark.parametrize(
         "dsname",
         [
             "DS01-OGB1-m-V1",
+            "DS02-OGB1-2-m-V1",
+            # "DS03-Cal520-m-S1",
+            "DS04-OGB1-zf-pDp",
             "DS06-GCaMP6f-zf-aDp",
+            # "DS07-GCaMP6f-zf-dD",
+            "DS08-GCaMP6f-zf-OB",
             "DS09-GCaMP6f-m-V1",
+            "DS10-GCaMP6f-m-V1-neuropil-corrected",
+            "DS11-GCaMP6f-m-V1-neuropil-corrected",
+            "DS12-GCaMP6s-m-V1-neuropil-corrected",
+            "DS13-GCaMP6s-m-V1-neuropil-corrected",
             "DS14-GCaMP6s-m-V1",
+            "DS15-GCaMP6s-m-V1",
+            "DS16-GCaMP6s-m-V1",
             "DS17-GCaMP5k-m-V1",
             "DS18-R-CaMP-m-CA3",
+            "DS19-R-CaMP-m-S1",
             "DS20-jRCaMP1a-m-V1",
             "DS21-jGECO1a-m-V1",
+            "DS22-OGB1-m-SST-V1",
+            "DS23-OGB1-m-PV-V1",
+            "DS24-GCaMP6f-m-PV-V1",
+            "DS25-GCaMP6f-m-SST-V1",
+            "DS26-GCaMP6f-m-VIP-V1",
+            "DS27-GCaMP6f-m-PV-vivo-V1",
+            "DS28-XCaMPgf-m-V1",
+            "DS29-GCaMP7f-m-V1",
+            "DS30-GCaMP8f-m-V1",
+            "DS31-GCaMP8m-m-V1",
+            "DS32-GCaMP8s-m-V1",
             "DS33-Interneurons2023-m-V1",
             "DS40-GCaMP6s-spinal-cord-excitatory",
             "DS41-GCaMP6s-spinal-cord-inhibitory",
@@ -341,18 +364,41 @@ class TestDemoPipeline:
 
     @pytest.mark.parametrize("upsamp", [1])
     @pytest.mark.parametrize("est_noise_freq", [None])
-    @pytest.mark.parametrize("est_add_lag", [10])
+    @pytest.mark.parametrize("est_add_lag", [200])
     @pytest.mark.parametrize(
         "dsname",
         [
             "DS01-OGB1-m-V1",
+            "DS02-OGB1-2-m-V1",
+            # "DS03-Cal520-m-S1",
+            "DS04-OGB1-zf-pDp",
             "DS06-GCaMP6f-zf-aDp",
+            # "DS07-GCaMP6f-zf-dD",
+            "DS08-GCaMP6f-zf-OB",
             "DS09-GCaMP6f-m-V1",
+            "DS10-GCaMP6f-m-V1-neuropil-corrected",
+            "DS11-GCaMP6f-m-V1-neuropil-corrected",
+            "DS12-GCaMP6s-m-V1-neuropil-corrected",
+            "DS13-GCaMP6s-m-V1-neuropil-corrected",
             "DS14-GCaMP6s-m-V1",
+            "DS15-GCaMP6s-m-V1",
+            "DS16-GCaMP6s-m-V1",
             "DS17-GCaMP5k-m-V1",
             "DS18-R-CaMP-m-CA3",
+            "DS19-R-CaMP-m-S1",
             "DS20-jRCaMP1a-m-V1",
             "DS21-jGECO1a-m-V1",
+            "DS22-OGB1-m-SST-V1",
+            "DS23-OGB1-m-PV-V1",
+            "DS24-GCaMP6f-m-PV-V1",
+            "DS25-GCaMP6f-m-SST-V1",
+            "DS26-GCaMP6f-m-VIP-V1",
+            "DS27-GCaMP6f-m-PV-vivo-V1",
+            "DS28-XCaMPgf-m-V1",
+            "DS29-GCaMP7f-m-V1",
+            "DS30-GCaMP8f-m-V1",
+            "DS31-GCaMP8m-m-V1",
+            "DS32-GCaMP8s-m-V1",
             "DS33-Interneurons2023-m-V1",
             "DS40-GCaMP6s-spinal-cord-excitatory",
             "DS41-GCaMP6s-spinal-cord-inhibitory",
