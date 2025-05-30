@@ -319,10 +319,15 @@ class TestDemoPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
+            try:
+                scal = iter_df.loc[(i_iter, uid), "scale"]
+            except KeyError:
+                opt_iter = iter_df.xs(uid, level=1)["obj"].idxmin()
+                scal = iter_df.loc[(opt_iter, uid), "scale"]
             fig.add_traces(
                 plot_traces(
                     {
-                        "y": Y[uid, :],
+                        "y": Y[uid, :] / scal,
                         "s_true": S_true[uid, :],
                         "c_bin": cb,
                         "s_bin": sb,
