@@ -1438,7 +1438,7 @@ class DeconvBin:
                 [np.full(xlen + self.y_len * 2, np.inf), self.y - self.huber_k]
             )
         else:
-            bb = self.y.mean() if self.use_base else 0
+            bb = np.clip(self.y.mean(), 0, None) if self.use_base else 0
             if self.free_kernel:
                 self.lb = np.zeros(len(self.nzidx_s) + 1)
                 self.ub = np.concatenate([np.full(1, bb), np.ones(len(self.nzidx_s))])
@@ -1452,3 +1452,5 @@ class DeconvBin:
                 self.lb = np.zeros(len(self.nzidx_A) + 1)
                 self.ub = np.concatenate([np.full(1, bb), ub_pad[self.nzidx_A]])
                 self.ub_inf = np.concatenate([np.full(1, bb), ub_inf_pad[self.nzidx_A]])
+        assert (self.ub >= self.lb).all()
+        assert (self.ub_inf >= self.lb).all()
