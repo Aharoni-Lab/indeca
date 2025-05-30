@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 from statsmodels.tsa.stattools import acovf
 
 from indeca.deconv import construct_G, construct_R
-from indeca.simulation import AR2tau, ar_pulse, tau2AR
+from indeca.simulation import AR2tau, ar_pulse, solve_p, tau2AR
 
 
 def convolve_g(s, g):
@@ -498,13 +498,13 @@ def get_ar_coef(
 
 
 def AR_upsamp_real(theta, upsamp: int = 1, fit_nsamp: int = 1000):
-    tau_d, tau_r, p = AR2tau(*theta, solve_amp=True)
-    tau = np.array([tau_d, tau_r])
-    if (np.imag(tau) != 0).any() or p == np.inf:
-        tr = ar_pulse(*theta, nsamp=fit_nsamp, shifted=True)[0]
-        lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
-        tau = -1 / lams
+    tr = ar_pulse(*theta, nsamp=fit_nsamp, shifted=True)[0]
+    lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
+    tau = -1 / lams
     tau_up = tau * upsamp
     theta_up = tau2AR(*tau_up)
-    td, tr, p = AR2tau(*theta_up, solve_amp=True)
+    td, tr = tau_up
+    p = solve_p(td, tr)
+    assert td > tr
+    assert p > 0 and not (np.isinf(p) or np.isnan(p))
     return theta_up, np.array([td, tr]), np.array([p, -p])
