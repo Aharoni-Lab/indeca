@@ -316,6 +316,13 @@ def solve_fit_h(
 
 
 def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1):
+    if y.ndim == 1:
+        ylen = len(y)
+    else:
+        ylen = y.shape[1]
+    if s_len >= ylen:
+        warnings.warn("Coefficient length longer than data")
+        s_len = ylen - 1
     h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
     try:
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms

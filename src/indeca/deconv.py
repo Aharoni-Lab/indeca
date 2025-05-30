@@ -130,6 +130,9 @@ class DeconvBin:
         else:
             assert y_len is not None
             self.y_len = y_len
+        if coef_len is not None and coef_len > self.y_len:
+            warnings.warn("Coefficient length longer than data")
+            coef_len = self.y_len
         if theta is not None:
             self.theta = np.array(theta)
             if tau is None:
