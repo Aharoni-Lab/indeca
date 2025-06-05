@@ -101,3 +101,11 @@ def df_assign_metadata(df, meta_dict):
     for dname, dval in meta_dict.items():
         df[dname] = dval
     return df
+
+
+def nzidx_int(arr):
+    idxs = []
+    for idx in np.where(arr)[0]:
+        val = arr[idx]
+        idxs.extend([idx] * val)
+    return idxs

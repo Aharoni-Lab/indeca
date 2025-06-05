@@ -13,7 +13,7 @@ from indeca.simulation import find_dhm
 
 from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
-from .testing_utils.metrics import assignment_distance
+from .testing_utils.metrics import assignment_distance, nzidx_int
 from .testing_utils.plotting import plot_traces
 
 
@@ -364,7 +364,6 @@ class TestDemoPipeline:
         fig.update_layout(height=350 * niter, width=1200 * ncell)
         fig.write_html(test_fig_path_html)
 
-    @pytest.mark.parametrize("upsamp", [None])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [200])
     @pytest.mark.parametrize(
@@ -412,7 +411,6 @@ class TestDemoPipeline:
     @pytest.mark.line_profile.with_args(pipeline_cnmf)
     def test_demo_pipeline_realds_cnmf(
         self,
-        upsamp,
         est_noise_freq,
         est_add_lag,
         dsname,
@@ -422,11 +420,8 @@ class TestDemoPipeline:
     ):
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
-        if upsamp is None:
-            upsamp = int(S_true.max().item())
         C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
             np.atleast_2d(Y),
-            up_factor=upsamp,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
             est_add_lag=est_add_lag,
@@ -436,7 +431,8 @@ class TestDemoPipeline:
         res_df = []
         for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
             for qthres in [0.25, 0.5, 0.75]:
-                sb = S_cnmf[iu, :] > qthres
+                cur_s = S_cnmf[iu, :]
+                sb = np.around(cur_s / (qthres * cur_s.max())).astype(int)
                 tau_d, tau_r = tau_cnmf[iu, :]
                 try:
                     (dhm0, dhm1), _ = find_dhm(
@@ -447,7 +443,7 @@ class TestDemoPipeline:
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
-                    sb_idx = np.where(sb)[0] / upsamp
+                    sb_idx = nzidx_int(sb)
                     t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
                     t_ap = cur_ap["ap_time"]
                     mdist, f1, prec, rec = assignment_distance(
