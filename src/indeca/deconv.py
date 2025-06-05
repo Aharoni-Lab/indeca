@@ -712,6 +712,7 @@ class DeconvBin:
             opt_idx = np.argmin(objs)
         s_bin = svals[opt_idx]
         self.s_bin = s_bin
+        assert len(s_bin) == len(self.nzidx_s)
         self.c_bin = np.array(cvals[opt_idx].todense()).squeeze()
         self.b = bs[opt_idx]
         if return_intm:
@@ -1174,15 +1175,14 @@ class DeconvBin:
     def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             if use_wt:
-                nzidx_s = np.where(self.err_wt)[0]
+                nzidx_s = np.where(self.R.T @ self.err_wt)[0]
             else:
                 if self.masking_r is not None:
-                    s_bin_R = self.R @ self._pad_s(self.s_bin)
-                    mask = np.zeros(self.y_len)
-                    for nzidx in np.where(s_bin_R > 0)[0]:
+                    mask = np.zeros(self.T)
+                    for nzidx in np.where(self._pad_s(self.s_bin) > 0)[0]:
                         mask[
                             max(nzidx - self.masking_r, 0) : min(
-                                nzidx + self.masking_r, self.y_len
+                                nzidx + self.masking_r, self.T
                             )
                         ] = 1
                     nzidx_s = np.where(mask)[0]
@@ -1191,7 +1191,7 @@ class DeconvBin:
                     opt_s, _ = self.solve(amp_constraint)
                     nzidx_s = np.where(opt_s > self.delta_penal)[0]
             if len(nzidx_s) == 0:
-                return
+                raise ValueError
             self.nzidx_s = nzidx_s
             self._update_R()
             self._update_w()
