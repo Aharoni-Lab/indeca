@@ -86,7 +86,7 @@ class TestDemoSolveFit:
                     )
                 )
             lams, ps, _, _, _ = solve_fit_h_num(
-                y, s, np.ones(1), up_factor=upsamp, s_len=60 * upsamp
+                y, s, np.ones(1), up_factor=upsamp, h_len=60 * upsamp
             )
             tau_fit = -1 / lams / upsamp
             dhm_fit, _ = find_dhm(True, tau_fit, ps)
@@ -110,7 +110,7 @@ class TestDemoSolveFit:
             )
         # indeca method
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-            Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, s_len=60 * upsamp
+            Y, S_org, np.ones(Y.shape[0]), up_factor=upsamp, h_len=60 * upsamp
         )
         tau_fit = -1 / lams / upsamp
         dhm_fit, _ = find_dhm(True, tau_fit, ps)

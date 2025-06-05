@@ -5,7 +5,7 @@ import pandas as pd
 from line_profiler import profile
 from tqdm.auto import tqdm, trange
 
-from .AR_kernel import AR_upsamp_real, estimate_coefs, fit_sumexp_gd, solve_fit_h_num
+from .AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
 from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .logging_config import get_module_logger
@@ -44,7 +44,6 @@ def pipeline_bin(
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l2",
-    ar_nspk_thres=5,
     da_client=None,
     spawn_dashboard=True,
 ):
@@ -274,21 +273,19 @@ def pipeline_bin(
         metric_df = metric_df.reset_index()
         S_ar = S_best
         if ar_use_all:
-            lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+            cur_tau, ps, ar_scal, h, h_fit = updateAR(
                 Y,
                 S_ar,
                 scal_best,
                 N=p,
-                s_len=ar_kn_len * up_factor,
+                h_len=ar_kn_len * up_factor,
                 norm=ar_norm,
                 up_factor=up_factor,
-                nspk_thres=ar_nspk_thres,
             )
             if dashboard is not None:
                 dashboard.update(
                     h=h[: ar_kn_len * up_factor], h_fit=h_fit[: ar_kn_len * up_factor]
                 )
-            cur_tau = -1 / lams
             tau = np.tile(cur_tau, (ncell, 1))
             for idx, d in enumerate(dcv):
                 if da_client is not None:
@@ -304,18 +301,17 @@ def pipeline_bin(
             theta = np.empty((ncell, p))
             tau = np.empty((ncell, p))
             for icell, (y, s) in enumerate(zip(Y, S_ar)):
-                lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+                cur_tau, ps, ar_scal, h, h_fit = updateAR(
                     y,
                     s,
                     scal_best[icell],
                     N=p,
-                    s_len=ar_kn_len,
+                    h_len=ar_kn_len,
                     norm=ar_norm,
                     up_factor=up_factor,
                 )
                 if dashboard is not None:
                     dashboard.update(uid=icell, h=h, h_fit=h_fit)
-                cur_tau = -1 / lams
                 tau[icell, :] = cur_tau
                 if da_client is not None:
                     da_client.submit(

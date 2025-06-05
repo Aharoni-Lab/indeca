@@ -228,7 +228,6 @@ def solve_h(
     smth_penalty=0,
     ignore_len=0,
     up_factor=1,
-    nspk_thres=None,
 ):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
@@ -240,14 +239,6 @@ def solve_h(
         T = len(s)
         y_len = len(y)
     R = construct_R(y_len, up_factor)
-    if nspk_thres is not None and np.sum(s, axis=None) < nspk_thres:
-        s = R @ s
-        R = sps.eye(y_len)
-        post_up_fac = up_factor
-        s_len = y_len
-    else:
-        post_up_fac = 1
-        s_len = T
     if h_len is None:
         h_len = T
     else:
@@ -259,9 +250,9 @@ def solve_h(
     h = cp.Variable(h_len)
     h = cp.hstack([h, 0])
     if multi_unit:
-        conv_term = cp.vstack([R @ cp.convolve(ss, h)[:s_len] for ss in s])
+        conv_term = cp.vstack([R @ cp.convolve(ss, h)[:T] for ss in s])
     else:
-        conv_term = R @ cp.convolve(s, h)[:s_len]
+        conv_term = R @ cp.convolve(s, h)[:T]
     if norm == "l1":
         err_term = cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, 1)
     elif norm == "l2":
@@ -270,7 +261,7 @@ def solve_h(
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
     prob.solve(solver=cp.CLARABEL)
-    return np.concatenate([h.value, np.zeros(T - h_len - 1)]), post_up_fac
+    return np.concatenate([h.value, np.zeros(T - h_len - 1)])
 
 
 def solve_fit_h(
@@ -333,17 +324,15 @@ def solve_fit_h(
     return lams, ps, h, h_fit, metric_df, h_df
 
 
-def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1, nspk_thres=None):
+def solve_fit_h_num(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
     if y.ndim == 1:
         ylen = len(y)
     else:
         ylen = y.shape[1]
-    if s_len >= ylen:
+    if h_len >= ylen:
         warnings.warn("Coefficient length longer than data")
-        s_len = ylen - 1
-    h, post_fac = solve_h(
-        y, s, scal, s_len, norm, up_factor=up_factor, nspk_thres=nspk_thres
-    )
+        h_len = ylen - 1
+    h = solve_h(y, s, scal, h_len, norm, up_factor=up_factor)
     try:
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
     except IndexError:
@@ -351,7 +340,35 @@ def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1, nspk_thre
     lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
     h_fit_pad = np.zeros_like(h)
     h_fit_pad[: len(h_fit)] = h_fit
-    return lams / post_fac, p, scal, h, h_fit_pad
+    return lams, p, scal, h, h_fit_pad
+
+
+def updateAR(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
+    try:
+        lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+            y, s, scal, N=N, h_len=h_len, norm=norm, up_factor=up_factor
+        )
+        return -1 / lams, ps, ar_scal, h, h_fit
+    except (cp.SolverError, RuntimeError):
+        multi_unit = y.ndim > 1
+        if multi_unit:
+            T = s.shape[1]
+            y_len = y.shape[1]
+        else:
+            T = len(s)
+            y_len = len(y)
+        R = construct_R(y_len, up_factor)
+        h_len = int(h_len / up_factor)
+        lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+            y, s @ R.T, scal, N=N, h_len=h_len, norm=norm, up_factor=1
+        )
+        return (
+            -1 / lams * up_factor,
+            ps,
+            ar_scal,
+            np.concatenate([h, np.zeros(T - h_len - 1)]),
+            np.concatenate([h_fit, np.zeros(T - h_len - 1)]),
+        )
 
 
 def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
