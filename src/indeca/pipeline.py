@@ -44,6 +44,7 @@ def pipeline_bin(
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l2",
+    ar_nspk_thres=5,
     da_client=None,
     spawn_dashboard=True,
 ):
@@ -281,6 +282,7 @@ def pipeline_bin(
                 s_len=ar_kn_len * up_factor,
                 norm=ar_norm,
                 up_factor=up_factor,
+                nspk_thres=ar_nspk_thres,
             )
             if dashboard is not None:
                 dashboard.update(
