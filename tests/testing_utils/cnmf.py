@@ -56,7 +56,9 @@ def pipeline_cnmf(
                 p_d=ps[icell, 0],
                 p_r=ps[icell, 1],
             )[0]
-        c, s, _ = solve_deconv_prob(y=y, coef=cur_coef, l1_penal=sps_penal * tn[icell])
+        c, s, _ = solve_deconv_prob(
+            y=y, coef=cur_coef, l1_penal=sps_penal * tn[icell], R=R
+        )
         C_cnmf[icell, :] = c.squeeze()
         S_cnmf[icell, :] = s.squeeze()
     return C_cnmf, S_cnmf, tau

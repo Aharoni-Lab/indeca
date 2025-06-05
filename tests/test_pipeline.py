@@ -191,7 +191,7 @@ class TestPipeline:
 
 @pytest.mark.slow
 class TestDemoPipeline:
-    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("upsamp", [None])
     @pytest.mark.parametrize("max_iter", [10])
     @pytest.mark.parametrize("ar_kn_len", [200])
     @pytest.mark.parametrize("est_noise_freq", [None])
@@ -260,6 +260,8 @@ class TestDemoPipeline:
     ):
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
+        if upsamp is None:
+            upsamp = max(int(S_true.max().item() / 2), 1)
         (
             C_bin,
             S_bin,
@@ -362,7 +364,7 @@ class TestDemoPipeline:
         fig.update_layout(height=350 * niter, width=1200 * ncell)
         fig.write_html(test_fig_path_html)
 
-    @pytest.mark.parametrize("upsamp", [1])
+    @pytest.mark.parametrize("upsamp", [None])
     @pytest.mark.parametrize("est_noise_freq", [None])
     @pytest.mark.parametrize("est_add_lag", [200])
     @pytest.mark.parametrize(
@@ -420,6 +422,8 @@ class TestDemoPipeline:
     ):
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
+        if upsamp is None:
+            upsamp = int(S_true.max().item())
         C_cnmf, S_cnmf, tau_cnmf = pipeline_cnmf(
             np.atleast_2d(Y),
             up_factor=upsamp,
