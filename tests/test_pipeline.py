@@ -6,8 +6,9 @@ import pandas as pd
 import pytest
 import xarray as xr
 from plotly.subplots import make_subplots
+from scipy.ndimage import gaussian_filter1d
 
-from indeca.deconv import DeconvBin
+from indeca.deconv import DeconvBin, construct_R
 from indeca.pipeline import pipeline_bin
 from indeca.simulation import find_dhm
 
@@ -294,6 +295,9 @@ class TestDemoPipeline:
         for i_iter, sbin in enumerate(S_bin_iter):
             for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
                 sb = sbin[iu, :]
+                s_true = S_true[iu, :]
+                R = construct_R(len(s_true), upsamp)
+                Rsb = R @ sb
                 try:
                     tau_d, tau_r = iter_df.loc[(i_iter, iu), ["tau_d", "tau_r"]]
                 except KeyError:
@@ -315,8 +319,12 @@ class TestDemoPipeline:
                         t_slv=np.atleast_1d(t_sb),
                         tdist_thres=1,
                     )
+                    corr_raw = np.corrcoef(s_true, Rsb)[0, 1]
+                    corr_gs = np.corrcoef(
+                        gaussian_filter1d(s_true, 1), gaussian_filter1d(Rsb, 1)
+                    )[0, 1]
                 else:
-                    mdist, f1, prec, rec = np.nan, 0, 0, 0
+                    mdist, f1, prec, rec, corr_raw, corr_gs = np.nan, 0, 0, 0, 0, 0
                 res_df.append(
                     pd.DataFrame(
                         [
@@ -331,6 +339,8 @@ class TestDemoPipeline:
                                 "rec": rec,
                                 "dhm0": dhm0,
                                 "dhm1": dhm1,
+                                "corr_raw": corr_raw,
+                                "corr_gs": corr_gs,
                             }
                         ]
                     )
@@ -431,6 +441,7 @@ class TestDemoPipeline:
         res_df = []
         for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
             for qthres in [0.25, 0.5, 0.75]:
+                s_true = S_true[iu, :]
                 cur_s = S_cnmf[iu, :]
                 sb = np.around(cur_s / (qthres * cur_s.max())).astype(int)
                 tau_d, tau_r = tau_cnmf[iu, :]
@@ -451,8 +462,19 @@ class TestDemoPipeline:
                         t_slv=np.atleast_1d(t_sb),
                         tdist_thres=1,
                     )
+                    corr_raw = np.corrcoef(s_true, cur_s)[0, 1]
+                    corr_gs = np.corrcoef(
+                        gaussian_filter1d(s_true, 1), gaussian_filter1d(cur_s, 1)
+                    )[0, 1]
                 else:
-                    mdist, f1, prec, rec = np.nan, 0, 0, 0
+                    mdist, f1, prec, rec, corr_raw, corr_gs = (
+                        np.nan,
+                        0,
+                        0,
+                        0,
+                        corr_raw,
+                        corr_gs,
+                    )
                 res_df.append(
                     pd.DataFrame(
                         [
@@ -467,6 +489,8 @@ class TestDemoPipeline:
                                 "rec": rec,
                                 "dhm0": dhm0,
                                 "dhm1": dhm1,
+                                "corr_raw": corr_raw,
+                                "corr_gs": corr_gs,
                             }
                         ]
                     )
