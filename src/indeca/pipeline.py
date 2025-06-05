@@ -9,7 +9,7 @@ from .AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
 from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .logging_config import get_module_logger
-from .simulation import AR2tau, ar_pulse, tau2AR
+from .simulation import AR2tau, find_dhm, tau2AR
 
 # Initialize logger for this module
 logger = get_module_logger("pipeline")
@@ -214,6 +214,12 @@ def pipeline_bin(
             f"Iteration {i_iter} stats - Mean error: {err.mean():.4f}, Mean scale: {scale.mean():.4f}"
         )
         # 2.2 save iteration results
+        dhm = np.stack(
+            [
+                find_dhm(True, (t0, t1), (s, -s))[0]
+                for t0, t1, s in zip(tau.T[0], tau.T[1], scale)
+            ]
+        )
         cur_metric = pd.DataFrame(
             {
                 "iter": i_iter,
@@ -222,6 +228,8 @@ def pipeline_bin(
                 "g1": theta.T[1],
                 "tau_d": tau.T[0],
                 "tau_r": tau.T[1],
+                "dhm0": dhm.T[0],
+                "dhm1": dhm.T[1],
                 "err": err,
                 "err_rel": err_rel,
                 "scale": scale,
