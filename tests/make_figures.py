@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from matplotlib.patches import Rectangle
+from conftest import fixt_deconv
+from matplotlib.lines import Line2D
+from matplotlib.patches import ConnectionPatch, Rectangle
 from testing_utils.compose import GridSpec
 from testing_utils.misc import load_agg_result
 from testing_utils.plotting import (
@@ -16,15 +18,18 @@ from testing_utils.plotting import (
     plot_pipeline_iter,
 )
 
+from indeca.AR_kernel import estimate_coefs, solve_fit_h_num
 from indeca.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
 
 tab20c = plt.get_cmap("tab20c").colors
+tab20b = plt.get_cmap("tab20b").colors
 dark2 = plt.get_cmap("Dark2").colors
 
 IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
 FIG_PATH_PN = Path(__file__).parent / "output" / "figs" / "print" / "panels"
 FIG_PATH_FIG = Path(__file__).parent / "output" / "figs" / "print" / "figures"
 COLORS = {
+    "background": "#e1eaf3",
     "annotation": "#566573",
     "annotation_maj": dark2[0],
     "annotation_min": dark2[2],
@@ -40,6 +45,21 @@ COLORS = {
     "cnmf1": tab20c[1],
     "cnmf2": tab20c[2],
     "cnmf3": tab20c[3],
+    "genericA": tab20b[0],
+    "genericA0": tab20b[0],
+    "genericA1": tab20b[1],
+    "genericA2": tab20b[2],
+    "genericA3": tab20b[3],
+    "genericB": tab20b[12],
+    "genericB0": tab20b[12],
+    "genericB1": tab20b[13],
+    "genericB2": tab20b[14],
+    "genericB3": tab20b[15],
+    "genericC": tab20b[4],
+    "genericC0": tab20b[4],
+    "genericC1": tab20b[5],
+    "genericC2": tab20b[6],
+    "genericC3": tab20b[7],
 }
 PNLAB_PARAM = {"size": 11, "weight": "bold"}
 RC_PARAM = {
@@ -62,6 +82,199 @@ RC_PARAM = {
 sns.set_theme(context="paper", style="darkgrid", rc=RC_PARAM)
 FIG_PATH_PN.mkdir(parents=True, exist_ok=True)
 FIG_PATH_FIG.mkdir(parents=True, exist_ok=True)
+
+
+# %% flow chart
+def add_vl_legend(vls, ax, label, **kwargs):
+    cl = vls.get_color()
+    ax.add_line(
+        Line2D(
+            [],
+            [],
+            marker="|",
+            color=cl,
+            linestyle="None",
+            markersize=8,
+            markeredgewidth=1.5,
+            label=label,
+        )
+    )
+
+
+def pad_ylim(ax, mul):
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], ylim[0] + (ylim[1] - ylim[0]) * mul)
+
+
+fig_path = FIG_PATH_FIG / "flow_chart.svg"
+# Simulated data
+T = 200
+thres_idx = [100, 500, 900]
+deconv, y, c, _, s, _, scl = fixt_deconv(taus=(6, 2), y_len=T, ns_lev=0.5)
+g, _ = estimate_coefs(y, p=2, noise_freq=None, use_smooth=False, add_lag=5)
+h_init, _, _ = ar_pulse(g[0], g[1], nsamp=T, shifted=True)
+opt_s, opt_c, opt_scl, _, intm = deconv.solve_thres(return_intm=True)
+s_slv, thres, svals, cvals, yfvals, _, _, opt_idx = intm
+thres_sub, svals_sub, cvals_sub, yfvals_sub = (
+    [thres[i] for i in thres_idx],
+    [svals[i] for i in thres_idx],
+    [cvals[i] for i in thres_idx],
+    [yfvals[i] for i in thres_idx],
+)
+_, _, _, h_free, h_fit = solve_fit_h_num(y, opt_s, scal=opt_scl)
+# Setup figure
+padding = {"spikes": 0.2}
+fig, axs = plt.subplots(
+    4, 2, figsize=(6.8, 6.8), gridspec_kw={"wspace": 0.32, "hspace": 0.35}
+)
+axs_dict = {
+    "p1": axs[0, 0],
+    "p2": axs[0, 1],
+    "p3": axs[1, 1],
+    "p4": axs[2, 1],
+    "p5": axs[3, 1],
+    "p6": axs[3, 0],
+    "p7": axs[2, 0],
+    "p8": axs[1, 0],
+}
+# Plotting
+## p1
+lns = axs_dict["p1"].plot(y, color=COLORS["genericA"], label="Input Signal")
+vls = axs_dict["p1"].vlines(
+    np.where(s)[0],
+    ymin=y.min() - np.ptp(y) * 0.4 - padding["spikes"],
+    ymax=y.min() - padding["spikes"],
+    color=COLORS["genericB"],
+)
+add_vl_legend(vls, axs_dict["p1"], "True Spikes")
+axs_dict["p1"].legend(
+    loc="upper center", ncol=2, columnspacing=1.5, handlelength=1, handletextpad=0.4
+)
+pad_ylim(axs_dict["p1"], 1.4)
+## p2
+axs_dict["p2"].plot(h_init, color=COLORS["genericC"], label="Initial Kernel")
+axs_dict["p2"].legend()
+## p3
+axs_dict["p3"].plot(s_slv, color=COLORS["genericA"], label="Deconvolved Signal")
+axs_dict["p3"].legend(loc="upper right")
+pad_ylim(axs_dict["p3"], 1.3)
+## p4
+axs_dict["p4"].plot([], [], label="Threshold:", alpha=0)
+for i, bs in enumerate(svals_sub):
+    vls = axs_dict["p4"].vlines(
+        np.where(bs)[0], ymin=i, ymax=i + 0.8, color=COLORS["genericB{}".format(i + 1)]
+    )
+    add_vl_legend(vls, axs_dict["p4"], "{:.1f}".format(thres_sub[i]))
+leg = axs_dict["p4"].legend(
+    loc="upper center",
+    ncol=4,
+    columnspacing=0.8,
+    handlelength=0.8,
+    handletextpad=0.2,
+)
+pad_ylim(axs_dict["p4"], 1.35)
+## p5
+axs_dict["p5"].plot([], [], label="Threshold:", alpha=0)
+for i, rec in enumerate(yfvals_sub):
+    axs_dict["p5"].plot(
+        rec + i * 2,
+        color=COLORS["genericA{}".format(i + 1)],
+        label="{:.1f}".format(thres_sub[i]),
+    )
+leg = axs_dict["p5"].legend(
+    loc="upper center",
+    ncol=4,
+    columnspacing=0.8,
+    handlelength=0.8,
+    handletextpad=0.2,
+)
+pad_ylim(axs_dict["p5"], 1.35)
+## p6
+lns = axs_dict["p6"].plot(opt_c, color=COLORS["genericA"], label="Model Calcium")
+vls = axs_dict["p6"].vlines(
+    np.where(opt_s)[0],
+    ymin=y.min() - np.ptp(y) * 0.4 - padding["spikes"],
+    ymax=y.min() - padding["spikes"],
+    color=COLORS["genericB"],
+)
+add_vl_legend(vls, axs_dict["p6"], "Model Spikes")
+axs_dict["p6"].legend(
+    loc="upper center", ncol=2, columnspacing=1.5, handlelength=1, handletextpad=0.4
+)
+pad_ylim(axs_dict["p6"], 1.4)
+## p7
+axs_dict["p7"].plot(h_free, color=COLORS["genericC"], label="Free Kernel")
+axs_dict["p7"].legend()
+## p8
+axs_dict["p8"].plot(h_fit, color=COLORS["genericC"], label="Bi-exponential Kernel")
+axs_dict["p8"].legend()
+
+# Clean axes
+for ax in axs_dict.values():
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+# Arrow style
+arrowstyle = dict(
+    arrowstyle="simple, head_length=1, head_width=2, tail_width=1",
+    facecolor=COLORS["background"],
+    edgecolor="black",
+    linewidth=1.2,
+)
+
+# Draw arrows using ConnectionPatch
+connections = [
+    ("p1", "p2", (1, 0.5), (0, 0.5), "Estimate", "arc", (0, -0.05)),
+    ("p2", "p3", (1, 0.3), (1, 0.7), "Deconvolve", "arc", (-0.06, 0)),
+    ("p3", "p4", (1, 0.3), (1, 0.7), "Threshold", "arc", (-0.06, 0)),
+    ("p4", "p5", (1, 0.3), (1, 0.7), "Reconvolve", "arc", (-0.06, 0)),
+    ("p5", "p6", (0, 0.5), (1, 0.5), "Select", "arc", (0, 0.04)),
+    ("p6", "p7", (0, 0.7), (0, 0.3), "Extract", "arc", (0.04, 0)),
+    ("p7", "p8", (0, 0.7), (0, 0.3), "Fit Exponential", "arc", (0.08, 0)),
+    ("p8", "p3", (1, 0.5), (0, 0.5), "Update", "arc", (0, -0.04)),
+]
+
+for a_from, a_to, xyA, xyB, label, conn_sty, txt_offset in connections:
+    if conn_sty == "arc":
+        conn_sty = "arc3, rad=-0.4"
+    elif conn_sty == "straight":
+        conn_sty = None
+    con = ConnectionPatch(
+        xyA=xyA,
+        coordsA="axes fraction",
+        axesA=axs_dict[a_from],
+        xyB=xyB,
+        coordsB="axes fraction",
+        axesB=axs_dict[a_to],
+        connectionstyle=conn_sty,
+        **arrowstyle,
+    )
+    fig.add_artist(con)
+    # Label midpoint
+    bboxA, bboxB = axs_dict[a_from].get_position(), axs_dict[a_to].get_position()
+    ptA = (bboxA.x0 + xyA[0] * bboxA.width, bboxA.y0 + xyA[1] * bboxA.height)
+    ptB = (bboxB.x0 + xyB[0] * bboxB.width, bboxB.y0 + xyB[1] * bboxB.height)
+    txt = fig.text(
+        (ptA[0] + ptB[0]) / 2 + txt_offset[0],
+        (ptA[1] + ptB[1]) / 2 + txt_offset[1],
+        label,
+        ha="center",
+        va="center",
+        fontsize=10,
+        backgroundcolor=COLORS["background"],
+    )
+    txt.set_bbox(
+        {
+            "facecolor": COLORS["background"],
+            "alpha": 0.9,
+            "edgecolor": "black",
+            "capstyle": "round",
+            "joinstyle": "round",
+        }
+    )
+fig.savefig(fig_path, bbox_inches="tight")
 
 
 # %% deconv-thres
