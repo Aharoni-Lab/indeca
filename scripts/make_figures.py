@@ -6,28 +6,28 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from conftest import fixt_deconv
 from matplotlib.lines import Line2D
 from matplotlib.patches import ConnectionPatch, Rectangle
-from testing_utils.compose import GridSpec
-from testing_utils.misc import load_agg_result
-from testing_utils.plotting import (
+
+from indeca.AR_kernel import estimate_coefs, solve_fit_h_num
+from indeca.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
+from tests.conftest import fixt_deconv
+from tests.testing_utils.compose import GridSpec
+from tests.testing_utils.misc import load_agg_result
+from tests.testing_utils.plotting import (
     agg_annot_group,
     plot_agg_boxswarm,
     plot_met_ROC_thres,
     plot_pipeline_iter,
 )
 
-from indeca.AR_kernel import estimate_coefs, solve_fit_h_num
-from indeca.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
-
 tab20c = plt.get_cmap("tab20c").colors
 tab20b = plt.get_cmap("tab20b").colors
 dark2 = plt.get_cmap("Dark2").colors
 
-IN_RES_PATH = Path(__file__).parent / "output" / "data" / "agg"
-FIG_PATH_PN = Path(__file__).parent / "output" / "figs" / "print" / "panels"
-FIG_PATH_FIG = Path(__file__).parent / "output" / "figs" / "print" / "figures"
+IN_RES_PATH = Path(__file__).parent / "tests" / "output" / "data" / "agg"
+FIG_PATH_PN = Path(__file__).parent / "tests" / "output" / "figs" / "print" / "panels"
+FIG_PATH_FIG = Path(__file__).parent / "tests" / "output" / "figs" / "print" / "figures"
 COLORS = {
     "background": "#e1eaf3",
     "annotation": "#566573",
