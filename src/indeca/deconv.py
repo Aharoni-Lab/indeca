@@ -14,7 +14,7 @@ from scipy.signal import ShortTimeFFT, find_peaks
 from scipy.special import huber
 
 from indeca.logging_config import get_module_logger
-from indeca.simulation import AR2tau, ar_pulse, exp_pulse, tau2AR
+from indeca.simulation import AR2tau, ar_pulse, exp_pulse, solve_p, tau2AR
 from indeca.utils import scal_lstsq
 
 # Initialize logger for this module
@@ -130,6 +130,9 @@ class DeconvBin:
         else:
             assert y_len is not None
             self.y_len = y_len
+        if coef_len is not None and coef_len > self.y_len:
+            warnings.warn("Coefficient length longer than data")
+            coef_len = self.y_len
         if theta is not None:
             self.theta = np.array(theta)
             if tau is None:
@@ -332,7 +335,7 @@ class DeconvBin:
                 self.y.value = y
             if tau is not None:
                 theta_new = np.array(tau2AR(tau[0], tau[1]))
-                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                p = solve_p(tau[0], tau[1])
                 coef, _, _ = exp_pulse(
                     tau[0],
                     tau[1],
@@ -367,7 +370,7 @@ class DeconvBin:
                 self.y = y
             if tau is not None:
                 theta_new = np.array(tau2AR(tau[0], tau[1]))
-                _, _, p = AR2tau(theta_new[0], theta_new[1], solve_amp=True)
+                p = solve_p(tau[0], tau[1])
                 coef, _, _ = exp_pulse(
                     tau[0],
                     tau[1],
@@ -709,6 +712,7 @@ class DeconvBin:
             opt_idx = np.argmin(objs)
         s_bin = svals[opt_idx]
         self.s_bin = s_bin
+        assert len(s_bin) == len(self.nzidx_s)
         self.c_bin = np.array(cvals[opt_idx].todense()).squeeze()
         self.b = bs[opt_idx]
         if return_intm:
@@ -887,7 +891,7 @@ class DeconvBin:
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
                     np.abs(cur_obj - opt_obj) < self.rtol * opt_obj,
                     np.abs(cur_scl - last_scal) < self.atol,
-                    np.abs(cur_obj - last_obj) < self.atol,
+                    np.abs(cur_obj - last_obj) < self.atol * 1e-3,
                     early_stop and cur_obj > last_obj,
                 )
             ):
@@ -1171,15 +1175,14 @@ class DeconvBin:
     def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
         if self.backend in ["osqp", "emosqp", "cuosqp"]:
             if use_wt:
-                nzidx_s = np.where(self.err_wt)[0]
+                nzidx_s = np.where(self.R.T @ self.err_wt)[0]
             else:
                 if self.masking_r is not None:
-                    s_bin_R = self.R @ self._pad_s(self.s_bin)
-                    mask = np.zeros(self.y_len)
-                    for nzidx in np.where(s_bin_R > 0)[0]:
+                    mask = np.zeros(self.T)
+                    for nzidx in np.where(self._pad_s(self.s_bin) > 0)[0]:
                         mask[
                             max(nzidx - self.masking_r, 0) : min(
-                                nzidx + self.masking_r, self.y_len
+                                nzidx + self.masking_r, self.T
                             )
                         ] = 1
                     nzidx_s = np.where(mask)[0]
@@ -1188,7 +1191,7 @@ class DeconvBin:
                     opt_s, _ = self.solve(amp_constraint)
                     nzidx_s = np.where(opt_s > self.delta_penal)[0]
             if len(nzidx_s) == 0:
-                return
+                raise ValueError
             self.nzidx_s = nzidx_s
             self._update_R()
             self._update_w()
@@ -1435,7 +1438,7 @@ class DeconvBin:
                 [np.full(xlen + self.y_len * 2, np.inf), self.y - self.huber_k]
             )
         else:
-            bb = self.y.mean() if self.use_base else 0
+            bb = np.clip(self.y.mean(), 0, None) if self.use_base else 0
             if self.free_kernel:
                 self.lb = np.zeros(len(self.nzidx_s) + 1)
                 self.ub = np.concatenate([np.full(1, bb), np.ones(len(self.nzidx_s))])
@@ -1449,3 +1452,5 @@ class DeconvBin:
                 self.lb = np.zeros(len(self.nzidx_A) + 1)
                 self.ub = np.concatenate([np.full(1, bb), ub_pad[self.nzidx_A]])
                 self.ub_inf = np.concatenate([np.full(1, bb), ub_inf_pad[self.nzidx_A]])
+        assert (self.ub >= self.lb).all()
+        assert (self.ub_inf >= self.lb).all()

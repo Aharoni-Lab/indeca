@@ -268,9 +268,13 @@ def agg_annot_group(data, group, x, y, color=None):
     ax = plt.gca()
     for xlabA, Blabs in group.items():
         datA = data.loc[data[x] == xlabA, y]
+        if not len(datA) > 0:
+            continue
         pval_df = []
         for xlabB in Blabs:
             datB = data.loc[data[x] == xlabB, y]
+            if not len(datB) > 0:
+                continue
             res = wilcoxon(datA, datB)
             pval_df.append(
                 pd.DataFrame(

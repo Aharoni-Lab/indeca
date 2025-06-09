@@ -166,10 +166,7 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
 
 
 def fixt_realds(dsname, ncell=None, nfm=None):
-    if not os.path.exists(os.path.join(TEST_DATA_DIR, dsname)) or not os.listdir(
-        os.path.join(TEST_DATA_DIR, dsname)
-    ):
-        download_realds(TEST_DATA_DIR, dsname)
+    download_realds(TEST_DATA_DIR, dsname)
     Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(TEST_DATA_DIR, dsname))
     if fluo_df["fps"].nunique() > 1:
         warnings.warn("More than one fps found in dataset {}".format(dsname))
@@ -179,12 +176,16 @@ def fixt_realds(dsname, ncell=None, nfm=None):
         fluo_df = fluo_df[fluo_df["fps"] == fps_keep].copy()
         uids = fluo_df["unit_id"].unique()
         Y = Y.sel(unit_id=uids).dropna("frame", how="all").fillna(0)
-        S_true = S_true.sel(unit_id=uids, frame=Y.coords["frame"])
+        S_true = S_true.sel(unit_id=uids, frame=Y.coords["frame"]).fillna(0)
+    nfm_valid = Y.coords["frame"][Y.notnull().all("unit_id")].max().item() + 1
     if nfm is not None:
-        ap_df = ap_df[ap_df["frame"].between(0, nfm)]
-        fluo_df = fluo_df[fluo_df["frame"].between(0, nfm)]
-        Y = Y.isel(frame=slice(0, nfm))
-        S_true = S_true.isel(frame=slice(0, nfm))
+        nfm = min(nfm, nfm_valid)
+    else:
+        nfm = nfm_valid
+    ap_df = ap_df[ap_df["frame"].between(0, nfm)]
+    fluo_df = fluo_df[fluo_df["frame"].between(0, nfm)]
+    Y = Y.isel(frame=slice(0, nfm))
+    S_true = S_true.isel(frame=slice(0, nfm))
     ap_ct = ap_df.groupby("unit_id")["ap_time"].count().reset_index()
     act_uids = np.array(ap_ct.loc[ap_ct["ap_time"] > 1, "unit_id"])
     if ncell is not None and ncell > len(act_uids):
@@ -200,6 +201,8 @@ def fixt_realds(dsname, ncell=None, nfm=None):
     ap_df = ap_df.set_index("unit_id").loc[act_uids]
     fluo_df = fluo_df.set_index("unit_id").loc[act_uids]
     Y = Y * 100
+    assert Y.notnull().all()
+    assert S_true.notnull().all()
     return Y, S_true, ap_df, fluo_df
 
 

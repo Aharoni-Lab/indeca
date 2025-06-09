@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 from statsmodels.tsa.stattools import acovf
 
 from indeca.deconv import construct_G, construct_R
-from indeca.simulation import AR2tau, ar_pulse, tau2AR
+from indeca.simulation import AR2tau, ar_pulse, solve_p, tau2AR
 
 
 def convolve_g(s, g):
@@ -219,7 +219,16 @@ def lst_l1(A, b):
     return x.value
 
 
-def solve_h(y, s, scal, h_len=60, norm="l2", smth_penalty=0, ignore_len=0, up_factor=1):
+def solve_h(
+    y,
+    s,
+    scal,
+    h_len=60,
+    norm="l2",
+    smth_penalty=0,
+    ignore_len=0,
+    up_factor=1,
+):
     y, s = y.squeeze(), s.squeeze()
     assert y.ndim == s.ndim
     multi_unit = y.ndim > 1
@@ -315,8 +324,15 @@ def solve_fit_h(
     return lams, ps, h, h_fit, metric_df, h_df
 
 
-def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1):
-    h = solve_h(y, s, scal, s_len, norm, up_factor=up_factor)
+def solve_fit_h_num(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
+    if y.ndim == 1:
+        ylen = len(y)
+    else:
+        ylen = y.shape[1]
+    if h_len >= ylen:
+        warnings.warn("Coefficient length longer than data")
+        h_len = ylen - 1
+    h = solve_h(y, s, scal, h_len, norm, up_factor=up_factor)
     try:
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
     except IndexError:
@@ -325,6 +341,34 @@ def solve_fit_h_num(y, s, scal, N=2, s_len=60, norm="l2", up_factor=1):
     h_fit_pad = np.zeros_like(h)
     h_fit_pad[: len(h_fit)] = h_fit
     return lams, p, scal, h, h_fit_pad
+
+
+def updateAR(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
+    try:
+        lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+            y, s, scal, N=N, h_len=h_len, norm=norm, up_factor=up_factor
+        )
+        return -1 / lams, ps, ar_scal, h, h_fit
+    except (cp.SolverError, RuntimeError):
+        multi_unit = y.ndim > 1
+        if multi_unit:
+            T = s.shape[1]
+            y_len = y.shape[1]
+        else:
+            T = len(s)
+            y_len = len(y)
+        R = construct_R(y_len, up_factor)
+        h_len = int(h_len / up_factor)
+        lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
+            y, s @ R.T, scal, N=N, h_len=h_len, norm=norm, up_factor=1
+        )
+        return (
+            -1 / lams * up_factor,
+            ps,
+            ar_scal,
+            np.concatenate([h, np.zeros(T - h_len - 1)]),
+            np.concatenate([h_fit, np.zeros(T - h_len - 1)]),
+        )
 
 
 def solve_g_cons(y, s, lam_tol=1e-6, lam_start=1, max_iter=30):
@@ -498,13 +542,13 @@ def get_ar_coef(
 
 
 def AR_upsamp_real(theta, upsamp: int = 1, fit_nsamp: int = 1000):
-    tau_d, tau_r, p = AR2tau(*theta, solve_amp=True)
-    tau = np.array([tau_d, tau_r])
-    if (np.imag(tau) != 0).any() or p == np.inf:
-        tr = ar_pulse(*theta, nsamp=fit_nsamp, shifted=True)[0]
-        lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
-        tau = -1 / lams
+    tr = ar_pulse(*theta, nsamp=fit_nsamp, shifted=True)[0]
+    lams, cur_p, scl, tr_fit = fit_sumexp_gd(tr, fit_amp=True)
+    tau = -1 / lams
     tau_up = tau * upsamp
     theta_up = tau2AR(*tau_up)
-    td, tr, p = AR2tau(*theta_up, solve_amp=True)
+    td, tr = tau_up
+    p = solve_p(td, tr)
+    assert td > tr
+    assert p > 0 and not (np.isinf(p) or np.isnan(p))
     return theta_up, np.array([td, tr]), np.array([p, -p])

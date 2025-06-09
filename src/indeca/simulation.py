@@ -456,10 +456,16 @@ def AR2tau(theta1, theta2, solve_amp: bool = False):
         z2 = np.abs(z2)
     tau_d, tau_r = np.nan_to_num([-1 / np.log(z1), -1 / np.log(z2)])
     if solve_amp:
-        p = 1 / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+        p = solve_p(tau_d, tau_r)
         return tau_d, tau_r, p
     else:
         return tau_d, tau_r
+
+
+def solve_p(tau_d, tau_r):
+    p = 1 / (np.exp(-1 / tau_d) - np.exp(-1 / tau_r))
+    assert not (np.isnan(p) or np.isinf(p))
+    return p
 
 
 def AR2exp(theta1, theta2):

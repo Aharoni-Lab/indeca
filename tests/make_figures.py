@@ -539,7 +539,58 @@ def xlab(row):
         return lab
 
 
-fig_path = FIG_PATH_PN / "pipeline-comp.svg"
+def plot_ds(data, palette, color=None):
+    ax = plt.gca()
+    ax = sns.boxplot(
+        data,
+        x="xlab",
+        y="value",
+        hue="xlab",
+        width=0.5,
+        fill=False,
+        palette=palette,
+        showfliers=False,
+    )
+    ax = sns.swarmplot(
+        data,
+        x="xlab",
+        y="value",
+        hue="xlab",
+        edgecolor="auto",
+        palette=palette,
+        linewidth=1,
+        s=4,
+    )
+    agg_annot_group(
+        data,
+        x="xlab",
+        y="value",
+        group={
+            "InDeCa /w\nindependent\nkernel": [
+                "CNMF\nthreshold\n0.25",
+                "CNMF\nthreshold\n0.5",
+                "CNMF\nthreshold\n0.75",
+            ],
+            "InDeCa /w\nshared\nkernel": [
+                "CNMF\nthreshold\n0.25",
+                "CNMF\nthreshold\n0.5",
+                "CNMF\nthreshold\n0.75",
+            ],
+        },
+    )
+    ax.set_xlabel("")
+    ax.set_ylabel("F1 score")
+
+
+def sel_iter(df):
+    its = df["iter"].unique()
+    if len(its) == 1 and its.item() == "None":
+        return df
+    else:
+        iter_last = its.max()
+        return df[df["iter"] == iter_last]
+
+
 res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
 res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
 id_vars = [
@@ -554,7 +605,7 @@ id_vars = [
     "test_id",
     "upsamp",
 ]
-val_vals = ["f1", "dhm0", "dhm1"]
+val_vals = ["f1", "corr_raw", "corr_gs"]
 resdf = (
     pd.concat([res_bin, res_cnmf], ignore_index=True)
     .drop_duplicates()
@@ -567,9 +618,13 @@ resdf = (
     )
     .drop_duplicates()
 )
-ressub = resdf.query(
-    "ncell == 'None' & method != 'gt' & iter in (10, 'None') & metric == 'f1' & tau_init == 'None'"
-).copy()
+ressub = (
+    resdf.query("ncell == 'None' & method != 'gt' & tau_init == 'None'")
+    .groupby(["dsname", "method", "use_all", "metric"])
+    .apply(sel_iter, include_groups=False)
+    .reset_index()
+    .copy()
+)
 ressub["xlab"] = ressub.apply(xlab, axis="columns")
 ressub = ressub.sort_values("xlab")
 palette = {
@@ -579,47 +634,17 @@ palette = {
     "InDeCa /w\nindependent\nkernel": COLORS["indeca_min"],
     "InDeCa /w\nshared\nkernel": COLORS["indeca_maj"],
 }
-fig, ax = plt.subplots(figsize=(6.4, 2))
-ax = sns.boxplot(
-    ressub,
-    x="xlab",
-    y="value",
-    hue="xlab",
-    width=0.5,
-    fill=False,
-    palette=palette,
-    showfliers=False,
-)
-ax = sns.swarmplot(
-    ressub,
-    x="xlab",
-    y="value",
-    hue="xlab",
-    edgecolor="auto",
-    palette=palette,
-    linewidth=1,
-    s=4,
-)
-agg_annot_group(
-    ressub,
-    x="xlab",
-    y="value",
-    group={
-        "InDeCa /w\nindependent\nkernel": [
-            "CNMF\nthreshold\n0.25",
-            "CNMF\nthreshold\n0.5",
-            "CNMF\nthreshold\n0.75",
-        ],
-        "InDeCa /w\nshared\nkernel": [
-            "CNMF\nthreshold\n0.25",
-            "CNMF\nthreshold\n0.5",
-            "CNMF\nthreshold\n0.75",
-        ],
-    },
-)
-ax.set_xlabel("")
-ax.set_ylabel("F1 score")
-fig.savefig(fig_path, bbox_inches="tight")
+for met, met_df in ressub.groupby("metric"):
+    fig_path = FIG_PATH_PN / "pipeline-comp-{}.svg".format(met)
+    g = sns.FacetGrid(
+        met_df.replace({"None": np.nan}),
+        col="dsname",
+        col_wrap=5,
+        height=2.5,
+        aspect=1.5,
+    )
+    g.map_dataframe(plot_ds, palette=palette)
+    g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make pipeline figure
 pns = {
