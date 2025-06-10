@@ -289,6 +289,7 @@ class DeconvBin:
             self.b = 0
             self.l1_penal = l1_penal
             self.scale = scale
+            self.H = None
             self._update_Wt()
             self._setup_prob_osqp()
         if self.dashboard is not None:
@@ -1081,12 +1082,20 @@ class DeconvBin:
 
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         if s is not None:
-            return self.H @ sps.csc_matrix(s.reshape(-1, 1))
+            return self._convolve_s(s)
         else:
             if self.backend == "cvxpy":
                 return self.c.value.squeeze()
             elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-                return self.H @ self.s
+                return self._convolve_s(self.s)
+
+    def _convolve_s(self, s: np.ndarray) -> sps.csc_array:
+        if self.H is not None:
+            return self.H @ sps.csc_matrix(s.reshape(-1, 1))
+        else:
+            return sps.csc_matrix(
+                np.convolve(self.coef, self._pad_s(s))[self.nzidx_c].reshape(-1, 1)
+            )
 
     def _compute_err(
         self,
@@ -1251,19 +1260,20 @@ class DeconvBin:
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        self.H_org = sps.diags(
-            [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
-            offsets=-np.arange(len(coef)),
-            format="csc",
-        )
-        try:
-            H_shape, H_nnz = self.H.shape, self.H.nnz
-        except AttributeError:
-            H_shape, H_nnz = None, None
-        self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
-        logger.debug(
-            f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
-        )
+        if self.T < 1e4:
+            self.H_org = sps.diags(
+                [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
+                offsets=-np.arange(len(coef)),
+                format="csc",
+            )
+            try:
+                H_shape, H_nnz = self.H.shape, self.H.nnz
+            except AttributeError:
+                H_shape, H_nnz = None, None
+            self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
+            logger.debug(
+                f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
+            )
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
