@@ -121,6 +121,7 @@ class DeconvBin:
         delta_penal: float = 1e-3,
         atol: float = 1e-3,
         rtol: float = 1e-3,
+        Hlim: int = 2.5e7,
         dashboard=None,
         dashboard_uid=None,
     ) -> None:
@@ -191,6 +192,7 @@ class DeconvBin:
         self.delta_penal = delta_penal
         self.atol = atol
         self.rtol = rtol
+        self.Hlim = Hlim
         self.dashboard = dashboard
         self.dashboard_uid = dashboard_uid
         self.nzidx_s = np.arange(self.T)
@@ -1260,7 +1262,7 @@ class DeconvBin:
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        if self.T < 1e4:
+        if self.T * self.coef_len < self.Hlim:
             self.H_org = sps.diags(
                 [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
                 offsets=-np.arange(len(coef)),
