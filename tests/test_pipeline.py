@@ -231,7 +231,7 @@ class TestDemoPipeline:
             "DS30-GCaMP8f-m-V1",
             "DS31-GCaMP8m-m-V1",
             "DS32-GCaMP8s-m-V1",
-            # "DS33-Interneurons2023-m-V1",
+            "DS33-Interneurons2023-m-V1",
             "DS40-GCaMP6s-spinal-cord-excitatory",
             "DS41-GCaMP6s-spinal-cord-inhibitory",
             "X-DS09-GCaMP6f-m-V1",
@@ -242,7 +242,7 @@ class TestDemoPipeline:
     @pytest.mark.parametrize("penalty", [None])
     @pytest.mark.parametrize("tau_init", [None])
     @pytest.mark.parametrize("ar_use_all", [True, False])
-    @pytest.mark.line_profile.with_args(pipeline_bin, DeconvBin.solve_scale)
+    @pytest.mark.line_profile.with_args(DeconvBin.solve_thres)
     def test_demo_pipeline_realds(
         self,
         upsamp,
@@ -410,7 +410,7 @@ class TestDemoPipeline:
             "DS30-GCaMP8f-m-V1",
             "DS31-GCaMP8m-m-V1",
             "DS32-GCaMP8s-m-V1",
-            # "DS33-Interneurons2023-m-V1",
+            "DS33-Interneurons2023-m-V1",
             "DS40-GCaMP6s-spinal-cord-excitatory",
             "DS41-GCaMP6s-spinal-cord-inhibitory",
             "X-DS09-GCaMP6f-m-V1",
