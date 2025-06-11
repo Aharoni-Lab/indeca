@@ -8,6 +8,7 @@ import osqp
 import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
+from numba import njit
 from scipy.ndimage import label
 from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT, find_peaks
@@ -91,6 +92,24 @@ def max_thres(
         return S_ls
 
 
+@njit(nopython=True, nogil=True, cache=True)
+def bin_convolve(
+    coef: np.ndarray, s: np.ndarray, nzidx_s: np.ndarray = None, s_len: int = None
+):
+    coef_len = len(coef)
+    if s_len is None:
+        s_len = len(s)
+    out = np.zeros(s_len)
+    nzidx = np.where(s)[0]
+    if nzidx_s is not None:
+        nzidx = nzidx_s[nzidx]
+    for i0 in nzidx:
+        i1 = min(i0 + coef_len, s_len)
+        clen = i1 - i0
+        out[i0:i1] += coef[:clen]
+    return out
+
+
 class DeconvBin:
     def __init__(
         self,
@@ -121,7 +140,7 @@ class DeconvBin:
         delta_penal: float = 1e-3,
         atol: float = 1e-3,
         rtol: float = 1e-3,
-        Hlim: int = 2.5e7,
+        Hlim: int = 1e5,
         dashboard=None,
         dashboard_uid=None,
     ) -> None:
@@ -1095,9 +1114,16 @@ class DeconvBin:
         if self.H is not None:
             return self.H @ sps.csc_matrix(s.reshape(-1, 1))
         else:
-            return sps.csc_matrix(
-                np.convolve(self.coef, self._pad_s(s))[self.nzidx_c].reshape(-1, 1)
-            )
+            if s.dtype == np.bool_:
+                return sps.csc_matrix(
+                    bin_convolve(
+                        self.coef, s=s, nzidx_s=self.nzidx_s, s_len=self.T
+                    ).reshape(-1, 1)
+                )
+            else:
+                return sps.csc_matrix(
+                    np.convolve(self.coef, self._pad_s(s))[self.nzidx_c].reshape(-1, 1)
+                )
 
     def _compute_err(
         self,
