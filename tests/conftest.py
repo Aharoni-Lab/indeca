@@ -137,7 +137,15 @@ def fixt_y(
     return Y, C, C_org, S, S_org, scales
 
 
-def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwargs):
+def fixt_deconv(
+    taus,
+    norm="l2",
+    upsamp=1,
+    upsamp_y=None,
+    backend="osqp",
+    deconv_kws=dict(),
+    **kwargs,
+):
     if upsamp_y is None:
         upsamp_y = upsamp
     y, c, c_org, s, s_org, scale = fixt_y(taus=taus, upsamp=upsamp_y, **kwargs)
@@ -152,6 +160,7 @@ def fixt_deconv(taus, norm="l2", upsamp=1, upsamp_y=None, backend="osqp", **kwar
         err_weighting=None,
         backend=backend,
         norm=norm,
+        **deconv_kws,
     )
     if upsamp_y != upsamp:
         scl = get_upsamp_scale(taus, upsamp_y, upsamp)

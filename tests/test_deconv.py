@@ -24,7 +24,11 @@ class TestDeconvBin:
     def test_solve(self, taus, rand_seed, backend, upsamp, eq_atol, test_fig_path_html):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
-            taus=taus, backend=backend, rand_seed=rand_seed, upsamp=upsamp
+            taus=taus,
+            backend=backend,
+            rand_seed=rand_seed,
+            upsamp=upsamp,
+            deconv_kws={"Hlim": None},
         )
         R = deconv.R.value if backend == "cvxpy" else deconv.R
         s_solve, b_solve = deconv.solve(amp_constraint=False, pks_polish=True)
@@ -56,7 +60,7 @@ class TestDeconvBin:
     def test_masking(self, taus, rand_seed, upsamp, eq_atol, test_fig_path_html):
         # act
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
-            taus=taus, rand_seed=rand_seed, upsamp=upsamp
+            taus=taus, rand_seed=rand_seed, upsamp=upsamp, deconv_kws={"Hlim": None}
         )
         s_nomsk, b_nomsk = deconv._solve(amp_constraint=False)
         c_nomsk = deconv.H @ s_nomsk

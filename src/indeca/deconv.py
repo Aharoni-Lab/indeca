@@ -8,6 +8,7 @@ import osqp
 import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
+from numba import njit
 from scipy.ndimage import label
 from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT, find_peaks
@@ -91,6 +92,24 @@ def max_thres(
         return S_ls
 
 
+@njit(nopython=True, nogil=True, cache=True)
+def bin_convolve(
+    coef: np.ndarray, s: np.ndarray, nzidx_s: np.ndarray = None, s_len: int = None
+):
+    coef_len = len(coef)
+    if s_len is None:
+        s_len = len(s)
+    out = np.zeros(s_len)
+    nzidx = np.where(s)[0]
+    if nzidx_s is not None:
+        nzidx = nzidx_s[nzidx]
+    for i0 in nzidx:
+        i1 = min(i0 + coef_len, s_len)
+        clen = i1 - i0
+        out[i0:i1] += coef[:clen]
+    return out
+
+
 class DeconvBin:
     def __init__(
         self,
@@ -121,6 +140,7 @@ class DeconvBin:
         delta_penal: float = 1e-3,
         atol: float = 1e-3,
         rtol: float = 1e-3,
+        Hlim: int = 1e5,
         dashboard=None,
         dashboard_uid=None,
     ) -> None:
@@ -191,6 +211,7 @@ class DeconvBin:
         self.delta_penal = delta_penal
         self.atol = atol
         self.rtol = rtol
+        self.Hlim = Hlim
         self.dashboard = dashboard
         self.dashboard_uid = dashboard_uid
         self.nzidx_s = np.arange(self.T)
@@ -289,6 +310,7 @@ class DeconvBin:
             self.b = 0
             self.l1_penal = l1_penal
             self.scale = scale
+            self.H = None
             self._update_Wt()
             self._setup_prob_osqp()
         if self.dashboard is not None:
@@ -1081,12 +1103,27 @@ class DeconvBin:
 
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         if s is not None:
-            return self.H @ sps.csc_matrix(s.reshape(-1, 1))
+            return self._convolve_s(s)
         else:
             if self.backend == "cvxpy":
                 return self.c.value.squeeze()
             elif self.backend in ["osqp", "emosqp", "cuosqp"]:
-                return self.H @ self.s
+                return self._convolve_s(self.s)
+
+    def _convolve_s(self, s: np.ndarray) -> sps.csc_array:
+        if self.H is not None:
+            return self.H @ sps.csc_matrix(s.reshape(-1, 1))
+        else:
+            if s.dtype == np.bool_:
+                return sps.csc_matrix(
+                    bin_convolve(
+                        self.coef, s=s, nzidx_s=self.nzidx_s, s_len=self.T
+                    ).reshape(-1, 1)
+                )
+            else:
+                return sps.csc_matrix(
+                    np.convolve(self.coef, self._pad_s(s))[self.nzidx_c].reshape(-1, 1)
+                )
 
     def _compute_err(
         self,
@@ -1251,19 +1288,20 @@ class DeconvBin:
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        self.H_org = sps.diags(
-            [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
-            offsets=-np.arange(len(coef)),
-            format="csc",
-        )
-        try:
-            H_shape, H_nnz = self.H.shape, self.H.nnz
-        except AttributeError:
-            H_shape, H_nnz = None, None
-        self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
-        logger.debug(
-            f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
-        )
+        if self.Hlim is None or self.T * self.coef_len < self.Hlim:
+            self.H_org = sps.diags(
+                [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
+                offsets=-np.arange(len(coef)),
+                format="csc",
+            )
+            try:
+                H_shape, H_nnz = self.H.shape, self.H.nnz
+            except AttributeError:
+                H_shape, H_nnz = None, None
+            self.H = self.H_org[:, self.nzidx_s][self.nzidx_c, :]
+            logger.debug(
+                f"Updating H matrix - shape before: {H_shape}, shape new: {self.H.shape}, nnz before: {H_nnz}, nnz new: {self.H.nnz}"
+            )
         if not self.free_kernel:
             theta = self.theta.value if self.backend == "cvxpy" else self.theta
             G_diag = sps.diags(
