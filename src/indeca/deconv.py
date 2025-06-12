@@ -1288,7 +1288,7 @@ class DeconvBin:
 
     def _update_HG(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
-        if self.T * self.coef_len < self.Hlim:
+        if self.Hlim is None or self.T * self.coef_len < self.Hlim:
             self.H_org = sps.diags(
                 [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
                 offsets=-np.arange(len(coef)),
