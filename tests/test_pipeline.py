@@ -356,6 +356,9 @@ class TestDemoPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
+            R = construct_R(len(s_true), upsamp)
+            Rsb = R @ sb
+            Rcb = R @ cb
             try:
                 scal = iter_df.loc[(i_iter, uid), "scale"]
             except KeyError:
@@ -366,8 +369,8 @@ class TestDemoPipeline:
                     {
                         "y": Y[uid, :] / scal,
                         "s_true": S_true[uid, :],
-                        "c_bin": cb,
-                        "s_bin": sb,
+                        "c_bin": Rcb,
+                        "s_bin": Rsb,
                     }
                 ),
                 rows=i_iter + 1,
