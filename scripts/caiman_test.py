@@ -8,7 +8,7 @@ from scipy.ndimage import gaussian_filter1d
 from tqdm.auto import tqdm
 
 from tests.testing_utils.io import load_gt_ds, subset_gt_ds
-from tests.testing_utils.metrics import assignment_distance, nzidx_int
+from tests.testing_utils.metrics import assignment_distance, dtw_corr, nzidx_int
 
 IN_DPATH = "./tests/data/"
 OUT_PATH = "./tests/output/data/external/caiman"
@@ -55,14 +55,20 @@ os.makedirs(OUT_PATH, exist_ok=True)
 
 # %% test caiman
 res_df = []
-for dsname in tqdm(DSNAMES):
+for dsname in tqdm(DSNAMES, desc="dataset"):
     Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(IN_DPATH, dsname))
     Y, S_true, ap_df, fluo_df = subset_gt_ds(Y, S_true, ap_df, fluo_df, dsname)
-    for iu, uid in enumerate(np.array(Y.coords["unit_id"])):
+    for uid in tqdm(np.array(Y.coords["unit_id"]), desc="cell", leave=False):
+        assert len(ap_df) > 0
         y = np.array(Y.sel(unit_id=uid))
+        s_true = S_true.sel(unit_id=uid)
         c, bl, c1, g, sn, cur_s, lam = constrained_foopsi(y, p=2)
+        corr_raw = np.corrcoef(s_true, cur_s)[0, 1]
+        corr_gs = np.corrcoef(
+            gaussian_filter1d(s_true, 1), gaussian_filter1d(cur_s, 1)
+        )[0, 1]
+        corr_dtw = dtw_corr(s_true, cur_s)
         for qthres in QTHRES:
-            s_true = S_true[iu, :]
             sb = np.around(cur_s / (qthres * cur_s.max())).astype(int)
             # tau_d, tau_r = tau_cnmf[iu, :]
             # try:
@@ -71,30 +77,16 @@ for dsname in tqdm(DSNAMES):
             #     )
             # except AssertionError:
             #     dhm0, dhm1 = 0, 0
-            if len(ap_df) > 0:
-                cur_ap = ap_df.loc[uid]
-                cur_fluo = fluo_df.loc[uid]
-                sb_idx = nzidx_int(sb)
-                t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
-                t_ap = cur_ap["ap_time"]
-                mdist, f1, prec, rec = assignment_distance(
-                    t_ref=np.atleast_1d(t_ap),
-                    t_slv=np.atleast_1d(t_sb),
-                    tdist_thres=1,
-                )
-                corr_raw = np.corrcoef(s_true, cur_s)[0, 1]
-                corr_gs = np.corrcoef(
-                    gaussian_filter1d(s_true, 1), gaussian_filter1d(cur_s, 1)
-                )[0, 1]
-            else:
-                mdist, f1, prec, rec, corr_raw, corr_gs = (
-                    np.nan,
-                    0,
-                    0,
-                    0,
-                    corr_raw,
-                    corr_gs,
-                )
+            cur_ap = ap_df.loc[uid]
+            cur_fluo = fluo_df.loc[uid]
+            sb_idx = nzidx_int(sb)
+            t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
+            t_ap = cur_ap["ap_time"]
+            mdist, f1, prec, rec = assignment_distance(
+                t_ref=np.atleast_1d(t_ap),
+                t_slv=np.atleast_1d(t_sb),
+                tdist_thres=1,
+            )
             res_df.append(
                 pd.DataFrame(
                     [
@@ -112,6 +104,7 @@ for dsname in tqdm(DSNAMES):
                             # "dhm1": dhm1,
                             "corr_raw": corr_raw,
                             "corr_gs": corr_gs,
+                            "corr_dtw": corr_dtw,
                         }
                     ]
                 )

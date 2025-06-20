@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
+from dtw import dtw
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
+from scipy.stats import zscore
 
 
 def is_boolean(arr):
@@ -109,3 +111,20 @@ def nzidx_int(arr):
         val = arr[idx]
         idxs.extend([idx] * val)
     return idxs
+
+
+def dtw_corr(s_ref: np.ndarray = None, s_slv: np.ndarray = None):
+    if s_ref is not None:
+        s_ref = np.nan_to_num(s_ref)
+    if s_slv is not None:
+        s_slv = np.nan_to_num(s_slv)
+    s_ref_z = zscore(s_ref)
+    s_slv_z = zscore(s_slv)
+    algn = dtw(
+        s_slv_z,
+        s_ref_z,
+        step_pattern="asymmetric",
+        window_type="sakoechiba",
+        window_args={"window_size": 1},
+    )
+    return np.corrcoef(s_ref_z[algn.index2], s_slv_z[algn.index1])[0, 1]

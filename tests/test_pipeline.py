@@ -14,7 +14,7 @@ from indeca.simulation import find_dhm
 
 from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
-from .testing_utils.metrics import assignment_distance, nzidx_int
+from .testing_utils.metrics import assignment_distance, dtw_corr, nzidx_int
 from .testing_utils.plotting import plot_traces
 
 
@@ -323,6 +323,7 @@ class TestDemoPipeline:
                     corr_gs = np.corrcoef(
                         gaussian_filter1d(s_true, 1), gaussian_filter1d(Rsb, 1)
                     )[0, 1]
+                    corr_dtw = dtw_corr(s_true, Rsb)
                 else:
                     mdist, f1, prec, rec, corr_raw, corr_gs = np.nan, 0, 0, 0, 0, 0
                 res_df.append(
@@ -341,6 +342,7 @@ class TestDemoPipeline:
                                 "dhm1": dhm1,
                                 "corr_raw": corr_raw,
                                 "corr_gs": corr_gs,
+                                "corr_dtw": corr_dtw,
                             }
                         ]
                     )
@@ -440,17 +442,18 @@ class TestDemoPipeline:
         # save results
         res_df = []
         for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
-            for qthres in [0.25, 0.5, 0.75]:
-                s_true = S_true[iu, :]
-                cur_s = S_cnmf[iu, :]
+            s_true = S_true[iu, :]
+            cur_s = S_cnmf[iu, :]
+            tau_d, tau_r = tau_cnmf[iu, :]
+            try:
+                (dhm0, dhm1), _ = find_dhm(
+                    True, np.array([tau_d, tau_r]), np.array([1, -1])
+                )
+            except AssertionError:
+                dhm0, dhm1 = 0, 0
+            corr_dtw = dtw_corr(s_true, cur_s)
+            for qthres in [0.01, 0.05, 0.1, 0.2, 0.5]:
                 sb = np.around(cur_s / (qthres * cur_s.max())).astype(int)
-                tau_d, tau_r = tau_cnmf[iu, :]
-                try:
-                    (dhm0, dhm1), _ = find_dhm(
-                        True, np.array([tau_d, tau_r]), np.array([1, -1])
-                    )
-                except AssertionError:
-                    dhm0, dhm1 = 0, 0
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
@@ -491,6 +494,7 @@ class TestDemoPipeline:
                                 "dhm1": dhm1,
                                 "corr_raw": corr_raw,
                                 "corr_gs": corr_gs,
+                                "corr_dtw": corr_dtw,
                             }
                         ]
                     )

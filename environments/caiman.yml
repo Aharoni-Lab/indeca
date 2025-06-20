@@ -5,3 +5,4 @@ dependencies:
   - xarray
   - gitpython
   - filelock
+  - dtw-python

@@ -5,7 +5,7 @@
 groups = ["default", "test"]
 strategy = []
 lock_version = "4.5.0"
-content_hash = "sha256:d33a4e999acf28718a0ddf6b213b01123d4084a87a5019b9b018eeee6c25a284"
+content_hash = "sha256:4f5ed9e8f685d76eb0697a6fe96b8bc2a91790bca75dbe477816cf4ca61a32e4"
 
 [[metadata.targets]]
 requires_python = ">=3.11,<3.13"
@@ -723,6 +723,28 @@ files = [
     {file = "dtaidistance-2.3.13-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:d071392388dab99462922df8e4fb99f905e59888bd7246dee318ba7fe0d6332d"},
     {file = "dtaidistance-2.3.13-cp312-cp312-win_amd64.whl", hash = "sha256:465f45d380a1cd4416201a9aeffa9fdf34848db10fe66918456d616989d61316"},
     {file = "dtaidistance-2.3.13.tar.gz", hash = "sha256:b0344a9b6f642863fcedacf5de86c4a0a0d4b4adec9b9be561a6f513ecf5e695"},
+]
+
+[[package]]
+name = "dtw-python"
+version = "1.5.3"
+requires_python = ">=3.6"
+summary = "A comprehensive implementation of dynamic time warping (DTW) algorithms."
+dependencies = [
+    "numpy; python_version < \"3.9\"",
+    "numpy>=1.23.5; python_version >= \"3.9\"",
+    "scipy",
+]
+files = [
+    {file = "dtw_python-1.5.3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:dfd248e5c8f67d6f714692bb116ad92fb9179582961889fd23f9318b21b132f6"},
+    {file = "dtw_python-1.5.3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:52b0e6604ea62db7a2610d7dba59ceb7c2a60e8d4e6963c9dc7ead172fac1b05"},
+    {file = "dtw_python-1.5.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:956e29579ab0a136e35b672d7f2646e52b5fa506165c5bbc1af7bdc2c401d214"},
+    {file = "dtw_python-1.5.3-cp311-cp311-win_amd64.whl", hash = "sha256:f5f6fe9a60d8f0cb4a3bf7c3f724a753328615672f181bb1c60e4a3061b79a52"},
+    {file = "dtw_python-1.5.3-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:16aaa97b4b93c17ddb43531cebf600ecfd63a5d4f41cba12555912b8a0af80a0"},
+    {file = "dtw_python-1.5.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:6cdedad418a41e9082aa473e007c5feae4a0947fcfa041d5aa89bfef92c999a7"},
+    {file = "dtw_python-1.5.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4c816c2bfc918e9ac5c8e26e0400c77844d61e3dadf8837a9464dd25abe8bdea"},
+    {file = "dtw_python-1.5.3-cp312-cp312-win_amd64.whl", hash = "sha256:f09555a5671f84a38eb0639980d2638d91293862f09b3d66ceea2d23d9934d3f"},
+    {file = "dtw_python-1.5.3.tar.gz", hash = "sha256:ec154d8db2d5fac796059a41ec52546c9b9f858ab71401b9bb518817f7f1b7ac"},
 ]
 
 [[package]]
