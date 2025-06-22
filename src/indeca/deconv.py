@@ -70,6 +70,8 @@ def max_thres(
     delta=1e-6,
     reverse_thres=False,
     nz_only: bool = False,
+    density_thres: float = None,
+    density_denom: int = None,
 ):
     amax = a.max()
     if reverse_thres:
@@ -86,6 +88,12 @@ def max_thres(
         Snz = [ss.sum() > 0 for ss in S_ls]
         S_ls = [ss for ss, nz in zip(S_ls, Snz) if nz]
         thres = [th for th, nz in zip(thres, Snz) if nz]
+    if density_thres is not None:
+        if density_denom is None:
+            density_denom = len(a)
+        Sden = [ss.sum() / density_denom for ss in S_ls]
+        S_ls = [ss for ss, den in zip(S_ls, Sden) if den < density_thres]
+        thres = [th for th, den in zip(thres, Sden) if den < density_thres]
     if return_thres:
         return S_ls, thres
     else:
@@ -133,6 +141,7 @@ class DeconvBin:
         pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
+        density_thres: float = 0.2,
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
@@ -221,6 +230,7 @@ class DeconvBin:
         self.masking_r = masking_radius
         self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
+        self.density_thres = density_thres
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = self._get_stft_spec(y)
@@ -685,6 +695,8 @@ class DeconvBin:
             reverse_thres=True,
             return_thres=True,
             nz_only=True,
+            density_thres=self.density_thres,
+            density_denom=self.T,
         )
         if not len(svals) > 0:
             if return_intm:
@@ -900,6 +912,7 @@ class DeconvBin:
                         "obj": cur_obj,
                         "penal": cur_penal,
                         "nnz": (cur_s > 0).sum(),
+                        "density": (cur_s > 0).sum() / self.T,
                     }
                 ]
             )
