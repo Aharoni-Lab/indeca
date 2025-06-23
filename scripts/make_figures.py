@@ -25,6 +25,7 @@ tab20c = plt.get_cmap("tab20c").colors
 tab20b = plt.get_cmap("tab20b").colors
 dark2 = plt.get_cmap("Dark2").colors
 
+IN_EXT_RES_PATH = Path(__file__).parent / "tests" / "output" / "data" / "external"
 IN_RES_PATH = Path(__file__).parent / "tests" / "output" / "data" / "agg"
 FIG_PATH_PN = Path(__file__).parent / "tests" / "output" / "figs" / "print" / "panels"
 FIG_PATH_FIG = Path(__file__).parent / "tests" / "output" / "figs" / "print" / "figures"
@@ -739,8 +740,11 @@ fig.savefig(fig_path, bbox_inches="tight")
 
 # %% make pipeline-comp figure
 def xlab(row):
-    if row["method"] == "cnmf":
-        return "CNMF\nthreshold\n{}".format(row["qthres"])
+    if row["method"] in ["cnmf", "oasis"]:
+        if row["metric"] in ["f1", "prec", "rec", "mdist"]:
+            return "{}\nthreshold\n{}".format(row["method"], row["qthres"])
+        else:
+            return "{}".format(row["method"])
     else:
         lab = "InDeCa"
         if row["use_all"]:
@@ -752,7 +756,7 @@ def xlab(row):
         return lab
 
 
-def plot_ds(data, palette, color=None):
+def plot_ds(data, palette=None, color=None):
     ax = plt.gca()
     ax = sns.boxplot(
         data,
@@ -774,23 +778,23 @@ def plot_ds(data, palette, color=None):
         linewidth=1,
         s=4,
     )
-    agg_annot_group(
-        data,
-        x="xlab",
-        y="value",
-        group={
-            "InDeCa /w\nindependent\nkernel": [
-                "CNMF\nthreshold\n0.25",
-                "CNMF\nthreshold\n0.5",
-                "CNMF\nthreshold\n0.75",
-            ],
-            "InDeCa /w\nshared\nkernel": [
-                "CNMF\nthreshold\n0.25",
-                "CNMF\nthreshold\n0.5",
-                "CNMF\nthreshold\n0.75",
-            ],
-        },
-    )
+    # agg_annot_group(
+    #     data,
+    #     x="xlab",
+    #     y="value",
+    #     group={
+    #         "InDeCa /w\nindependent\nkernel": [
+    #             "CNMF\nthreshold\n0.25",
+    #             "CNMF\nthreshold\n0.5",
+    #             "CNMF\nthreshold\n0.75",
+    #         ],
+    #         "InDeCa /w\nshared\nkernel": [
+    #             "CNMF\nthreshold\n0.25",
+    #             "CNMF\nthreshold\n0.5",
+    #             "CNMF\nthreshold\n0.75",
+    #         ],
+    #     },
+    # )
     ax.set_xlabel("")
     ax.set_ylabel("F1 score")
 
@@ -806,6 +810,7 @@ def sel_iter(df):
 
 res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
 res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
+res_oasis = pd.read_feather(IN_EXT_RES_PATH / "caiman" / "metrics.feat")
 id_vars = [
     "dsname",
     "ncell",
@@ -818,9 +823,9 @@ id_vars = [
     "test_id",
     "upsamp",
 ]
-val_vals = ["f1", "corr_raw", "corr_gs"]
+val_vals = ["f1", "corr_raw", "corr_gs", "corr_dtw"]
 resdf = (
-    pd.concat([res_bin, res_cnmf], ignore_index=True)
+    pd.concat([res_bin, res_cnmf, res_oasis], ignore_index=True)
     .drop_duplicates()
     .fillna("None")
     .melt(
@@ -839,7 +844,9 @@ ressub = (
     .copy()
 )
 ressub["xlab"] = ressub.apply(xlab, axis="columns")
-ressub = ressub.sort_values("xlab")
+ressub = ressub.sort_values("xlab").drop_duplicates(
+    subset=["method", "dsname", "xlab", "unit_id", "metric", "value"]
+)
 palette = {
     "CNMF\nthreshold\n0.25": COLORS["cnmf0"],
     "CNMF\nthreshold\n0.5": COLORS["cnmf1"],
@@ -849,14 +856,19 @@ palette = {
 }
 for met, met_df in ressub.groupby("metric"):
     fig_path = FIG_PATH_PN / "pipeline-comp-{}.svg".format(met)
+    if met == "f1":
+        asp = 3
+    else:
+        asp = 1.6
     g = sns.FacetGrid(
         met_df.replace({"None": np.nan}),
         col="dsname",
         col_wrap=5,
         height=2.5,
-        aspect=1.5,
+        aspect=asp,
     )
-    g.map_dataframe(plot_ds, palette=palette)
+    # g.map_dataframe(plot_ds, palette=palette)
+    g.map_dataframe(plot_ds)
     g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make pipeline figure
