@@ -70,8 +70,6 @@ def max_thres(
     delta=1e-6,
     reverse_thres=False,
     nz_only: bool = False,
-    density_thres: float = None,
-    density_denom: int = None,
 ):
     amax = a.max()
     if reverse_thres:
@@ -88,12 +86,6 @@ def max_thres(
         Snz = [ss.sum() > 0 for ss in S_ls]
         S_ls = [ss for ss, nz in zip(S_ls, Snz) if nz]
         thres = [th for th, nz in zip(thres, Snz) if nz]
-    if density_thres is not None:
-        if density_denom is None:
-            density_denom = len(a)
-        Sden = [ss.sum() / density_denom for ss in S_ls]
-        S_ls = [ss for ss, den in zip(S_ls, Sden) if den < density_thres]
-        thres = [th for th, den in zip(thres, Sden) if den < density_thres]
     if return_thres:
         return S_ls, thres
     else:
@@ -116,6 +108,19 @@ def bin_convolve(
         clen = i1 - i0
         out[i0:i1] += coef[:clen]
     return out
+
+
+@njit(nopython=True, nogil=True, cache=True)
+def max_consecutive(arr):
+    max_count = 0
+    current_count = 0
+    for value in arr:
+        if value:
+            current_count += 1
+            max_count = max(max_count, current_count)
+        else:
+            current_count = 0
+    return max_count
 
 
 class DeconvBin:
@@ -141,7 +146,8 @@ class DeconvBin:
         pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
-        density_thres: float = 0.2,
+        density_thres: float = None,
+        ncons_thres: int = 5,
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
@@ -231,6 +237,7 @@ class DeconvBin:
         self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
         self.density_thres = density_thres
+        self.ncons_thres = ncons_thres
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = self._get_stft_spec(y)
@@ -668,6 +675,35 @@ class DeconvBin:
         self.s = np.abs(opt_s)
         return self.s, self.b
 
+    def _max_thres(self, s, nz_only=True):
+        S_ls, thres = max_thres(
+            s,
+            nthres=self.nthres,
+            th_min=self.th_min,
+            th_max=self.th_max,
+            reverse_thres=True,
+            return_thres=True,
+            nz_only=nz_only,
+        )
+        if self.density_thres is not None:
+            Sden = [ss.sum() / self.T for ss in S_ls]
+            S_ls = [ss for ss, den in zip(S_ls, Sden) if den < self.density_thres]
+            thres = [th for th, den in zip(thres, Sden) if den < self.density_thres]
+        if self.ncons_thres is not None:
+            S_pad = [self._pad_s(ss) for ss in S_ls]
+            Sncons = [max_consecutive(ss) for ss in S_pad]
+            if min(Sncons) < self.ncons_thres:
+                S_ls = [
+                    ss for ss, ncons in zip(S_ls, Sncons) if ncons <= self.ncons_thres
+                ]
+                thres = [
+                    th for th, ncons in zip(thres, Sncons) if ncons <= self.ncons_thres
+                ]
+            else:
+                S_ls = [S_ls[0]]
+                thres = [thres[0]]
+        return S_ls, thres
+
     def solve_thres(
         self,
         scaling: bool = True,
@@ -687,27 +723,10 @@ class DeconvBin:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
         else:
             res = np.zeros_like(y)
-        svals, thres = max_thres(
-            opt_s,
-            self.nthres,
-            th_min=self.th_min,
-            th_max=self.th_max,
-            reverse_thres=True,
-            return_thres=True,
-            nz_only=True,
-            density_thres=self.density_thres,
-            density_denom=self.T,
-        )
+        svals, thres = self._max_thres(opt_s)
         if not len(svals) > 0:
             if return_intm:
-                svals, thres = max_thres(
-                    opt_s,
-                    self.nthres,
-                    th_min=self.th_min,
-                    th_max=self.th_max,
-                    reverse_thres=True,
-                    return_thres=True,
-                )
+                svals, thres = self._max_thres(opt_s, nz_only=False)
             else:
                 return (
                     np.full(len(self.nzidx_s), np.nan),
