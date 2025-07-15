@@ -745,6 +745,8 @@ def xlab(row):
             return "{}\nthreshold\n{}".format(row["method"], row["qthres"])
         else:
             return "{}".format(row["method"])
+    elif row["method"] == "mlspike":
+        return "{}".format(row["method"])
     else:
         lab = "InDeCa"
         if row["use_all"]:
@@ -811,6 +813,7 @@ def sel_iter(df):
 res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
 res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
 res_oasis = pd.read_feather(IN_EXT_RES_PATH / "caiman" / "metrics.feat")
+res_mlspike = pd.read_feather(IN_EXT_RES_PATH / "mlspike" / "metrics.feat")
 id_vars = [
     "dsname",
     "ncell",
@@ -825,7 +828,7 @@ id_vars = [
 ]
 val_vals = ["f1", "corr_raw", "corr_gs", "corr_dtw"]
 resdf = (
-    pd.concat([res_bin, res_cnmf, res_oasis], ignore_index=True)
+    pd.concat([res_bin, res_cnmf, res_oasis, res_mlspike], ignore_index=True)
     .drop_duplicates()
     .fillna("None")
     .melt(
@@ -851,14 +854,17 @@ palette = {
     "CNMF\nthreshold\n0.25": COLORS["cnmf0"],
     "CNMF\nthreshold\n0.5": COLORS["cnmf1"],
     "CNMF\nthreshold\n0.75": COLORS["cnmf2"],
+    "mlspike": COLORS["genericA"],
     "InDeCa /w\nindependent\nkernel": COLORS["indeca_min"],
     "InDeCa /w\nshared\nkernel": COLORS["indeca_maj"],
 }
 for met, met_df in ressub.groupby("metric"):
     fig_path = FIG_PATH_PN / "pipeline-comp-{}.svg".format(met)
     if met == "f1":
-        asp = 3
+        met_df = met_df[met_df["method"].isin(["indeca", "mlspike"])]
+        asp = 1.6
     else:
+        met_df = met_df[met_df["method"] != "mlspike"]
         asp = 1.6
     g = sns.FacetGrid(
         met_df.replace({"None": np.nan}),
