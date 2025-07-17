@@ -343,13 +343,13 @@ def solve_fit_h_num(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
     return lams, p, scal, h, h_fit_pad
 
 
-def updateAR(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
-    try:
+def updateAR(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1, pre_agg=True):
+    if not pre_agg:
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
             y, s, scal, N=N, h_len=h_len, norm=norm, up_factor=up_factor
         )
         return -1 / lams, ps, ar_scal, h, h_fit
-    except (cp.SolverError, RuntimeError):
+    else:
         multi_unit = y.ndim > 1
         if multi_unit:
             T = s.shape[1]
