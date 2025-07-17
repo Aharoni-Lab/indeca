@@ -282,6 +282,7 @@ class TestDemoPipeline:
             deconv_err_weighting="adaptive",
             deconv_masking_radius=5,
             deconv_pks_polish=False,
+            deconv_min_rel_scl=None,
             ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,

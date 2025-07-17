@@ -148,6 +148,7 @@ class DeconvBin:
         th_max: float = 1,
         density_thres: float = None,
         ncons_thres: int = None,
+        min_rel_scl: float = "auto",
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
@@ -238,6 +239,12 @@ class DeconvBin:
         self.err_wt = np.ones(self.y_len)
         self.density_thres = density_thres
         self.ncons_thres = ncons_thres
+        if min_rel_scl == "auto":
+            self.min_rel_scl = (
+                0.5 / self.upsamp
+            )  # 2 x upsamp number of spikes should be more than enough to explain highest peak
+        else:
+            self.min_rel_scl = min_rel_scl
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = self._get_stft_spec(y)
@@ -740,6 +747,16 @@ class DeconvBin:
             scal_fit = [scal_lstsq(yf, y - res, fit_intercept=True) for yf in yfvals]
             scals = [sf[0] for sf in scal_fit]
             bs = [sf[1] for sf in scal_fit]
+            if self.min_rel_scl is not None:
+                scl_thres = np.max(y) * self.min_rel_scl
+                valid_idx = np.where(scals > scl_thres)[0]
+                if len(valid_idx) > 0:
+                    scals = [scals[i] for i in valid_idx]
+                    bs = [bs[i] for i in valid_idx]
+                else:
+                    max_idx = np.argmax(scals)
+                    scals = [scals[max_idx]]
+                    bs = [bs[max_idx]]
         else:
             scals = [self.scale] * len(yfvals)
             bs = [(y - res - scl * yf).mean() for scl, yf in zip(scals, yfvals)]
