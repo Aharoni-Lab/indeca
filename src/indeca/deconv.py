@@ -147,7 +147,7 @@ class DeconvBin:
         th_min: float = 0,
         th_max: float = 1,
         density_thres: float = None,
-        ncons_thres: int = 5,
+        ncons_thres: int = None,
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
