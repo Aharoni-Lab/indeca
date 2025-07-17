@@ -370,8 +370,10 @@ class TestDemoPipeline:
                     {
                         "y": Y[uid, :] / scal,
                         "s_true": S_true[uid, :],
-                        "c_bin": Rcb,
-                        "s_bin": Rsb,
+                        "c_bin": cb,
+                        "s_bin": sb,
+                        "R@c_bin": Rcb,
+                        "R@s_bin": Rsb,
                     }
                 ),
                 rows=i_iter + 1,
