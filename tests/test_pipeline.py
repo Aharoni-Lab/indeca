@@ -258,6 +258,7 @@ class TestDemoPipeline:
         ar_use_all,
         results_bag,
         test_fig_path_html,
+        func_data_dir,
     ):
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
@@ -350,6 +351,25 @@ class TestDemoPipeline:
                 )
         res_df = pd.concat(res_df, ignore_index=True)
         results_bag.data = res_df
+        # save raw traces
+        R = construct_R(len(s_true), upsamp)
+        if ncell is None:
+            S = xr.DataArray(
+                R @ (S_bin_iter[-1]).T,
+                dims=["frame", "unit_id"],
+                coords={"unit_id": Y.coords["unit_id"], "frame": Y.coords["frame"]},
+                name="S",
+            )
+            C = xr.DataArray(
+                R @ (C_bin_iter[-1]).T,
+                dims=["frame", "unit_id"],
+                coords={"unit_id": Y.coords["unit_id"], "frame": Y.coords["frame"]},
+                name="C",
+            )
+            ds = xr.merge([S, C])
+            ds.to_netcdf(
+                os.path.join(func_data_dir, "{}-{}.nc".format(dsname, ar_use_all))
+            )
         # plotting
         niter = len(S_bin_iter)
         ncell = Y.shape[0]
@@ -357,7 +377,6 @@ class TestDemoPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
-            R = construct_R(len(s_true), upsamp)
             Rsb = R @ sb
             Rcb = R @ cb
             try:
