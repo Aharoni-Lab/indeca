@@ -16,7 +16,7 @@ IN_DPATH = "./tests/data/"
 IN_MLSPIKE_RES = "./tests/output/data/mlspike/"
 IN_INDECA_RES = "./tests/output/data/func/test_demo_pipeline_realds/"
 OUT_PATH = "./tests/output/data/external/mlspike"
-FIG_PATH = "./tests/output/figs/func/mlspke_comparison"
+FIG_PATH = "./tests/output/figs/func/mlspike_comparison"
 
 os.makedirs(FIG_PATH, exist_ok=True)
 os.makedirs(OUT_PATH, exist_ok=True)
