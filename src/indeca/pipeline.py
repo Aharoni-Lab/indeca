@@ -379,10 +379,15 @@ def pipeline_bin(
         logger.warning("Max iteration reached without convergence")
     # Compute final results
     opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
+    mobj = metric_df.groupby("iter")["obj"].median()
+    opt_idx_all = mobj.idxmin()
     for icell in range(ncell):
-        opt_idx = metric_df.loc[
-            metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
-        ]
+        if ar_use_all:
+            opt_idx = opt_idx_all
+        else:
+            opt_idx = metric_df.loc[
+                metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
+            ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
     C_ls.append(opt_C)
