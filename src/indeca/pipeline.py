@@ -132,6 +132,7 @@ def pipeline_bin(
             "scale",
             "best_idx",
             "obj",
+            "wgt_len",
         ]
     )
     if da_client is not None:
@@ -242,6 +243,7 @@ def pipeline_bin(
                 "penal": penal,
                 "nnz": nnz,
                 "obj": err_rel if use_rel_err else err,
+                "wgt_len": [d.wgt_len for d in dcv],
             }
         )
         if dashboard is not None:

@@ -142,6 +142,7 @@ class DeconvBin:
         backend: str = "osqp",
         nthres: int = 1000,
         err_weighting: str = None,
+        wt_trunc_thres: float = None,
         masking_radius: int = None,
         pks_polish: bool = True,
         th_min: float = 0,
@@ -238,6 +239,7 @@ class DeconvBin:
         self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
         self.density_thres = density_thres
+        self.wt_trunc_thres = wt_trunc_thres
         if ncons_thres == "auto":
             self.ncons_thres = upsamp + 1
         else:
@@ -396,11 +398,13 @@ class DeconvBin:
                 self.coef.value = coef
                 self.theta.value = theta_new
                 self._update_HG()
+                self._update_wgt_len()
             if coef is not None:
                 if scale_coef:
                     scale_mul = scal_lstsq(coef, self.coef).item()
                 self.coef.value = coef
                 self._update_HG()
+                self._update_wgt_len()
             if scale is not None:
                 self.scale.value = scale
             if scale_mul is not None:
@@ -451,6 +455,7 @@ class DeconvBin:
             ] * 7
             if coef is not None:
                 self._update_HG()
+                self._update_wgt_len()
                 updt_HG = True
             if self.err_weighting is not None and update_weighting:
                 self._update_Wt(clear=clear_weighting)
@@ -1014,6 +1019,7 @@ class DeconvBin:
     def _setup_prob_osqp(self) -> None:
         logger.debug("Setting up OSQP problem")
         self._update_HG()
+        self._update_wgt_len()
         self._update_P()
         self._update_q0()
         self._update_q()
@@ -1333,7 +1339,7 @@ class DeconvBin:
                 self.err_wt = np.zeros(self.y_len)
                 s_bin_R = self.R @ self._pad_s(self.s_bin)
                 for nzidx in np.where(s_bin_R > 0)[0]:
-                    self.err_wt[nzidx : nzidx + self.coef_len] = 1
+                    self.err_wt[nzidx : nzidx + self.wgt_len] = 1
             else:
                 self.err_wt = np.ones(self.y_len)
         self.Wt = sps.diags(self.err_wt)
@@ -1376,6 +1382,15 @@ class DeconvBin:
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
+
+    def _update_wgt_len(self) -> None:
+        coef = self.coef.value if self.backend == "cvxpy" else self.coef
+        if self.wt_trunc_thres is not None:
+            self.wgt_len = min(
+                self.coef_len, np.where(coef > self.wt_trunc_thres)[0][-1]
+            )
+        else:
+            self.wgt_len = self.coef_len
 
     def _get_stft_spec(self, x: np.ndarray) -> np.ndarray:
         spec = np.abs(self.stft.stft(x)) ** 2
