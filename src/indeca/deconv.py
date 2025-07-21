@@ -238,7 +238,10 @@ class DeconvBin:
         self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
         self.density_thres = density_thres
-        self.ncons_thres = ncons_thres
+        if ncons_thres == "auto":
+            self.ncons_thres = upsamp + 1
+        else:
+            self.ncons_thres = ncons_thres
         if min_rel_scl == "auto":
             self.min_rel_scl = (
                 0.5 / self.upsamp
