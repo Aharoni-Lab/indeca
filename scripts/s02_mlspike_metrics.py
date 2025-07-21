@@ -36,13 +36,16 @@ for ncf in tqdm(ncfiles, desc="dataset"):
         cur_ap = ap_df.loc[uid]
         cur_fluo = fluo_df.loc[uid]
         sb_idx = nzidx_int(np.array(sb).astype(int))
-        t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
-        t_ap = cur_ap["ap_time"]
-        mdist, f1, prec, rec = assignment_distance(
-            t_ref=np.atleast_1d(t_ap),
-            t_slv=np.atleast_1d(t_sb),
-            tdist_thres=1,
-        )
+        if len(sb_idx) > 0:
+            t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
+            t_ap = cur_ap["ap_time"]
+            mdist, f1, prec, rec = assignment_distance(
+                t_ref=np.atleast_1d(t_ap),
+                t_slv=np.atleast_1d(t_sb),
+                tdist_thres=1,
+            )
+        else:
+            mdist, f1, prec, rec = np.nan, 0, 0, 0
         res_df.append(
             pd.DataFrame(
                 [
