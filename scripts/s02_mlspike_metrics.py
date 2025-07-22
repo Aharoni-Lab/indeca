@@ -86,9 +86,45 @@ for ncf in tqdm(ncfiles, desc="dataset"):
     Y, S_true, ap_df, fluo_df = subset_gt_ds(Y, S_true, ap_df, fluo_df, dsname)
     mlspk_ds = xr.open_dataset(os.path.join(IN_MLSPIKE_RES, ncf))
     S_mlspk = mlspk_ds["S"].assign_coords(unit_id=Y.coords["unit_id"])
+    titles = []
+    sb_scal_dict = {"indeca_all": [], "indeca_ind": [], "mlspike": []}
+    for iu, uid in enumerate(np.array(Y.coords["unit_id"])):
+        s_true = S_true.sel(unit_id=uid)
+        sb_all = S_ind_all.sel(unit_id=uid)
+        sb_ind = S_ind_ind.sel(unit_id=uid)
+        sb_ml = S_mlspk.sel(unit_id=uid)
+        T = len(s_true)
+        upsamp = int(np.around(len(sb_all) / len(s_true)))
+        cur_ap = ap_df.loc[uid]
+        cur_fluo = fluo_df.loc[uid]
+        t_ap = cur_ap["ap_time"]
+        f1_dict = dict()
+        for meth, sb in {
+            "indeca_all": sb_all,
+            "indeca_ind": sb_ind,
+            "mlspike": sb_ml,
+        }.items():
+            sb = np.around(sb / sb.max() * s_true.max())
+            sb_idx = nzidx_int(np.array(sb).astype(int))
+            if len(sb_idx) > 0:
+                t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
+                t_ap = cur_ap["ap_time"]
+                mdist, f1, prec, rec = assignment_distance(
+                    t_ref=np.atleast_1d(t_ap),
+                    t_slv=np.atleast_1d(t_sb),
+                    tdist_thres=fluo_df["fluo_time"].diff().median() * 2.5,
+                )
+            else:
+                mdist, f1, prec, rec, corr = np.nan, 0, 0, 0, 0
+            f1_dict[meth] = f1
+            sb_scal_dict[meth].append(sb)
+        titles.append(
+            "uid: {}, ".format(uid)
+            + ", ".join(f"{k}: {v:.3f}" for k, v in f1_dict.items())
+        )
     # plotting
     ncell = Y.shape[0]
-    fig = make_subplots(rows=ncell)
+    fig = make_subplots(rows=ncell, subplot_titles=titles)
     for iu, uid in enumerate(np.array(Y.coords["unit_id"])):
         fig.add_traces(
             plot_traces(
@@ -98,6 +134,8 @@ for ncf in tqdm(ncfiles, desc="dataset"):
                     "mlspk": S_mlspk.sel(unit_id=uid),
                     "s_all": S_ind_all.sel(unit_id=uid),
                     "s_ind": S_ind_ind.sel(unit_id=uid),
+                    "mlspk_scal": sb_scal_dict["mlspike"][iu],
+                    "s_all_scal": sb_scal_dict["indeca_all"][iu],
                 }
             ),
             rows=iu + 1,
