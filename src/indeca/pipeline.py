@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from line_profiler import profile
+from scipy.signal import medfilt
 from tqdm.auto import tqdm, trange
 
 from .AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
@@ -31,6 +32,7 @@ def pipeline_bin(
     est_noise_freq=0.4,
     est_use_smooth=True,
     est_add_lag=20,
+    med_wnd=None,
     deconv_nthres=1000,
     deconv_norm="l2",
     deconv_atol=1e-3,
@@ -72,6 +74,11 @@ def pipeline_bin(
         f"ar_use_all={ar_use_all}, ar_kn_len={ar_kn_len}"
         f"{ncell} cells with {T} timepoints"
     )
+    if med_wnd is not None:
+        if med_wnd == "auto":
+            med_wnd = ar_kn_len
+        for iy, y in enumerate(Y):
+            Y[iy, :] = y - medfilt(y, med_wnd * 2 + 1)
     if spawn_dashboard:
         if da_client is not None:
             logger.debug("Using Dask client for distributed computation")
