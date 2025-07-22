@@ -49,7 +49,7 @@ def assignment_distance(
     dist_mat = cdist(t_ref.reshape((-1, 1)), t_slv.reshape((-1, 1)))
     if tdist_thres is not None:
         dist_mat_mask = dist_mat <= tdist_thres
-        dist_mat = np.where(dist_mat_mask, dist_mat, tdist_thres * 1e16)
+        dist_mat = np.where(dist_mat_mask, dist_mat, dist_mat.max() * 1e16)
         feas_idx_ref = dist_mat_mask.sum(axis=1).astype(bool)
         feas_idx_slv = dist_mat_mask.sum(axis=0).astype(bool)
         dist_mat = dist_mat[feas_idx_ref, :][:, feas_idx_slv]
