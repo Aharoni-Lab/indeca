@@ -313,13 +313,14 @@ class TestDemoPipeline:
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
-                    sb_idx = np.where(sb)[0] / upsamp
+                    sb = np.around(Rsb / Rsb.max() * np.array(s_true).max())
+                    sb_idx = nzidx_int(np.array(sb).astype(int))
                     t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
                     t_ap = cur_ap["ap_time"]
                     mdist, f1, prec, rec = assignment_distance(
                         t_ref=np.atleast_1d(t_ap),
                         t_slv=np.atleast_1d(t_sb),
-                        tdist_thres=1,
+                        tdist_thres=fluo_df["fluo_time"].diff().median() * 2.5,
                     )
                     corr_raw = np.corrcoef(s_true, Rsb)[0, 1]
                     corr_gs = np.corrcoef(

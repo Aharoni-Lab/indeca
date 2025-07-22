@@ -35,6 +35,7 @@ for ncf in tqdm(ncfiles, desc="dataset"):
         sb = S.sel(unit_id=uid)
         cur_ap = ap_df.loc[uid]
         cur_fluo = fluo_df.loc[uid]
+        sb = np.around(sb / sb.max() * s_true.max())
         sb_idx = nzidx_int(np.array(sb).astype(int))
         if len(sb_idx) > 0:
             t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
@@ -42,7 +43,7 @@ for ncf in tqdm(ncfiles, desc="dataset"):
             mdist, f1, prec, rec = assignment_distance(
                 t_ref=np.atleast_1d(t_ap),
                 t_slv=np.atleast_1d(t_sb),
-                tdist_thres=1,
+                tdist_thres=fluo_df["fluo_time"].diff().median() * 2.5,
             )
         else:
             mdist, f1, prec, rec = np.nan, 0, 0, 0
