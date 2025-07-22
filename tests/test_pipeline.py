@@ -263,7 +263,7 @@ class TestDemoPipeline:
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
         if upsamp is None:
-            upsamp = max(int(S_true.max().item() / 2), 1)
+            upsamp = max(int(S_true.max().item()), 1)
         (
             C_bin,
             S_bin,
@@ -281,9 +281,10 @@ class TestDemoPipeline:
             deconv_use_base=True,
             deconv_penal=penalty,
             deconv_err_weighting="adaptive",
-            deconv_masking_radius=None,
+            deconv_masking_radius=5,
             deconv_pks_polish=False,
-            deconv_min_rel_scl=0.25 / upsamp,
+            deconv_ncons_thres=None,
+            deconv_min_rel_scl=None,
             ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
             est_noise_freq=est_noise_freq,
@@ -326,7 +327,7 @@ class TestDemoPipeline:
                     corr_gs = np.corrcoef(
                         gaussian_filter1d(s_true, 1), gaussian_filter1d(Rsb, 1)
                     )[0, 1]
-                    corr_dtw = dtw_corr(s_true, Rsb)
+                    # corr_dtw = dtw_corr(s_true, Rsb)
                 else:
                     mdist, f1, prec, rec, corr_raw, corr_gs = np.nan, 0, 0, 0, 0, 0
                 res_df.append(
@@ -345,7 +346,7 @@ class TestDemoPipeline:
                                 "dhm1": dhm1,
                                 "corr_raw": corr_raw,
                                 "corr_gs": corr_gs,
-                                "corr_dtw": corr_dtw,
+                                # "corr_dtw": corr_dtw,
                             }
                         ]
                     )
