@@ -895,7 +895,7 @@ class DeconvBin:
         return_met: bool = False,
         obj_crit: str = None,
         early_stop: bool = True,
-        masking: bool = True,
+        masking: bool = False,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
@@ -964,7 +964,7 @@ class DeconvBin:
             if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
                 if masking:
-                    self._update_mask(use_wt=self.masking_r is None)
+                    self._update_mask()
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
