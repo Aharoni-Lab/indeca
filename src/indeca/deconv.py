@@ -154,7 +154,7 @@ class DeconvBin:
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
         delta_l0: float = 1e-4,
-        delta_penal: float = 1e-3,
+        delta_penal: float = 1e-4,
         atol: float = 1e-3,
         rtol: float = 1e-3,
         Hlim: int = 1e5,
@@ -895,7 +895,7 @@ class DeconvBin:
         return_met: bool = False,
         obj_crit: str = None,
         early_stop: bool = True,
-        masking: bool = False,
+        masking: bool = True,
     ) -> Tuple[np.ndarray]:
         if self.penal in ["l0", "l1"]:
             pn = "{}_penal".format(self.penal)
