@@ -963,8 +963,8 @@ class DeconvBin:
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
             if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
-                if masking:
-                    self._update_mask()
+            if masking and i >= 1:
+                self._update_mask()
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
