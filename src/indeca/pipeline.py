@@ -276,6 +276,7 @@ def pipeline_bin(
         if n_best is not None and i_iter >= n_best:
             S_best = np.empty_like(S)
             scal_best = np.empty_like(scale)
+            err_wt = np.empty_like(err_rel)
             if tau_init is not None:
                 metric_best = metric_df
             else:
@@ -290,9 +291,11 @@ def pipeline_bin(
                     np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                 ) > (n_best / 2)
                 scal_best[icell] = np.mean([scal_ls[i][icell] for i in cur_idx])
+                err_wt[icell] = -np.mean([metric_df.loc[(i, icell)] for i in cur_idx])
         else:
             S_best = S
             scal_best = scale
+            err_wt = -err_rel
         metric_df = metric_df.reset_index()
         S_ar = S_best
         if ar_use_all:
@@ -300,6 +303,7 @@ def pipeline_bin(
                 Y,
                 S_ar,
                 scal_best,
+                err_wt=err_wt,
                 N=p,
                 h_len=ar_kn_len * up_factor,
                 norm=ar_norm,
