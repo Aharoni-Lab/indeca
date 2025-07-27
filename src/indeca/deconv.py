@@ -142,7 +142,7 @@ class DeconvBin:
         backend: str = "osqp",
         nthres: int = 1000,
         err_weighting: str = None,
-        wt_trunc_thres: float = None,
+        wt_trunc_thres: float = 1e-2,
         masking_radius: int = None,
         pks_polish: bool = True,
         th_min: float = 0,
@@ -1386,9 +1386,12 @@ class DeconvBin:
     def _update_wgt_len(self) -> None:
         coef = self.coef.value if self.backend == "cvxpy" else self.coef
         if self.wt_trunc_thres is not None:
-            self.wgt_len = min(
-                self.coef_len, np.where(coef > self.wt_trunc_thres)[0][-1]
+            trunc_len = int(
+                np.around(np.where(coef > self.wt_trunc_thres)[0][-1] / self.upsamp)
             )
+            if trunc_len == 0:
+                trunc_len = int(np.around(np.where(coef > 0)[0][-1] / self.upsamp))
+            self.wgt_len = max(min(self.coef_len, trunc_len), 1)
         else:
             self.wgt_len = self.coef_len
 
