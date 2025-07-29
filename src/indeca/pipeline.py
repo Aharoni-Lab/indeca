@@ -48,6 +48,7 @@ def pipeline_bin(
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l2",
+    ar_prop_best=0.5,
     da_client=None,
     spawn_dashboard=True,
 ):
@@ -291,7 +292,9 @@ def pipeline_bin(
                     np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                 ) > (n_best / 2)
                 scal_best[icell] = np.mean([scal_ls[i][icell] for i in cur_idx])
-                err_wt[icell] = -np.mean([metric_df.loc[(i, icell)] for i in cur_idx])
+                err_wt[icell] = -np.mean(
+                    [metric_df.loc[(i, icell), "err_rel"] for i in cur_idx]
+                )
         else:
             S_best = S
             scal_best = scale
@@ -299,11 +302,15 @@ def pipeline_bin(
         metric_df = metric_df.reset_index()
         S_ar = S_best
         if ar_use_all:
+            if ar_prop_best is not None:
+                ar_nbest = max(int(np.round(ar_prop_best * ncell)), 1)
+                ar_best_idx = np.argsort(err_wt)[-ar_nbest:]
+            else:
+                ar_best_idx = slice()
             cur_tau, ps, ar_scal, h, h_fit = updateAR(
-                Y,
-                S_ar,
-                scal_best,
-                err_wt=err_wt,
+                Y[ar_best_idx],
+                S_ar[ar_best_idx],
+                scal_best[ar_best_idx],
                 N=p,
                 h_len=ar_kn_len * up_factor,
                 norm=ar_norm,

@@ -287,6 +287,7 @@ class TestDemoPipeline:
             deconv_min_rel_scl=None,
             ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
+            ar_prop_best=0.5,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
             est_add_lag=est_add_lag,
