@@ -46,6 +46,8 @@ COLORS = {
     "cnmf1": tab20c[1],
     "cnmf2": tab20c[2],
     "cnmf3": tab20c[3],
+    "oasis": tab20c[8],
+    "mlspike": tab20c[12],
     "genericA": tab20b[0],
     "genericA0": tab20b[0],
     "genericA1": tab20b[1],
@@ -839,8 +841,11 @@ resdf = (
     )
     .drop_duplicates()
 )
+resdf["ds_ncell"] = resdf["dsname"].map(
+    resdf.groupby("dsname")["unit_id"].nunique().to_dict()
+)
 ressub = (
-    resdf.query("ncell == 'None' & method != 'gt' & tau_init == 'None'")
+    resdf.query("ncell == 'None' & method != 'gt' & tau_init == 'None' & ds_ncell > 5")
     .groupby(["dsname", "method", "use_all", "metric"])
     .apply(sel_iter, include_groups=False)
     .reset_index()
@@ -854,7 +859,8 @@ palette = {
     "CNMF\nthreshold\n0.25": COLORS["cnmf0"],
     "CNMF\nthreshold\n0.5": COLORS["cnmf1"],
     "CNMF\nthreshold\n0.75": COLORS["cnmf2"],
-    "mlspike": COLORS["genericA"],
+    "mlspike": COLORS["mlspike"],
+    "oasis": COLORS["oasis"],
     "InDeCa /w\nindependent\nkernel": COLORS["indeca_min"],
     "InDeCa /w\nshared\nkernel": COLORS["indeca_maj"],
 }
@@ -873,8 +879,7 @@ for met, met_df in ressub.groupby("metric"):
         height=2.5,
         aspect=asp,
     )
-    # g.map_dataframe(plot_ds, palette=palette)
-    g.map_dataframe(plot_ds)
+    g.map_dataframe(plot_ds, palette=palette)
     g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make pipeline figure
