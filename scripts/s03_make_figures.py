@@ -679,8 +679,7 @@ resdf = (
     .drop_duplicates()
 )
 ressub = resdf.query(
-    "ncell == 'None' & method != 'gt'"
-    "& tau_init == 'None' & iter != 10 & metric != 'f1'"
+    "ncell == 'None' & method != 'gt'& tau_init == 'None' & iter != 10 & metric != 'f1'"
 ).copy()
 row_lab_map = {
     "f1": "f1 Score",
@@ -741,6 +740,9 @@ fig.savefig(fig_path, bbox_inches="tight")
 
 
 # %% make pipeline-comp figure
+DS_AGG_MODE = "mean"
+
+
 def xlab(row):
     if row["method"] in ["cnmf", "oasis"]:
         if row["metric"] in ["f1", "prec", "rec", "mdist"]:
@@ -760,7 +762,7 @@ def xlab(row):
         return lab
 
 
-def plot_ds(data, palette=None, color=None):
+def plot_ds(data, ylabel="value", palette=None, color=None):
     ax = plt.gca()
     ax = sns.boxplot(
         data,
@@ -800,7 +802,7 @@ def plot_ds(data, palette=None, color=None):
     #     },
     # )
     ax.set_xlabel("")
-    ax.set_ylabel("F1 score")
+    ax.set_ylabel(ylabel)
 
 
 def sel_iter(df):
@@ -864,6 +866,12 @@ palette = {
     "InDeCa /w\nindependent\nkernel": COLORS["indeca_min"],
     "InDeCa /w\nshared\nkernel": COLORS["indeca_maj"],
 }
+ylab = {
+    "corr_dtw": "DTW Correlation",
+    "corr_raw": "Correlation",
+    "corr_gs": "Gaussian-smoothed Correlation",
+    "f1": "F1 Score",
+}
 for met, met_df in ressub.groupby("metric"):
     fig_path = FIG_PATH_PN / "pipeline-comp-{}.svg".format(met)
     if met == "f1":
@@ -872,14 +880,26 @@ for met, met_df in ressub.groupby("metric"):
     else:
         met_df = met_df[met_df["method"] != "mlspike"]
         asp = 1.6
-    g = sns.FacetGrid(
-        met_df.replace({"None": np.nan}),
-        col="dsname",
-        col_wrap=5,
-        height=2.5,
-        aspect=asp,
-    )
-    g.map_dataframe(plot_ds, palette=palette)
+    met_df = met_df.replace({"None": np.nan})
+    if DS_AGG_MODE is None:
+        g = sns.FacetGrid(met_df, col="dsname", col_wrap=5, height=2.5, aspect=asp)
+    elif DS_AGG_MODE == "collapse":
+        g = sns.FacetGrid(met_df, height=2.5, aspect=asp)
+    elif DS_AGG_MODE == "median":
+        g = sns.FacetGrid(
+            met_df.groupby(["dsname", "method", "xlab"])["value"]
+            .median()
+            .reset_index(),
+            height=2.5,
+            aspect=asp,
+        )
+    elif DS_AGG_MODE == "mean":
+        g = sns.FacetGrid(
+            met_df.groupby(["dsname", "method", "xlab"])["value"].mean().reset_index(),
+            height=2.5,
+            aspect=asp,
+        )
+    g.map_dataframe(plot_ds, palette=palette, ylabel=ylab[met])
     g.figure.savefig(fig_path, bbox_inches="tight")
 
 # %% make pipeline figure
