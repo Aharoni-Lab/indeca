@@ -32,7 +32,7 @@ def pipeline_bin(
     est_noise_freq=0.4,
     est_use_smooth=True,
     est_add_lag=20,
-    med_wnd=None,
+    med_wnd="auto",
     deconv_nthres=1000,
     deconv_norm="l2",
     deconv_atol=1e-3,
