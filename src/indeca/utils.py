@@ -1,6 +1,7 @@
 import itertools as itt
 
 import numpy as np
+import pandas as pd
 
 
 def norm(a):
@@ -31,3 +32,11 @@ def scal_like(src: np.ndarray, tgt: np.ndarray, zero_center=True):
 
 def enumerated_product(*args):
     yield from zip(itt.product(*(range(len(x)) for x in args)), itt.product(*args))
+
+
+def compute_dff(s, window_size=100, q=0.10):
+    s = pd.Series(s).astype(float)
+    f0 = s.rolling(window=window_size, min_periods=1).quantile(q)
+    # dff = (s - f0) / f0
+    dff = s - f0
+    return dff.to_numpy()

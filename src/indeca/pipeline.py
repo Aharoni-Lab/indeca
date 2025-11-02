@@ -11,6 +11,7 @@ from .dashboard import Dashboard
 from .deconv import DeconvBin
 from .logging_config import get_module_logger
 from .simulation import AR2tau, find_dhm, tau2AR
+from .utils import compute_dff
 
 # Initialize logger for this module
 logger = get_module_logger("pipeline")
@@ -32,7 +33,8 @@ def pipeline_bin(
     est_noise_freq=0.4,
     est_use_smooth=True,
     est_add_lag=20,
-    med_wnd="auto",
+    med_wnd=None,
+    dff=True,
     deconv_nthres=1000,
     deconv_norm="l2",
     deconv_atol=1e-3,
@@ -80,6 +82,9 @@ def pipeline_bin(
             med_wnd = ar_kn_len
         for iy, y in enumerate(Y):
             Y[iy, :] = y - medfilt(y, med_wnd * 2 + 1)
+    if dff:
+        for iy, y in enumerate(Y):
+            Y[iy, :] = compute_dff(y, window_size=ar_kn_len)
     if spawn_dashboard:
         if da_client is not None:
             logger.debug("Using Dask client for distributed computation")
