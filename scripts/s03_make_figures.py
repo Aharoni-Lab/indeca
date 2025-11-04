@@ -764,6 +764,16 @@ def xlab(row):
 
 def plot_ds(data, ylabel="value", palette=None, color=None):
     ax = plt.gca()
+    ax = sns.lineplot(
+        data,
+        x="xlab",
+        y="value",
+        estimator=None,
+        linewidth=0.8,
+        units="unit_id" if "unit_id" in data.columns else "dsname",
+        color="grey",
+        alpha=0.4,
+    )
     ax = sns.boxplot(
         data,
         x="xlab",
@@ -814,10 +824,10 @@ def sel_iter(df):
         return df[df["iter"] == iter_last]
 
 
-res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
+res_bin = pd.read_feather(IN_RES_PATH / "metrics" / "metrics.feat").fillna(0)
 res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
 res_oasis = pd.read_feather(IN_EXT_RES_PATH / "caiman" / "metrics.feat")
-res_mlspike = pd.read_feather(IN_EXT_RES_PATH / "mlspike" / "metrics.feat")
+res_mlspike = pd.read_feather(IN_EXT_RES_PATH / "mlspike" / "metrics.feat").fillna(0)
 id_vars = [
     "dsname",
     "ncell",
