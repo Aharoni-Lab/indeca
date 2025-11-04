@@ -305,7 +305,25 @@ def pipeline_bin(
             scal_best = scale
             err_wt = -err_rel
         metric_df = metric_df.reset_index()
-        S_ar = S_best
+        if est_nevt is not None:
+            S_ar = []
+            R = construct_R(T, up_factor)
+            for s in S_best:
+                Rs = R @ s
+                s_pks, pk_prop = find_peaks(
+                    Rs, height=1, distance=ar_kn_len * up_factor
+                )
+                pk_ht = pk_prop["peak_heights"]
+                top_idx = s_pks[np.argsort(pk_ht)[-est_nevt:]]
+                mask = np.zeros_like(Rs, dtype=bool)
+                mask[top_idx] = True
+                Rs_ma = Rs * mask
+                s_ma = np.zeros_like(s)
+                s_ma[::up_factor] = Rs_ma
+                S_ar.append(s_ma)
+            S_ar = np.stack(S_ar, axis=0)
+        else:
+            S_ar = S_best
         if ar_use_all:
             if ar_prop_best is not None:
                 ar_nbest = max(int(np.round(ar_prop_best * ncell)), 1)
