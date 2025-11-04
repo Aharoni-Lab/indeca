@@ -3,12 +3,12 @@ import warnings
 import numpy as np
 import pandas as pd
 from line_profiler import profile
-from scipy.signal import medfilt
+from scipy.signal import find_peaks, medfilt
 from tqdm.auto import tqdm, trange
 
 from .AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
 from .dashboard import Dashboard
-from .deconv import DeconvBin
+from .deconv import DeconvBin, construct_R
 from .logging_config import get_module_logger
 from .simulation import AR2tau, find_dhm, tau2AR
 from .utils import compute_dff
@@ -30,9 +30,10 @@ def pipeline_bin(
     use_rel_err=True,
     err_atol=1e-4,
     err_rtol=5e-2,
-    est_noise_freq=0.4,
-    est_use_smooth=True,
+    est_noise_freq=None,
+    est_use_smooth=False,
     est_add_lag=20,
+    est_nevt=10,
     med_wnd=None,
     dff=True,
     deconv_nthres=1000,
@@ -50,7 +51,7 @@ def pipeline_bin(
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l2",
-    ar_prop_best=0.5,
+    ar_prop_best=None,
     da_client=None,
     spawn_dashboard=True,
 ):
@@ -329,7 +330,7 @@ def pipeline_bin(
                 ar_nbest = max(int(np.round(ar_prop_best * ncell)), 1)
                 ar_best_idx = np.argsort(err_wt)[-ar_nbest:]
             else:
-                ar_best_idx = slice()
+                ar_best_idx = slice(None)
             cur_tau, ps, ar_scal, h, h_fit = updateAR(
                 Y[ar_best_idx],
                 S_ar[ar_best_idx],
@@ -431,6 +432,7 @@ def pipeline_bin(
             opt_idx = metric_df.loc[
                 metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
             ]
+        opt_idx = -1
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
     C_ls.append(opt_C)
