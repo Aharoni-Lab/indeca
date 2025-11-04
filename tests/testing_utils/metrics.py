@@ -75,16 +75,19 @@ def assignment_distance(
         f1 = 2 * (precision * recall) / (precision + recall)
     else:
         f1 = 0
-    if tdist_agg == "median":
-        mdist = np.median(tdists)
-    elif tdist_agg == "mean":
-        mdist = np.mean(tdists)
+    if len(tdists) > 0:
+        if tdist_agg == "median":
+            mdist = np.median(tdists)
+        elif tdist_agg == "mean":
+            mdist = np.mean(tdists)
+        else:
+            raise NotImplementedError("Aggregation method must be 'median' or 'mean'")
     else:
-        raise NotImplementedError("Aggregation method must be 'median' or 'mean'")
+        mdist = np.nan
     return mdist, f1, precision, recall
 
 
-def compute_metrics(s_ref, svals, add_met, **kwargs):
+def compute_f1_metrics(s_ref, svals, add_met, **kwargs):
     mets = [assignment_distance(s_ref, ss, **kwargs) for ss in svals]
     metdf = pd.DataFrame(
         {
@@ -97,6 +100,50 @@ def compute_metrics(s_ref, svals, add_met, **kwargs):
     for met_name, mets in add_met.items():
         metdf[met_name] = mets
     return metdf
+
+
+def compute_metrics(
+    svals,
+    s_ref,
+    ap_df=None,
+    fluo_df=None,
+    pre_scaling: bool = True,
+    rolling_window: int = 30,
+    tdist_thres: float = 3,
+):
+    svals = np.nan_to_num(np.array(svals))
+    s_ref = np.nan_to_num(np.array(s_ref))
+    met_dict = dict()
+    if ap_df is not None and svals.sum() > 0:
+        assert fluo_df is not None
+        if pre_scaling:
+            scl = max(s_ref.sum() / svals.sum(), 1)
+            sb = np.around(svals * scl)
+        else:
+            sb = svals
+        sh_res = []
+        for sh_idx in range(-rolling_window, rolling_window):
+            sb_sh = np.roll(sb, sh_idx).astype(int)
+            sb_idx = nzidx_int(sb_sh)
+            if len(sb_idx) > 0:
+                t_sb = np.interp(sb_idx, fluo_df["frame"], fluo_df["fluo_time"])
+                t_ap = ap_df["ap_time"]
+                mdist, f1, prec, rec = assignment_distance(
+                    t_ref=np.atleast_1d(t_ap),
+                    t_slv=np.atleast_1d(t_sb),
+                    tdist_thres=fluo_df["fluo_time"].diff().median() * tdist_thres,
+                )
+                sh_res.append(
+                    {"sh": sh_idx, "mdist": mdist, "f1": f1, "prec": prec, "rec": rec}
+                )
+        sh_res = pd.DataFrame(sh_res)
+        try:
+            opt_idx = sh_res["f1"].argmax()
+            f1_met = sh_res.loc[opt_idx].to_dict()
+        except KeyError:
+            f1_met = dict()
+        met_dict = met_dict | f1_met
+    return met_dict
 
 
 def df_assign_metadata(df, meta_dict):
