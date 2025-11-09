@@ -85,7 +85,7 @@ def pipeline_bin(
             Y[iy, :] = y - medfilt(y, med_wnd * 2 + 1)
     if dff:
         for iy, y in enumerate(Y):
-            Y[iy, :] = compute_dff(y, window_size=ar_kn_len)
+            Y[iy, :] = compute_dff(y, window_size=ar_kn_len * 5, q=0.2)
     if spawn_dashboard:
         if da_client is not None:
             logger.debug("Using Dask client for distributed computation")
