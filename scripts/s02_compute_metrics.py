@@ -16,6 +16,7 @@ from tests.testing_utils.plotting import plot_traces
 
 IN_DPATH = "./tests/data/"
 IN_MLSPIKE_RES = "./tests/output/data/mlspike/"
+IN_OASIS_RES = "./tests/output/data/oasis"
 IN_INDECA_RES = "./tests/output/data/func/test_demo_pipeline_realds/"
 OUT_EXT_PATH = "./tests/output/data/external/"
 OUT_IND_PATH = "./tests/output/data/agg/metrics"
@@ -24,6 +25,40 @@ FIG_PATH = "./tests/output/figs/func/mlspike_comparison"
 os.makedirs(FIG_PATH, exist_ok=True)
 os.makedirs(OUT_EXT_PATH, exist_ok=True)
 os.makedirs(OUT_IND_PATH, exist_ok=True)
+
+# %% compute metrics for oasis
+res_df = []
+ncfiles = [f for f in os.listdir(IN_OASIS_RES) if f.endswith(".nc")]
+for ncf in tqdm(ncfiles, desc="dataset"):
+    dsname = os.path.splitext(ncf)[0]
+    Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(IN_DPATH, dsname))
+    Y, S_true, ap_df, fluo_df = subset_gt_ds(Y, S_true, ap_df, fluo_df, dsname)
+    mlspk_ds = xr.open_dataset(os.path.join(IN_OASIS_RES, ncf))
+    S = mlspk_ds["S"].assign_coords(unit_id=Y.coords["unit_id"])
+    for uid in tqdm(np.array(Y.coords["unit_id"]), desc="cell", leave=False):
+        s_true = S_true.sel(unit_id=uid)
+        sb = S.sel(unit_id=uid)
+        cur_ap = ap_df.loc[uid]
+        cur_fluo = fluo_df.loc[uid]
+        met_dict = compute_metrics(
+            s_slv=sb,
+            s_ref=s_true,
+            ap_df=cur_ap,
+            fluo_df=cur_fluo,
+            tdist_thres=5,
+            compute_f1=False,
+        )
+        meta_dict = {
+            "dsname": dsname,
+            "method": "oasis",
+            "use_all": False,
+            "unit_id": uid,
+        }
+        res_df.append(meta_dict | met_dict)
+met_path = os.path.join(OUT_EXT_PATH, "oasis")
+os.makedirs(met_path, exist_ok=True)
+res_df = pd.DataFrame(res_df)
+res_df.to_feather(os.path.join(met_path, "metrics.feat"))
 
 # %% compute metrics for mlspike
 res_df = []
