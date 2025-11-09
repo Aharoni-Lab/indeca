@@ -342,7 +342,10 @@ def solve_fit_h_num(y, s, scal, err_wt=None, N=2, h_len=60, norm="l2", up_factor
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
     except IndexError:
         pos_idx = 1
-    lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
+    try:
+        lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
+    except RuntimeError:
+        lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp=False)
     h_fit_pad = np.zeros_like(h)
     h_fit_pad[: len(h_fit)] = h_fit
     return lams, p, scal, h, h_fit_pad
