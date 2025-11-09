@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from dtw import dtw
+from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from scipy.stats import zscore
@@ -103,24 +104,27 @@ def compute_f1_metrics(s_ref, svals, add_met, **kwargs):
 
 
 def compute_metrics(
-    svals,
+    s_slv,
     s_ref,
     ap_df=None,
     fluo_df=None,
     pre_scaling: bool = True,
     rolling_window: int = 30,
+    smoothing_window: int = 2,
     tdist_thres: float = 3,
+    compute_f1: bool = True,
+    compute_corr: bool = True,
 ):
-    svals = np.nan_to_num(np.array(svals))
-    s_ref = np.nan_to_num(np.array(s_ref))
+    s_slv = np.nan_to_num(np.array(s_slv)).astype(float)
+    s_ref = np.nan_to_num(np.array(s_ref)).astype(float)
     met_dict = dict()
-    if ap_df is not None and svals.sum() > 0:
+    if compute_f1 and ap_df is not None and s_slv.sum() > 0:
         assert fluo_df is not None
         if pre_scaling:
-            scl = max(s_ref.sum() / svals.sum(), 1)
-            sb = np.around(svals * scl)
+            scl = max(s_ref.sum() / s_slv.sum(), 1)
+            sb = np.around(s_slv * scl)
         else:
-            sb = svals
+            sb = s_slv
         sh_res = []
         for sh_idx in range(-rolling_window, rolling_window):
             sb_sh = np.roll(sb, sh_idx).astype(int)
@@ -134,7 +138,13 @@ def compute_metrics(
                     tdist_thres=fluo_df["fluo_time"].diff().median() * tdist_thres,
                 )
                 sh_res.append(
-                    {"sh": sh_idx, "mdist": mdist, "f1": f1, "prec": prec, "rec": rec}
+                    {
+                        "sh_f1": sh_idx,
+                        "mdist": mdist,
+                        "f1": f1,
+                        "prec": prec,
+                        "rec": rec,
+                    }
                 )
         sh_res = pd.DataFrame(sh_res)
         try:
@@ -143,6 +153,34 @@ def compute_metrics(
         except KeyError:
             f1_met = dict()
         met_dict = met_dict | f1_met
+    if compute_corr and s_slv.sum() > 0:
+        corr_met = dict()
+        sh_res = []
+        svals_smth = gaussian_filter1d(s_slv, smoothing_window)
+        s_ref_smth = gaussian_filter1d(s_ref, smoothing_window)
+        for sh_idx in range(-rolling_window, rolling_window):
+            s_sh = np.roll(s_slv, sh_idx)
+            s_sh_smth = np.roll(svals_smth, sh_idx)
+            craw = np.corrcoef(s_sh, s_ref)[0, 1]
+            csmth = np.corrcoef(s_sh_smth, s_ref_smth)[0, 1]
+            sh_res.append({"sh": sh_idx, "corr_raw": craw, "corr_smth": csmth})
+        sh_res = pd.DataFrame(sh_res)
+        opt_idx_raw = sh_res["corr_raw"].argmax()
+        opt_idx_smth = sh_res["corr_smth"].argmax()
+        corr_met = (
+            corr_met
+            | sh_res.loc[opt_idx_raw, ["sh", "corr_raw"]]
+            .rename({"sh": "sh_raw"})
+            .to_dict()
+        )
+        corr_met = (
+            corr_met
+            | sh_res.loc[opt_idx_smth, ["sh", "corr_smth"]]
+            .rename({"sh": "sh_smth"})
+            .to_dict()
+        )
+        corr_met = corr_met | {"corr_dtw": dtw_corr(s_ref, s_slv)}
+        met_dict = met_dict | corr_met
     return met_dict
 
 
@@ -160,7 +198,7 @@ def nzidx_int(arr):
     return idxs
 
 
-def dtw_corr(s_ref: np.ndarray = None, s_slv: np.ndarray = None):
+def dtw_corr(s_ref: np.ndarray = None, s_slv: np.ndarray = None, window_size: int = 5):
     if s_ref is not None:
         s_ref = np.nan_to_num(s_ref)
     if s_slv is not None:
@@ -172,6 +210,6 @@ def dtw_corr(s_ref: np.ndarray = None, s_slv: np.ndarray = None):
         s_ref_z,
         step_pattern="asymmetric",
         window_type="sakoechiba",
-        window_args={"window_size": 1},
+        window_args={"window_size": window_size},
     )
     return np.corrcoef(s_ref_z[algn.index2], s_slv_z[algn.index1])[0, 1]

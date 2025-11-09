@@ -40,7 +40,12 @@ for ncf in tqdm(ncfiles, desc="dataset"):
         cur_ap = ap_df.loc[uid]
         cur_fluo = fluo_df.loc[uid]
         met_dict = compute_metrics(
-            svals=sb, s_ref=s_true, ap_df=cur_ap, fluo_df=cur_fluo, tdist_thres=5
+            s_slv=sb,
+            s_ref=s_true,
+            ap_df=cur_ap,
+            fluo_df=cur_fluo,
+            tdist_thres=5,
+            compute_corr=False,
         )
         meta_dict = {
             "dsname": dsname,
@@ -71,7 +76,7 @@ for ncf in tqdm(ncfiles, desc="dataset"):
         cur_ap = ap_df.loc[uid]
         cur_fluo = fluo_df.loc[uid]
         met_dict = compute_metrics(
-            svals=sb, s_ref=s_true, ap_df=cur_ap, fluo_df=cur_fluo, tdist_thres=5
+            s_slv=sb, s_ref=s_true, ap_df=cur_ap, fluo_df=cur_fluo, tdist_thres=5
         )
         meta_dict = {
             "dsname": dsname,
