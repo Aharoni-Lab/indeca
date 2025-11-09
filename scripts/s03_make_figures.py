@@ -740,7 +740,7 @@ fig.savefig(fig_path, bbox_inches="tight")
 
 
 # %% make pipeline-comp figure
-DS_AGG_MODE = "mean"
+DS_AGG_MODE = None
 
 
 def xlab(row):
