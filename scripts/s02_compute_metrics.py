@@ -80,7 +80,6 @@ for ncf in tqdm(ncfiles, desc="dataset"):
             ap_df=cur_ap,
             fluo_df=cur_fluo,
             tdist_thres=5,
-            compute_corr=False,
         )
         meta_dict = {
             "dsname": dsname,

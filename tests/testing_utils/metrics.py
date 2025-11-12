@@ -110,8 +110,8 @@ def compute_metrics(
     fluo_df=None,
     pre_scaling: bool = True,
     rolling_window: int = 30,
-    smoothing_window: int = 2,
-    tdist_thres: float = 3,
+    smoothing_sigma: int = 0.5,
+    tdist_thres: float = 5,
     compute_f1: bool = True,
     compute_corr: bool = True,
 ):
@@ -156,17 +156,19 @@ def compute_metrics(
     if compute_corr and s_slv.sum() > 0:
         corr_met = dict()
         sh_res = []
-        svals_smth = gaussian_filter1d(s_slv, smoothing_window)
-        s_ref_smth = gaussian_filter1d(s_ref, smoothing_window)
+        s_slv_smth = gaussian_filter1d(s_slv, smoothing_sigma)
+        s_ref_smth = gaussian_filter1d(s_ref, smoothing_sigma)
         for sh_idx in range(-rolling_window, rolling_window):
             s_sh = np.roll(s_slv, sh_idx)
-            s_sh_smth = np.roll(svals_smth, sh_idx)
+            s_sh_smth = np.roll(s_slv_smth, sh_idx)
             craw = np.corrcoef(s_sh, s_ref)[0, 1]
-            csmth = np.corrcoef(s_sh_smth, s_ref_smth)[0, 1]
-            sh_res.append({"sh": sh_idx, "corr_raw": craw, "corr_smth": csmth})
+            cgs = np.corrcoef(s_sh_smth, s_ref_smth)[0, 1]
+            sh_res.append({"sh": sh_idx, "corr_raw": craw, "corr_gs": cgs})
         sh_res = pd.DataFrame(sh_res)
         opt_idx_raw = sh_res["corr_raw"].argmax()
-        opt_idx_smth = sh_res["corr_smth"].argmax()
+        opt_idx_smth = sh_res["corr_gs"].argmax()
+        opt_sh = sh_res.loc[opt_idx_smth, "sh"]
+        s_slv_sh = np.roll(s_slv_smth, opt_sh)
         corr_met = (
             corr_met
             | sh_res.loc[opt_idx_raw, ["sh", "corr_raw"]]
@@ -175,11 +177,13 @@ def compute_metrics(
         )
         corr_met = (
             corr_met
-            | sh_res.loc[opt_idx_smth, ["sh", "corr_smth"]]
-            .rename({"sh": "sh_smth"})
+            | sh_res.loc[opt_idx_smth, ["sh", "corr_gs"]]
+            .rename({"sh": "sh_gs"})
             .to_dict()
         )
-        corr_met = corr_met | {"corr_dtw": dtw_corr(s_ref, s_slv)}
+        corr_met = corr_met | {
+            "corr_dtw": dtw_corr(s_ref_smth, s_slv_sh, window_size=tdist_thres)
+        }
         met_dict = met_dict | corr_met
     return met_dict
 
