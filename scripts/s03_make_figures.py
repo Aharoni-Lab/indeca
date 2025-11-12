@@ -740,13 +740,16 @@ fig.savefig(fig_path, bbox_inches="tight")
 
 
 # %% make pipeline-comp figure
-DS_AGG_MODE = None
+DS_AGG_MODE = "median"
 
 
 def xlab(row):
     if row["method"] in ["cnmf", "oasis"]:
         if row["metric"] in ["f1", "prec", "rec", "mdist"]:
-            return "{}\nthreshold\n{}".format(row["method"], row["qthres"])
+            try:
+                return "{}\nthreshold\n{}".format(row["method"], row["qthres"])
+            except KeyError:
+                return "{}".format(row["method"])
         else:
             return "{}".format(row["method"])
     elif row["method"] == "mlspike":
@@ -824,9 +827,16 @@ def sel_iter(df):
         return df[df["iter"] == iter_last]
 
 
-res_bin = pd.read_feather(IN_RES_PATH / "metrics" / "metrics.feat").fillna(0)
-res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
-res_oasis = pd.read_feather(IN_EXT_RES_PATH / "caiman" / "metrics.feat")
+res_bin = (
+    pd.read_feather(IN_RES_PATH / "metrics" / "metrics.feat")
+    .fillna(0)
+    .rename(columns={"corr_smth": "corr_gs"})
+)
+res_oasis = (
+    pd.read_feather(IN_EXT_RES_PATH / "oasis" / "metrics.feat")
+    .fillna(0)
+    .rename(columns={"corr_smth": "corr_gs"})
+)
 res_mlspike = pd.read_feather(IN_EXT_RES_PATH / "mlspike" / "metrics.feat").fillna(0)
 id_vars = [
     "dsname",
@@ -836,13 +846,12 @@ id_vars = [
     "tau_init",
     "unit_id",
     "iter",
-    "qthres",
     "test_id",
     "upsamp",
 ]
 val_vals = ["f1", "corr_raw", "corr_gs", "corr_dtw"]
 resdf = (
-    pd.concat([res_bin, res_cnmf, res_oasis, res_mlspike], ignore_index=True)
+    pd.concat([res_bin, res_oasis, res_mlspike], ignore_index=True)
     .drop_duplicates()
     .fillna("None")
     .melt(
