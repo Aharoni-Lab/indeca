@@ -9,7 +9,7 @@ from indeca.deconv import DeconvBin
 from .conftest import fixt_deconv, fixt_realds, fixt_y
 from .testing_utils.metrics import (
     assignment_distance,
-    compute_metrics,
+    compute_f1_metrics,
     df_assign_metadata,
 )
 from .testing_utils.plotting import plot_met_ROC_scale, plot_met_ROC_thres, plot_traces
@@ -317,7 +317,7 @@ class TestDemoDeconv:
         )
         s_slv, thres, svals, cvals, yfvals, scals, objs, opt_idx = intm
         # save results
-        metdf = compute_metrics(
+        metdf = compute_f1_metrics(
             s_org,
             svals,
             {"objs": objs, "scals": scals, "thres": thres, "opt_idx": opt_idx},
@@ -364,7 +364,7 @@ class TestDemoDeconv:
                     cur_svals.append(s_pad)
             else:
                 cur_svals = cur_intm[2]
-            cur_met = compute_metrics(
+            cur_met = compute_f1_metrics(
                 s_org,
                 cur_svals,
                 {

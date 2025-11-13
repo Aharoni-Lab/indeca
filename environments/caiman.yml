@@ -1,0 +1,8 @@
+channels:
+  - conda-forge
+dependencies:
+  - caiman
+  - xarray
+  - gitpython
+  - filelock
+  - dtw-python

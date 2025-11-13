@@ -175,6 +175,12 @@ cython_debug/
 /benchmarks/data
 /benchmarks/intermediate
 /tests/data
-/tests/output
 *.npy
 *.feat
+/tests/output/*
+!/tests/output/figs
+/tests/output/figs/*
+!/tests/output/figs/print
+!/tests/output/figs/func
+/tests/output/figs/func/*
+!/tests/output/figs/func/mlspike_comparison

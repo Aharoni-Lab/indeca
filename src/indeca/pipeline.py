@@ -3,13 +3,15 @@ import warnings
 import numpy as np
 import pandas as pd
 from line_profiler import profile
+from scipy.signal import find_peaks, medfilt
 from tqdm.auto import tqdm, trange
 
 from .AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
 from .dashboard import Dashboard
-from .deconv import DeconvBin
+from .deconv import DeconvBin, construct_R
 from .logging_config import get_module_logger
 from .simulation import AR2tau, find_dhm, tau2AR
+from .utils import compute_dff
 
 # Initialize logger for this module
 logger = get_module_logger("pipeline")
@@ -28,9 +30,12 @@ def pipeline_bin(
     use_rel_err=True,
     err_atol=1e-4,
     err_rtol=5e-2,
-    est_noise_freq=0.4,
-    est_use_smooth=True,
+    est_noise_freq=None,
+    est_use_smooth=False,
     est_add_lag=20,
+    est_nevt=10,
+    med_wnd=None,
+    dff=True,
     deconv_nthres=1000,
     deconv_norm="l2",
     deconv_atol=1e-3,
@@ -41,9 +46,12 @@ def pipeline_bin(
     deconv_reset_scl=True,
     deconv_masking_radius=None,
     deconv_pks_polish=None,
+    deconv_ncons_thres=None,
+    deconv_min_rel_scl=None,
     ar_use_all=True,
     ar_kn_len=100,
     ar_norm="l2",
+    ar_prop_best=None,
     da_client=None,
     spawn_dashboard=True,
 ):
@@ -70,6 +78,14 @@ def pipeline_bin(
         f"ar_use_all={ar_use_all}, ar_kn_len={ar_kn_len}"
         f"{ncell} cells with {T} timepoints"
     )
+    if med_wnd is not None:
+        if med_wnd == "auto":
+            med_wnd = ar_kn_len
+        for iy, y in enumerate(Y):
+            Y[iy, :] = y - medfilt(y, med_wnd * 2 + 1)
+    if dff:
+        for iy, y in enumerate(Y):
+            Y[iy, :] = compute_dff(y, window_size=ar_kn_len * 5, q=0.2)
     if spawn_dashboard:
         if da_client is not None:
             logger.debug("Using Dask client for distributed computation")
@@ -130,6 +146,7 @@ def pipeline_bin(
             "scale",
             "best_idx",
             "obj",
+            "wgt_len",
         ]
     )
     if da_client is not None:
@@ -149,6 +166,8 @@ def pipeline_bin(
                     err_weighting=deconv_err_weighting,
                     masking_radius=deconv_masking_radius,
                     pks_polish=deconv_pks_polish,
+                    ncons_thres=deconv_ncons_thres,
+                    min_rel_scl=deconv_min_rel_scl,
                     atol=deconv_atol,
                     backend=deconv_backend,
                     dashboard=dashboard,
@@ -177,6 +196,8 @@ def pipeline_bin(
                 err_weighting=deconv_err_weighting,
                 masking_radius=deconv_masking_radius,
                 pks_polish=deconv_pks_polish,
+                ncons_thres=deconv_ncons_thres,
+                min_rel_scl=deconv_min_rel_scl,
                 atol=deconv_atol,
                 backend=deconv_backend,
                 dashboard=dashboard,
@@ -236,6 +257,7 @@ def pipeline_bin(
                 "penal": penal,
                 "nnz": nnz,
                 "obj": err_rel if use_rel_err else err,
+                "wgt_len": [d.wgt_len for d in dcv],
             }
         )
         if dashboard is not None:
@@ -261,6 +283,7 @@ def pipeline_bin(
         if n_best is not None and i_iter >= n_best:
             S_best = np.empty_like(S)
             scal_best = np.empty_like(scale)
+            err_wt = np.empty_like(err_rel)
             if tau_init is not None:
                 metric_best = metric_df
             else:
@@ -275,16 +298,43 @@ def pipeline_bin(
                     np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
                 ) > (n_best / 2)
                 scal_best[icell] = np.mean([scal_ls[i][icell] for i in cur_idx])
+                err_wt[icell] = -np.mean(
+                    [metric_df.loc[(i, icell), "err_rel"] for i in cur_idx]
+                )
         else:
             S_best = S
             scal_best = scale
+            err_wt = -err_rel
         metric_df = metric_df.reset_index()
-        S_ar = S_best
+        if est_nevt is not None:
+            S_ar = []
+            R = construct_R(T, up_factor)
+            for s in S_best:
+                Rs = R @ s
+                s_pks, pk_prop = find_peaks(
+                    Rs, height=1, distance=ar_kn_len * up_factor
+                )
+                pk_ht = pk_prop["peak_heights"]
+                top_idx = s_pks[np.argsort(pk_ht)[-est_nevt:]]
+                mask = np.zeros_like(Rs, dtype=bool)
+                mask[top_idx] = True
+                Rs_ma = Rs * mask
+                s_ma = np.zeros_like(s)
+                s_ma[::up_factor] = Rs_ma
+                S_ar.append(s_ma)
+            S_ar = np.stack(S_ar, axis=0)
+        else:
+            S_ar = S_best
         if ar_use_all:
+            if ar_prop_best is not None:
+                ar_nbest = max(int(np.round(ar_prop_best * ncell)), 1)
+                ar_best_idx = np.argsort(err_wt)[-ar_nbest:]
+            else:
+                ar_best_idx = slice(None)
             cur_tau, ps, ar_scal, h, h_fit = updateAR(
-                Y,
-                S_ar,
-                scal_best,
+                Y[ar_best_idx],
+                S_ar[ar_best_idx],
+                scal_best[ar_best_idx],
                 N=p,
                 h_len=ar_kn_len * up_factor,
                 norm=ar_norm,
@@ -373,10 +423,16 @@ def pipeline_bin(
         logger.warning("Max iteration reached without convergence")
     # Compute final results
     opt_C, opt_S = np.empty((ncell, T * up_factor)), np.empty((ncell, T * up_factor))
+    mobj = metric_df.groupby("iter")["obj"].median()
+    opt_idx_all = mobj.idxmin()
     for icell in range(ncell):
-        opt_idx = metric_df.loc[
-            metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
-        ]
+        if ar_use_all:
+            opt_idx = opt_idx_all
+        else:
+            opt_idx = metric_df.loc[
+                metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
+            ]
+        opt_idx = -1
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
     C_ls.append(opt_C)

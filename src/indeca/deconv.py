@@ -110,6 +110,19 @@ def bin_convolve(
     return out
 
 
+@njit(nopython=True, nogil=True, cache=True)
+def max_consecutive(arr):
+    max_count = 0
+    current_count = 0
+    for value in arr:
+        if value:
+            current_count += 1
+            max_count = max(max_count, current_count)
+        else:
+            current_count = 0
+    return max_count
+
+
 class DeconvBin:
     def __init__(
         self,
@@ -129,15 +142,19 @@ class DeconvBin:
         backend: str = "osqp",
         nthres: int = 1000,
         err_weighting: str = None,
+        wt_trunc_thres: float = 1e-2,
         masking_radius: int = None,
         pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
+        density_thres: float = None,
+        ncons_thres: int = None,
+        min_rel_scl: float = "auto",
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
         delta_l0: float = 1e-4,
-        delta_penal: float = 1e-3,
+        delta_penal: float = 1e-4,
         atol: float = 1e-3,
         rtol: float = 1e-3,
         Hlim: int = 1e5,
@@ -221,6 +238,18 @@ class DeconvBin:
         self.masking_r = masking_radius
         self.pks_polish = pks_polish
         self.err_wt = np.ones(self.y_len)
+        self.density_thres = density_thres
+        self.wt_trunc_thres = wt_trunc_thres
+        if ncons_thres == "auto":
+            self.ncons_thres = upsamp + 1
+        else:
+            self.ncons_thres = ncons_thres
+        if min_rel_scl == "auto":
+            self.min_rel_scl = (
+                0.5 / self.upsamp
+            )  # 2 x upsamp number of spikes should be more than enough to explain highest peak
+        else:
+            self.min_rel_scl = min_rel_scl
         if err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = self._get_stft_spec(y)
@@ -369,11 +398,13 @@ class DeconvBin:
                 self.coef.value = coef
                 self.theta.value = theta_new
                 self._update_HG()
+                self._update_wgt_len()
             if coef is not None:
                 if scale_coef:
                     scale_mul = scal_lstsq(coef, self.coef).item()
                 self.coef.value = coef
                 self._update_HG()
+                self._update_wgt_len()
             if scale is not None:
                 self.scale.value = scale
             if scale_mul is not None:
@@ -424,6 +455,7 @@ class DeconvBin:
             ] * 7
             if coef is not None:
                 self._update_HG()
+                self._update_wgt_len()
                 updt_HG = True
             if self.err_weighting is not None and update_weighting:
                 self._update_Wt(clear=clear_weighting)
@@ -658,6 +690,35 @@ class DeconvBin:
         self.s = np.abs(opt_s)
         return self.s, self.b
 
+    def _max_thres(self, s, nz_only=True):
+        S_ls, thres = max_thres(
+            s,
+            nthres=self.nthres,
+            th_min=self.th_min,
+            th_max=self.th_max,
+            reverse_thres=True,
+            return_thres=True,
+            nz_only=nz_only,
+        )
+        if self.density_thres is not None:
+            Sden = [ss.sum() / self.T for ss in S_ls]
+            S_ls = [ss for ss, den in zip(S_ls, Sden) if den < self.density_thres]
+            thres = [th for th, den in zip(thres, Sden) if den < self.density_thres]
+        if self.ncons_thres is not None:
+            S_pad = [self._pad_s(ss) for ss in S_ls]
+            Sncons = [max_consecutive(ss) for ss in S_pad]
+            if min(Sncons) < self.ncons_thres:
+                S_ls = [
+                    ss for ss, ncons in zip(S_ls, Sncons) if ncons <= self.ncons_thres
+                ]
+                thres = [
+                    th for th, ncons in zip(thres, Sncons) if ncons <= self.ncons_thres
+                ]
+            else:
+                S_ls = [S_ls[0]]
+                thres = [thres[0]]
+        return S_ls, thres
+
     def solve_thres(
         self,
         scaling: bool = True,
@@ -677,25 +738,10 @@ class DeconvBin:
             res = y - opt_b - self.scale * R @ self._compute_c(opt_s)
         else:
             res = np.zeros_like(y)
-        svals, thres = max_thres(
-            opt_s,
-            self.nthres,
-            th_min=self.th_min,
-            th_max=self.th_max,
-            reverse_thres=True,
-            return_thres=True,
-            nz_only=True,
-        )
+        svals, thres = self._max_thres(opt_s)
         if not len(svals) > 0:
             if return_intm:
-                svals, thres = max_thres(
-                    opt_s,
-                    self.nthres,
-                    th_min=self.th_min,
-                    th_max=self.th_max,
-                    reverse_thres=True,
-                    return_thres=True,
-                )
+                svals, thres = self._max_thres(opt_s, nz_only=False)
             else:
                 return (
                     np.full(len(self.nzidx_s), np.nan),
@@ -709,6 +755,16 @@ class DeconvBin:
             scal_fit = [scal_lstsq(yf, y - res, fit_intercept=True) for yf in yfvals]
             scals = [sf[0] for sf in scal_fit]
             bs = [sf[1] for sf in scal_fit]
+            if self.min_rel_scl is not None:
+                scl_thres = np.max(y) * self.min_rel_scl
+                valid_idx = np.where(scals > scl_thres)[0]
+                if len(valid_idx) > 0:
+                    scals = [scals[i] for i in valid_idx]
+                    bs = [bs[i] for i in valid_idx]
+                else:
+                    max_idx = np.argmax(scals)
+                    scals = [scals[max_idx]]
+                    bs = [bs[max_idx]]
         else:
             scals = [self.scale] * len(yfvals)
             bs = [(y - res - scl * yf).mean() for scl, yf in zip(scals, yfvals)]
@@ -900,14 +956,15 @@ class DeconvBin:
                         "obj": cur_obj,
                         "penal": cur_penal,
                         "nnz": (cur_s > 0).sum(),
+                        "density": (cur_s > 0).sum() / self.T,
                     }
                 ]
             )
             metric_df = pd.concat([metric_df, cur_met], ignore_index=True)
             if self.err_weighting == "adaptive" and i <= 1:
                 self.update(update_weighting=True)
-                if masking:
-                    self._update_mask(use_wt=self.masking_r is None)
+            if masking and i >= 1:
+                self._update_mask()
             if any(
                 (
                     np.abs(cur_scl - opt_scal) < self.rtol * opt_scal,
@@ -962,6 +1019,7 @@ class DeconvBin:
     def _setup_prob_osqp(self) -> None:
         logger.debug("Setting up OSQP problem")
         self._update_HG()
+        self._update_wgt_len()
         self._update_P()
         self._update_q0()
         self._update_q()
@@ -1281,7 +1339,7 @@ class DeconvBin:
                 self.err_wt = np.zeros(self.y_len)
                 s_bin_R = self.R @ self._pad_s(self.s_bin)
                 for nzidx in np.where(s_bin_R > 0)[0]:
-                    self.err_wt[nzidx : nzidx + self.coef_len] = 1
+                    self.err_wt[nzidx : nzidx + self.wgt_len] = 1
             else:
                 self.err_wt = np.ones(self.y_len)
         self.Wt = sps.diags(self.err_wt)
@@ -1324,6 +1382,18 @@ class DeconvBin:
             # assert np.isclose(
             #     np.linalg.pinv(self.H.todense()), self.G.todense(), atol=self.atol
             # ).all()
+
+    def _update_wgt_len(self) -> None:
+        coef = self.coef.value if self.backend == "cvxpy" else self.coef
+        if self.wt_trunc_thres is not None:
+            trunc_len = int(
+                np.around(np.where(coef > self.wt_trunc_thres)[0][-1] / self.upsamp)
+            )
+            if trunc_len == 0:
+                trunc_len = int(np.around(np.where(coef > 0)[0][-1] / self.upsamp))
+            self.wgt_len = max(min(self.coef_len, trunc_len), 1)
+        else:
+            self.wgt_len = self.coef_len
 
     def _get_stft_spec(self, x: np.ndarray) -> np.ndarray:
         spec = np.abs(self.stft.stft(x)) ** 2

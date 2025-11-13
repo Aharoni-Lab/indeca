@@ -14,7 +14,7 @@ from indeca.simulation import find_dhm
 
 from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
-from .testing_utils.metrics import assignment_distance, nzidx_int
+from .testing_utils.metrics import assignment_distance, dtw_corr, nzidx_int
 from .testing_utils.plotting import plot_traces
 
 
@@ -258,11 +258,12 @@ class TestDemoPipeline:
         ar_use_all,
         results_bag,
         test_fig_path_html,
+        func_data_dir,
     ):
         # act
         Y, S_true, ap_df, fluo_df = fixt_realds(dsname, ncell, nfm)
         if upsamp is None:
-            upsamp = max(int(S_true.max().item() / 2), 1)
+            upsamp = max(int(S_true.max().item()), 1)
         (
             C_bin,
             S_bin,
@@ -282,8 +283,11 @@ class TestDemoPipeline:
             deconv_err_weighting="adaptive",
             deconv_masking_radius=5,
             deconv_pks_polish=False,
+            deconv_ncons_thres=None,
+            deconv_min_rel_scl=None,
             ar_use_all=ar_use_all,
             ar_kn_len=ar_kn_len,
+            ar_prop_best=0.5,
             est_noise_freq=est_noise_freq,
             est_use_smooth=False,
             est_add_lag=est_add_lag,
@@ -311,18 +315,20 @@ class TestDemoPipeline:
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
-                    sb_idx = np.where(sb)[0] / upsamp
+                    sb = np.around(Rsb / Rsb.max() * np.array(s_true).max())
+                    sb_idx = nzidx_int(np.array(sb).astype(int))
                     t_sb = np.interp(sb_idx, cur_fluo["frame"], cur_fluo["fluo_time"])
                     t_ap = cur_ap["ap_time"]
                     mdist, f1, prec, rec = assignment_distance(
                         t_ref=np.atleast_1d(t_ap),
                         t_slv=np.atleast_1d(t_sb),
-                        tdist_thres=1,
+                        tdist_thres=fluo_df["fluo_time"].diff().median() * 2.5,
                     )
                     corr_raw = np.corrcoef(s_true, Rsb)[0, 1]
                     corr_gs = np.corrcoef(
                         gaussian_filter1d(s_true, 1), gaussian_filter1d(Rsb, 1)
                     )[0, 1]
+                    # corr_dtw = dtw_corr(s_true, Rsb)
                 else:
                     mdist, f1, prec, rec, corr_raw, corr_gs = np.nan, 0, 0, 0, 0, 0
                 res_df.append(
@@ -341,12 +347,32 @@ class TestDemoPipeline:
                                 "dhm1": dhm1,
                                 "corr_raw": corr_raw,
                                 "corr_gs": corr_gs,
+                                # "corr_dtw": corr_dtw,
                             }
                         ]
                     )
                 )
         res_df = pd.concat(res_df, ignore_index=True)
         results_bag.data = res_df
+        # save raw traces
+        R = construct_R(len(s_true), upsamp)
+        if ncell is None:
+            S = xr.DataArray(
+                R @ (S_bin_iter[-1]).T,
+                dims=["frame", "unit_id"],
+                coords={"unit_id": Y.coords["unit_id"], "frame": Y.coords["frame"]},
+                name="S",
+            )
+            C = xr.DataArray(
+                R @ (C_bin_iter[-1]).T,
+                dims=["frame", "unit_id"],
+                coords={"unit_id": Y.coords["unit_id"], "frame": Y.coords["frame"]},
+                name="C",
+            )
+            ds = xr.merge([S, C])
+            ds.to_netcdf(
+                os.path.join(func_data_dir, "{}-{}.nc".format(dsname, ar_use_all))
+            )
         # plotting
         niter = len(S_bin_iter)
         ncell = Y.shape[0]
@@ -354,6 +380,8 @@ class TestDemoPipeline:
         for uid, i_iter in itt.product(range(ncell), range(niter)):
             sb = S_bin_iter[i_iter][uid, :]
             cb = C_bin_iter[i_iter][uid, :]
+            Rsb = R @ sb
+            Rcb = R @ cb
             try:
                 scal = iter_df.loc[(i_iter, uid), "scale"]
             except KeyError:
@@ -366,6 +394,8 @@ class TestDemoPipeline:
                         "s_true": S_true[uid, :],
                         "c_bin": cb,
                         "s_bin": sb,
+                        "R@c_bin": Rcb,
+                        "R@s_bin": Rsb,
                     }
                 ),
                 rows=i_iter + 1,
@@ -440,17 +470,18 @@ class TestDemoPipeline:
         # save results
         res_df = []
         for iu, uid in enumerate(np.atleast_1d(Y.coords["unit_id"])):
-            for qthres in [0.25, 0.5, 0.75]:
-                s_true = S_true[iu, :]
-                cur_s = S_cnmf[iu, :]
+            s_true = S_true[iu, :]
+            cur_s = S_cnmf[iu, :]
+            tau_d, tau_r = tau_cnmf[iu, :]
+            try:
+                (dhm0, dhm1), _ = find_dhm(
+                    True, np.array([tau_d, tau_r]), np.array([1, -1])
+                )
+            except AssertionError:
+                dhm0, dhm1 = 0, 0
+            corr_dtw = dtw_corr(s_true, cur_s)
+            for qthres in [0.01, 0.05, 0.1, 0.2, 0.5]:
                 sb = np.around(cur_s / (qthres * cur_s.max())).astype(int)
-                tau_d, tau_r = tau_cnmf[iu, :]
-                try:
-                    (dhm0, dhm1), _ = find_dhm(
-                        True, np.array([tau_d, tau_r]), np.array([1, -1])
-                    )
-                except AssertionError:
-                    dhm0, dhm1 = 0, 0
                 if len(ap_df) > 0:
                     cur_ap = ap_df.loc[uid]
                     cur_fluo = fluo_df.loc[uid]
@@ -491,6 +522,7 @@ class TestDemoPipeline:
                                 "dhm1": dhm1,
                                 "corr_raw": corr_raw,
                                 "corr_gs": corr_gs,
+                                "corr_dtw": corr_dtw,
                             }
                         ]
                     )

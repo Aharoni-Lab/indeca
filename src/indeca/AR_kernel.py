@@ -223,6 +223,7 @@ def solve_h(
     y,
     s,
     scal,
+    err_wt=None,
     h_len=60,
     norm="l2",
     smth_penalty=0,
@@ -253,10 +254,14 @@ def solve_h(
         conv_term = cp.vstack([R @ cp.convolve(ss, h)[:T] for ss in s])
     else:
         conv_term = R @ cp.convolve(s, h)[:T]
+    diff_term = y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b
+    if err_wt is not None:
+        err_wt = np.sqrt(err_wt) if norm == "l2" else err_wt
+        diff_term = cp.multiply(err_wt.reshape((-1, 1)), diff_term)
     if norm == "l1":
-        err_term = cp.norm(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b, 1)
+        err_term = cp.norm(diff_term, 1)
     elif norm == "l2":
-        err_term = cp.sum_squares(y - cp.multiply(scal.reshape((-1, 1)), conv_term) - b)
+        err_term = cp.sum_squares(diff_term)
     obj = cp.Minimize(err_term + smth_penalty * cp.norm(cp.diff(h[ignore_len:]), 1))
     cons = [b >= 0]
     prob = cp.Problem(obj, cons)
@@ -324,7 +329,7 @@ def solve_fit_h(
     return lams, ps, h, h_fit, metric_df, h_df
 
 
-def solve_fit_h_num(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
+def solve_fit_h_num(y, s, scal, err_wt=None, N=2, h_len=60, norm="l2", up_factor=1):
     if y.ndim == 1:
         ylen = len(y)
     else:
@@ -332,24 +337,29 @@ def solve_fit_h_num(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
     if h_len >= ylen:
         warnings.warn("Coefficient length longer than data")
         h_len = ylen - 1
-    h = solve_h(y, s, scal, h_len, norm, up_factor=up_factor)
+    h = solve_h(y, s, scal, err_wt=err_wt, h_len=h_len, norm=norm, up_factor=up_factor)
     try:
         pos_idx = max(np.where(h > 0)[0][0], 1)  # ignore any preceding negative terms
     except IndexError:
         pos_idx = 1
-    lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
+    try:
+        lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp="scale")
+    except RuntimeError:
+        lams, p, scal, h_fit = fit_sumexp_gd(h[pos_idx - 1 :], fit_amp=False)
     h_fit_pad = np.zeros_like(h)
     h_fit_pad[: len(h_fit)] = h_fit
     return lams, p, scal, h, h_fit_pad
 
 
-def updateAR(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
-    try:
+def updateAR(
+    y, s, scal, err_wt=None, N=2, h_len=60, norm="l2", up_factor=1, pre_agg=True
+):
+    if not pre_agg:
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-            y, s, scal, N=N, h_len=h_len, norm=norm, up_factor=up_factor
+            y, s, scal, err_wt=err_wt, N=N, h_len=h_len, norm=norm, up_factor=up_factor
         )
         return -1 / lams, ps, ar_scal, h, h_fit
-    except (cp.SolverError, RuntimeError):
+    else:
         multi_unit = y.ndim > 1
         if multi_unit:
             T = s.shape[1]
@@ -360,7 +370,7 @@ def updateAR(y, s, scal, N=2, h_len=60, norm="l2", up_factor=1):
         R = construct_R(y_len, up_factor)
         h_len = int(h_len / up_factor)
         lams, ps, ar_scal, h, h_fit = solve_fit_h_num(
-            y, s @ R.T, scal, N=N, h_len=h_len, norm=norm, up_factor=1
+            y, s @ R.T, scal, err_wt=err_wt, N=N, h_len=h_len, norm=norm, up_factor=1
         )
         return (
             -1 / lams * up_factor,
