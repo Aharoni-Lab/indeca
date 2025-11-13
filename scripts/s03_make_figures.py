@@ -1,4 +1,5 @@
 # %% imports and definition
+import os
 from ast import literal_eval
 from pathlib import Path
 
@@ -6,13 +7,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import xarray as xr
 from matplotlib.lines import Line2D
 from matplotlib.patches import ConnectionPatch, Rectangle
 
 from indeca.AR_kernel import estimate_coefs, solve_fit_h_num
 from indeca.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
+from indeca.utils import norm
 from tests.conftest import fixt_deconv
 from tests.testing_utils.compose import GridSpec
+from tests.testing_utils.io import load_gt_ds, subset_gt_ds
 from tests.testing_utils.misc import load_agg_result
 from tests.testing_utils.plotting import (
     agg_annot_group,
@@ -25,8 +29,18 @@ tab20c = plt.get_cmap("tab20c").colors
 tab20b = plt.get_cmap("tab20b").colors
 dark2 = plt.get_cmap("Dark2").colors
 
-IN_EXT_RES_PATH = Path(__file__).parent / "tests" / "output" / "data" / "external"
-IN_RES_PATH = Path(__file__).parent / "tests" / "output" / "data" / "agg"
+IN_MET_EXT_PATH = Path(__file__).parent / "tests" / "output" / "data" / "external"
+IN_MET_PATH = Path(__file__).parent / "tests" / "output" / "data" / "agg"
+IN_TRS_EXT_PATH = Path(__file__).parent / "tests" / "output" / "data"
+IN_TRS_PATH = (
+    Path(__file__).parent
+    / "tests"
+    / "output"
+    / "data"
+    / "func"
+    / "test_demo_pipeline_realds"
+)
+IN_GT_DPATH = Path(__file__).parent / "tests" / "data"
 FIG_PATH_PN = Path(__file__).parent / "tests" / "output" / "figs" / "print" / "panels"
 FIG_PATH_FIG = Path(__file__).parent / "tests" / "output" / "figs" / "print" / "figures"
 COLORS = {
@@ -283,7 +297,7 @@ fig.savefig(fig_path, bbox_inches="tight")
 # %% deconv-thres
 fig_w, fig_h = 5.8, 2.2
 fig_path = FIG_PATH_PN / "deconv-thres.svg"
-resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_thres")
+resdf = load_agg_result(IN_MET_PATH / "test_demo_solve_thres")
 ressub = (
     resdf.query("upsamp==1 & ns_lev==0.5 & rand_seed==2 & taus=='(6, 1)'")
     .drop_duplicates()
@@ -321,7 +335,7 @@ def upsamp_heatmap(data, color, **kwargs):
 
 
 fig_path = FIG_PATH_PN / "deconv-upsamp.svg"
-resdf = load_agg_result(IN_RES_PATH / "test_solve_thres").drop_duplicates()
+resdf = load_agg_result(IN_MET_PATH / "test_solve_thres").drop_duplicates()
 ressub = resdf.query("taus=='(6, 1)'").copy()
 vmin, vmax = 0.48, 1.02
 g = sns.FacetGrid(ressub, col="ns_lev", margin_titles=True, height=2, aspect=0.9)
@@ -374,7 +388,7 @@ def agg_result(
 
 fig_path = FIG_PATH_PN / "deconv-full.svg"
 grp_dim = ["tau_d", "tau_r", "ns_lev", "upsamp", "rand_seed"]
-resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_penal").drop_duplicates()
+resdf = load_agg_result(IN_MET_PATH / "test_demo_solve_penal").drop_duplicates()
 resagg = resdf.groupby(grp_dim).apply(agg_result).reset_index().drop_duplicates()
 ressub = resagg.query("tau_d == 6 & tau_r == 1").copy()
 palette = {
@@ -523,7 +537,7 @@ def AR_scatter(
 
 
 fig_path = FIG_PATH_PN / "ar-full.svg"
-resdf = load_agg_result(IN_RES_PATH / "test_demo_solve_fit_h_num")
+resdf = load_agg_result(IN_MET_PATH / "test_demo_solve_fit_h_num")
 ressub = (
     resdf.query("taus == '(6, 1)' & upsamp < 5 & rand_seed == 2")
     .astype({"upsamp": int})
@@ -651,8 +665,8 @@ def plot_iter(
 
 
 fig_path = FIG_PATH_PN / "pipeline-iter.svg"
-res_bin = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds")
-res_cnmf = load_agg_result(IN_RES_PATH / "test_demo_pipeline_realds_cnmf")
+res_bin = load_agg_result(IN_MET_PATH / "test_demo_pipeline_realds")
+res_cnmf = load_agg_result(IN_MET_PATH / "test_demo_pipeline_realds_cnmf")
 id_vars = [
     "dsname",
     "ncell",
@@ -747,13 +761,13 @@ def xlab(row):
     if row["method"] in ["cnmf", "oasis"]:
         if row["metric"] in ["f1", "prec", "rec", "mdist"]:
             try:
-                return "{}\nthreshold\n{}".format(row["method"], row["qthres"])
+                return "{}\nthreshold\n{}".format(row["method"].upper(), row["qthres"])
             except KeyError:
-                return "{}".format(row["method"])
+                return "{}".format(row["method"].upper())
         else:
-            return "{}".format(row["method"])
+            return "{}".format(row["method"].upper())
     elif row["method"] == "mlspike":
-        return "{}".format(row["method"])
+        return "MLSpike"
     else:
         lab = "InDeCa"
         if row["use_all"]:
@@ -828,16 +842,16 @@ def sel_iter(df):
 
 
 res_bin = (
-    pd.read_feather(IN_RES_PATH / "metrics" / "metrics.feat")
+    pd.read_feather(IN_MET_PATH / "metrics" / "metrics.feat")
     .fillna(0)
     .rename(columns={"corr_smth": "corr_gs"})
 )
 res_oasis = (
-    pd.read_feather(IN_EXT_RES_PATH / "oasis" / "metrics.feat")
+    pd.read_feather(IN_MET_EXT_PATH / "oasis" / "metrics.feat")
     .fillna(0)
     .rename(columns={"corr_smth": "corr_gs"})
 )
-res_mlspike = pd.read_feather(IN_EXT_RES_PATH / "mlspike" / "metrics.feat").fillna(0)
+res_mlspike = pd.read_feather(IN_MET_EXT_PATH / "mlspike" / "metrics.feat").fillna(0)
 id_vars = [
     "dsname",
     "ncell",
@@ -880,8 +894,8 @@ palette = {
     "CNMF\nthreshold\n0.25": COLORS["cnmf0"],
     "CNMF\nthreshold\n0.5": COLORS["cnmf1"],
     "CNMF\nthreshold\n0.75": COLORS["cnmf2"],
-    "mlspike": COLORS["mlspike"],
-    "oasis": COLORS["oasis"],
+    "MLSpike": COLORS["mlspike"],
+    "OASIS": COLORS["oasis"],
     "InDeCa /w\nindependent\nkernel": COLORS["indeca_min"],
     "InDeCa /w\nshared\nkernel": COLORS["indeca_maj"],
 }
@@ -921,13 +935,183 @@ for met, met_df in ressub.groupby("metric"):
     g.map_dataframe(plot_ds, palette=palette, ylabel=ylab[met])
     g.figure.savefig(fig_path, bbox_inches="tight")
 
+
+# %% make pipeline example figure
+def plot_stacked_signals(
+    ax,
+    signals,
+    spike_offset=0.8,
+    line_offset=0.9,
+    marker_size=100,
+    marker_linewidth=2,
+    line_width=1.5,
+    spike_alpha=0.9,
+    line_alpha=0.8,
+):
+    offset = 0.0
+    for signal_info in signals:
+        t = signal_info["t"]
+        data = signal_info["data"]
+        label = signal_info["label"]
+        color = signal_info["color"]
+        is_spike = signal_info.get("is_spike", False)
+        custom_offset = signal_info.get("offset", None)
+        if is_spike or np.all(np.mod(data, 1) == 0):
+            data_norm = np.array(data).clip(0, 1)
+            spike_indices = np.where(data > 0)[0]
+            ax.scatter(
+                t[spike_indices],
+                data_norm[spike_indices] + offset,
+                color=color,
+                marker="|",
+                s=marker_size,
+                linewidths=marker_linewidth,
+                label=label,
+                alpha=spike_alpha,
+            )
+            offset += custom_offset if custom_offset is not None else spike_offset
+        else:
+            data_norm = norm(data)
+            ax.plot(
+                t,
+                data_norm + offset,
+                color=color,
+                linewidth=line_width,
+                label=label,
+                alpha=line_alpha,
+            )
+            offset += custom_offset if custom_offset is not None else line_offset
+    ax.scatter(0, offset, alpha=0)
+    return offset
+
+
+examples = [
+    {
+        "ds": "DS13-GCaMP6s-m-V1-neuropil-corrected",
+        "unit_id": "21-0",
+        "subset": (14000, 18000),
+        "indeca_use_all": True,
+    },
+    {
+        "ds": "DS09-GCaMP6f-m-V1",
+        "unit_id": "8-5",
+        "subset": (3000, 8000),
+        "indeca_use_all": True,
+    },
+]
+res_bin = (
+    pd.read_feather(IN_MET_PATH / "metrics" / "metrics.feat")
+    .fillna(0)
+    .set_index(["dsname", "unit_id", "use_all"])
+)
+res_oasis = (
+    pd.read_feather(IN_MET_EXT_PATH / "oasis" / "metrics.feat")
+    .fillna(0)
+    .set_index(["dsname", "unit_id"])
+)
+res_mlspike = (
+    pd.read_feather(IN_MET_EXT_PATH / "mlspike" / "metrics.feat")
+    .fillna(0)
+    .set_index(["dsname", "unit_id"])
+)
+for exp in examples:
+    dsname, uid, subset, use_all = (
+        exp.get("ds"),
+        exp.get("unit_id"),
+        exp.get("subset"),
+        exp.get("indeca_use_all"),
+    )
+    subset = slice(*subset) if subset is not None else slice(None)
+    ncf = "{}.nc".format(dsname)
+    Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(IN_GT_DPATH, dsname))
+    Y, S_true, ap_df, fluo_df = subset_gt_ds(Y, S_true, ap_df, fluo_df, dsname)
+    ds_mlspk = xr.open_dataset(IN_TRS_EXT_PATH / "mlspike" / ncf)
+    ds_oasis = xr.open_dataset(IN_TRS_EXT_PATH / "oasis" / ncf)
+    ds_indeca = xr.open_dataset(
+        os.path.join(IN_TRS_PATH, "{}-{}.nc".format(dsname, use_all))
+    )
+    iu = np.array(Y.coords["unit_id"]).tolist().index(uid)
+    Y = Y.sel(unit_id=uid, frame=subset)
+    S_true = S_true.sel(unit_id=uid, frame=subset)
+    S_mlspk = ds_mlspk["S"].isel(unit_id=iu, frame=subset)
+    S_oasis = ds_oasis["S"].sel(unit_id=uid, frame=subset)
+    S_indeca = ds_indeca["S"].sel(unit_id=uid, frame=subset)
+    fig, ax = plt.subplots(1, 1, figsize=(8, 3))
+    signals = [
+        {
+            "t": fluo_df.iloc[: len(Y)]["fluo_time"],
+            "data": S_oasis.values,
+            "label": "OASIS",
+            "color": COLORS["oasis"],
+            "is_spike": False,
+            "offset": 0.3,
+        },
+        {
+            "t": fluo_df.iloc[: len(Y)]["fluo_time"],
+            "data": S_mlspk.values,
+            "label": "MLSpike",
+            "color": COLORS["mlspike"],
+            "is_spike": True,
+            "offset": 0.6,
+        },
+        {
+            "t": fluo_df.iloc[: len(Y)]["fluo_time"],
+            "data": S_indeca.values,
+            "label": "InDeCa",
+            "color": COLORS["indeca_maj"],
+            "is_spike": True,
+            "offset": 0.6,
+        },
+        {
+            "t": fluo_df.iloc[: len(Y)]["fluo_time"],
+            "data": S_true.values,
+            "label": "Ground Truth Spikes",
+            "color": COLORS["genericB"],
+            "is_spike": True,
+            "offset": 1.3,
+        },
+        {
+            "t": fluo_df.iloc[: len(Y)]["fluo_time"],
+            "data": Y.values,
+            "label": "Fluorescence",
+            "color": COLORS["genericA"],
+            "offset": 1.5,
+            "is_spike": False,
+        },
+    ]
+    plot_stacked_signals(ax, signals)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("")
+    ax.set_title(
+        "F1 score: InDeCa={:.2f}, MLSpike={:.2f}; Correlation: InDeCa={:.2f}, OASIS={:.2f}".format(
+            res_bin.loc[(dsname, uid, use_all), "f1"],
+            res_mlspike.loc[(dsname, uid), "f1"],
+            res_bin.loc[(dsname, uid, use_all), "corr_dtw"],
+            res_oasis.loc[(dsname, uid), "corr_dtw"],
+        ),
+        fontsize=11,
+    )
+    ax.legend(loc="upper left", frameon=True, ncol=5)
+    ax.set_yticks([])
+    fig_path = FIG_PATH_PN / f"pipeline-example-{dsname}-{uid.replace('/', '_')}.svg"
+    fig.tight_layout()
+    fig.savefig(fig_path, bbox_inches="tight", dpi=300)
+    plt.close(fig)
+
+
 # %% make pipeline figure
 pns = {
-    "A": (FIG_PATH_PN / "pipeline-iter.svg", (0, 0)),
-    "B": (FIG_PATH_PN / "pipeline-comp.svg", (1, 0)),
+    "A": (FIG_PATH_PN / "pipeline-comp-corr_dtw.svg", (0, 0)),
+    "B": (FIG_PATH_PN / "pipeline-comp-f1.svg", (0, 1)),
+    "C": (FIG_PATH_PN / "pipeline-example-DS09-GCaMP6f-m-V1-8-5.svg", (1, 0), (1, 2)),
+    "D": (
+        FIG_PATH_PN / "pipeline-example-DS13-GCaMP6s-m-V1-neuropil-corrected-21-0.svg",
+        (2, 0),
+        (1, 2),
+    ),
 }
 fig = GridSpec(
-    param_text=PNLAB_PARAM, wsep=0, hsep=0, halign="left", valign="top", **pns
+    param_text=PNLAB_PARAM, wsep=5, hsep=10, halign="left", valign="top", **pns
 )
 fig.tile()
 fig.save(FIG_PATH_FIG / "pipeline.svg")

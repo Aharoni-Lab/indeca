@@ -33,8 +33,8 @@ for ncf in tqdm(ncfiles, desc="dataset"):
     dsname = os.path.splitext(ncf)[0]
     Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(IN_DPATH, dsname))
     Y, S_true, ap_df, fluo_df = subset_gt_ds(Y, S_true, ap_df, fluo_df, dsname)
-    mlspk_ds = xr.open_dataset(os.path.join(IN_OASIS_RES, ncf))
-    S = mlspk_ds["S"].assign_coords(unit_id=Y.coords["unit_id"])
+    oasis_ds = xr.open_dataset(os.path.join(IN_OASIS_RES, ncf))
+    S = oasis_ds["S"].assign_coords(unit_id=Y.coords["unit_id"])
     for uid in tqdm(np.array(Y.coords["unit_id"]), desc="cell", leave=False):
         s_true = S_true.sel(unit_id=uid)
         sb = S.sel(unit_id=uid)
@@ -146,7 +146,9 @@ for ncf in tqdm(ncfiles, desc="dataset"):
     Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(IN_DPATH, dsname))
     Y, S_true, ap_df, fluo_df = subset_gt_ds(Y, S_true, ap_df, fluo_df, dsname)
     mlspk_ds = xr.open_dataset(os.path.join(IN_MLSPIKE_RES, ncf))
+    oasis_ds = xr.open_dataset(os.path.join(IN_OASIS_RES, ncf))
     S_mlspk = mlspk_ds["S"].assign_coords(unit_id=Y.coords["unit_id"])
+    S_oasis = oasis_ds["S"].assign_coords(unit_id=Y.coords["unit_id"])
     met_indeca = pd.read_feather(os.path.join(OUT_IND_PATH, "metrics.feat")).set_index(
         ["dsname", "unit_id", "use_all"]
     )["f1"]
@@ -175,6 +177,7 @@ for ncf in tqdm(ncfiles, desc="dataset"):
                     "mlspk": S_mlspk.sel(unit_id=uid),
                     "s_all": S_ind_all.sel(unit_id=uid),
                     "s_ind": S_ind_ind.sel(unit_id=uid),
+                    "s_oasis": S_oasis.sel(unit_id=uid),
                 }
             ),
             rows=iu + 1,
