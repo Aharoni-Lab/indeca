@@ -168,10 +168,11 @@ def fixt_deconv(
     return deconv, y, c, c_org, s, s_org, scale
 
 
-# @pytest.hookimpl(tryfirst=True)
-# def pytest_configure(config):
-#     if not hasattr(config, "workerinput"):
-#         shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    if not hasattr(config, "workerinput"):
+        shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
+
 
 
 def fixt_realds(dsname, ncell=None, nfm=None):
