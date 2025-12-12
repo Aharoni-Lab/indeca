@@ -3,7 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from indeca.utils.logging_config import get_module_logger, log_dir, set_package_log_level
+from indeca.utils.logging_config import (
+    get_module_logger,
+    log_dir,
+    set_package_log_level,
+)
 
 
 class TestLoggingConfig:
