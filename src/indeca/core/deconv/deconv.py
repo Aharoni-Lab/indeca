@@ -102,7 +102,7 @@ def bin_convolve(
     out = np.zeros(s_len)
     nzidx = np.where(s)[0]
     if nzidx_s is not None:
-        nzidx = nzidx_s[nzidx]
+        nzidx = nzidx_s[nzidx].astype(np.int64) # astype to fix numpa issues on GPU on Windows
     for i0 in nzidx:
         i1 = min(i0 + coef_len, s_len)
         clen = i1 - i0
@@ -231,8 +231,8 @@ class DeconvBin:
         self.Hlim = Hlim
         self.dashboard = dashboard
         self.dashboard_uid = dashboard_uid
-        self.nzidx_s = np.arange(self.T)
-        self.nzidx_c = np.arange(self.T)
+        self.nzidx_s = np.arange(self.T, dtype=np.int64)
+        self.nzidx_c = np.arange(self.T, dtype=np.int64)
         self.x_cache = None
         self.err_weighting = err_weighting
         self.masking_r = masking_radius
