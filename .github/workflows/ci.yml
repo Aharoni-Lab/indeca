@@ -128,10 +128,17 @@ jobs:
         run: |
           pdm install --no-lock -G test
 
-      - name: Run tests
-        run: |
-          pdm run pytest tests/ -v -m "not slow" -n auto --cov=indeca --cov-report=xml
-          pdm run plot_test
+      - name: Run Unit Tests
+        run: pdm run pytest tests/unit -v -n auto --cov=indeca --cov-report=xml
+
+      - name: Run Integration & Regression Tests
+        run: pdm run pytest tests/integration tests/regression -v -n auto -m "not slow" --cov=indeca --cov-report=xml --cov-append
+
+      - name: Run Other Tests (Robustness, Validation, Demo)
+        run: pdm run pytest tests/robustness tests/validation tests/demo -v -n auto -m "not slow" --cov=indeca --cov-report=xml --cov-append
+
+      - name: Generate Plot Artifacts
+        run: pdm run plot_test
 
       - uses: actions/upload-artifact@v4
         continue-on-error: true
