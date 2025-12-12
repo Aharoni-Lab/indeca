@@ -14,9 +14,9 @@ from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT, find_peaks
 from scipy.special import huber
 
-from indeca.logging_config import get_module_logger
-from indeca.simulation import AR2tau, ar_pulse, exp_pulse, solve_p, tau2AR
-from indeca.utils import scal_lstsq
+from indeca.utils.logging_config import get_module_logger
+from indeca.core.simulation import AR2tau, ar_pulse, exp_pulse, solve_p, tau2AR
+from indeca.utils.utils import scal_lstsq
 
 # Initialize logger for this module
 logger = get_module_logger("deconv")
