@@ -11,6 +11,7 @@ from tests.testing_utils.plotting import plot_met_ROC_scale, plot_traces
 
 pytestmark = pytest.mark.validation
 
+
 @pytest.mark.slow
 class TestDemoDeconv:
     @pytest.mark.parametrize("upsamp", [1])

@@ -9,6 +9,7 @@ from tests.conftest import fixt_y
 
 pytestmark = pytest.mark.robustness
 
+
 class TestDemoSolveFit:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize("rand_seed", np.arange(3))

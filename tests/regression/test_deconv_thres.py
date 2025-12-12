@@ -10,6 +10,7 @@ from tests.testing_utils.plotting import plot_traces
 
 pytestmark = pytest.mark.regression
 
+
 class TestDeconvBin:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
     @pytest.mark.parametrize(

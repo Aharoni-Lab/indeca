@@ -10,6 +10,7 @@ from tests.testing_utils.plotting import plot_traces
 
 pytestmark = pytest.mark.robustness
 
+
 class TestDeconvBin:
     @pytest.mark.parametrize(
         "y_len", [1000, pytest.param(10000, marks=pytest.mark.slow)]

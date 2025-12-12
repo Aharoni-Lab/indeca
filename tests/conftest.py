@@ -174,7 +174,6 @@ def pytest_configure(config):
         shutil.rmtree(AGG_RES_DIR, ignore_errors=True)
 
 
-
 def fixt_realds(dsname, ncell=None, nfm=None):
     download_realds(TEST_DATA_DIR, dsname)
     Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(TEST_DATA_DIR, dsname))
