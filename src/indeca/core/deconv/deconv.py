@@ -102,7 +102,9 @@ def bin_convolve(
     out = np.zeros(s_len)
     nzidx = np.where(s)[0]
     if nzidx_s is not None:
-        nzidx = nzidx_s[nzidx].astype(np.int64) # astype to fix numpa issues on GPU on Windows
+        nzidx = nzidx_s[nzidx].astype(
+            np.int64
+        )  # astype to fix numpa issues on GPU on Windows
     for i0 in nzidx:
         i1 = min(i0 + coef_len, s_len)
         clen = i1 - i0
