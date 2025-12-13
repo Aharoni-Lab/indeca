@@ -236,6 +236,11 @@ class DeconvBin:
         """Error weighting vector."""
         return self.solver.err_wt
 
+    @property
+    def wgt_len(self):
+        """Error weighting length."""
+        return self.solver.wgt_len
+
     @err_wt.setter
     def err_wt(self, value):
         """Allow direct assignment (used by tests/demo code)."""

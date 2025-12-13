@@ -59,7 +59,7 @@ class DeconvConfig(BaseModel):
     delta_penal: float = 1e-4
     atol: float = 1e-3
     rtol: float = 1e-3
-    Hlim: int = 1e5
+    Hlim: Optional[int] = 1e5
 
     @model_validator(mode="before")
     @classmethod
