@@ -9,7 +9,7 @@ from scipy.linalg import lstsq, toeplitz
 from scipy.optimize import curve_fit
 from statsmodels.tsa.stattools import acovf
 
-from indeca.core.deconv.deconv import construct_G, construct_R
+from indeca.core.deconv import construct_G, construct_R
 from indeca.core.simulation import AR2tau, ar_pulse, solve_p, tau2AR
 
 
