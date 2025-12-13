@@ -73,6 +73,11 @@ addopts = "-n auto -v --cov=indeca --cov-report=term-missing"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "regression: marks tests as regression tests",
+    "robustness: marks tests as robustness tests",
+    "validation: marks tests as validation tests",
+    "demo: marks tests as demo tests",
 ]
 
 [build-system]

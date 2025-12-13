@@ -23,7 +23,7 @@ from plotly.subplots import make_subplots
 from routine.utils import compute_ROC
 
 from indeca.pipeline import pipeline_bin
-from indeca.simulation import exp_pulse
+from indeca.core.simulation import exp_pulse
 from tests.testing_utils.cnmf import pipeline_cnmf
 
 IN_PATH = {
@@ -325,8 +325,11 @@ import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
-from indeca.simulation import ar_pulse, exp_pulse, tau2AR
-from indeca.update_bin import max_thres, scal_lstsq, solve_deconv
+from indeca.core.simulation import ar_pulse, exp_pulse, tau2AR
+from indeca.core.deconv import max_thres
+
+# from indeca.core.deconv import solve_deconv  # TODO: missing function
+from indeca.utils.utils import scal_lstsq
 
 uid = 0
 iiter = 0
@@ -422,9 +425,12 @@ import scipy.sparse as sps
 from plotly.subplots import make_subplots
 from scipy.linalg import convolution_matrix
 
-from indeca.AR_kernel import solve_fit_h
-from indeca.simulation import ar_pulse, exp_pulse, tau2AR
-from indeca.update_bin import max_thres, scal_lstsq, solve_deconv, solve_deconv_l0
+from indeca.core.AR_kernel import solve_fit_h
+from indeca.core.simulation import ar_pulse, exp_pulse, tau2AR
+from indeca.core.deconv import max_thres
+
+# from indeca.core.deconv import solve_deconv, solve_deconv_l0  # TODO: missing functions
+from indeca.utils.utils import scal_lstsq
 
 uid = 0
 iiter = 0

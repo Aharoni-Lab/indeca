@@ -2,8 +2,8 @@ import os
 
 import pandas as pd
 
-from indeca.deconv import construct_R
-from indeca.simulation import ar_pulse, tau2AR
+from indeca.core.deconv import construct_R
+from indeca.core.simulation import ar_pulse, tau2AR
 from indeca.utils import scal_lstsq
 
 

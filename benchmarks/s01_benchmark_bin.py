@@ -16,8 +16,8 @@ from routine.utils import (
 )
 from tqdm.auto import tqdm
 
-from indeca.AR_kernel import estimate_coefs
-from indeca.deconv import construct_G, construct_R, max_thres
+from indeca.core.AR_kernel import estimate_coefs
+from indeca.core.deconv import construct_G, construct_R, max_thres
 from tests.testing_utils.cnmf import solve_deconv
 
 IN_PATH = {

@@ -14,7 +14,7 @@ from plotly.subplots import make_subplots
 from routine.utils import compute_ROC
 
 from indeca import set_package_log_level
-from indeca.deconv import construct_R
+from indeca.core.deconv import construct_R
 from indeca.pipeline import pipeline_bin
 from tests.testing_utils.io import download_realds, load_gt_ds
 

@@ -7,14 +7,14 @@ import plotly.express as px
 import xarray as xr
 from tqdm.auto import tqdm
 
-from indeca.AR_kernel import (
+from indeca.core.AR_kernel import (
     convolve_g,
     convolve_h,
     estimate_coefs,
     solve_fit_h,
     solve_g,
 )
-from indeca.simulation import AR2exp, eval_exp, find_dhm, tau2AR
+from indeca.core.simulation import AR2exp, eval_exp, find_dhm, tau2AR
 from indeca.utils import scal_like
 
 IN_PATH = "./intermediate/simulated/simulated.nc"

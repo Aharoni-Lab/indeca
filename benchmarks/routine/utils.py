@@ -12,7 +12,7 @@ from dtaidistance import dtw
 from scipy.spatial.distance import cdist
 from sklearn.metrics.pairwise import cosine_similarity
 
-from indeca.deconv import max_thres
+from indeca.core.deconv import max_thres
 from indeca.utils import norm
 
 
