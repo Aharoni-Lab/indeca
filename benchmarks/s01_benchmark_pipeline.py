@@ -327,6 +327,7 @@ from scipy.linalg import convolution_matrix
 
 from indeca.core.simulation import ar_pulse, exp_pulse, tau2AR
 from indeca.core.deconv import max_thres
+
 # from indeca.core.deconv import solve_deconv  # TODO: missing function
 from indeca.utils.utils import scal_lstsq
 
@@ -427,6 +428,7 @@ from scipy.linalg import convolution_matrix
 from indeca.core.AR_kernel import solve_fit_h
 from indeca.core.simulation import ar_pulse, exp_pulse, tau2AR
 from indeca.core.deconv import max_thres
+
 # from indeca.core.deconv import solve_deconv, solve_deconv_l0  # TODO: missing functions
 from indeca.utils.utils import scal_lstsq
 
