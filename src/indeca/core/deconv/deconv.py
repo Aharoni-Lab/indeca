@@ -2,6 +2,7 @@
 
 import itertools as itt
 import math
+import os
 import warnings
 from typing import Tuple, Any, Optional
 
@@ -654,18 +655,25 @@ class DeconvBin:
                 scl_thres = np.max(y) * self.cfg.min_rel_scl
                 valid_idx = np.where(np.array(scals) > scl_thres)[0]
                 if len(valid_idx) > 0:
+                    # Optional legacy compatibility: reproduce old deconv behavior where
+                    # scale filtering shrinks `scals/bs` but does NOT shrink `svals/yfvals`.
+                    # This leads to zip() truncation later and can change which candidate is selected.
+                    legacy_bug = os.environ.get("INDECA_LEGACY_SCALE_FILTER_BUG", "0") == "1"
                     scals = [scals[i] for i in valid_idx]
                     bs = [bs[i] for i in valid_idx]
-                    svals = [svals[i] for i in valid_idx]
-                    cvals = [cvals[i] for i in valid_idx]
-                    yfvals = [yfvals[i] for i in valid_idx]
+                    if not legacy_bug:
+                        svals = [svals[i] for i in valid_idx]
+                        cvals = [cvals[i] for i in valid_idx]
+                        yfvals = [yfvals[i] for i in valid_idx]
                 else:
                     max_idx = np.argmax(scals)
+                    legacy_bug = os.environ.get("INDECA_LEGACY_SCALE_FILTER_BUG", "0") == "1"
                     scals = [scals[max_idx]]
                     bs = [bs[max_idx]]
-                    svals = [svals[max_idx]]
-                    cvals = [cvals[max_idx]]
-                    yfvals = [yfvals[max_idx]]
+                    if not legacy_bug:
+                        svals = [svals[max_idx]]
+                        cvals = [cvals[max_idx]]
+                        yfvals = [yfvals[max_idx]]
         else:
             scals = [self.scale] * len(yfvals)
             bs = [(y - res - scl * yf).mean() for scl, yf in zip(scals, yfvals)]
