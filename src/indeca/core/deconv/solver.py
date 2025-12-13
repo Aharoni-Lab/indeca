@@ -22,6 +22,7 @@ logger = get_module_logger("deconv_solver")
 # Try to import GPU solver
 try:
     import cuosqp
+
     HAS_CUOSQP = True
 except ImportError:
     HAS_CUOSQP = False
@@ -46,26 +47,28 @@ class DeconvSolver(ABC):
         self.T = y_len * self.cfg.upsamp
         self.y = y if y is not None else np.zeros(y_len)
         self.coef = coef
-        self.coef_len = len(coef) if coef is not None else config.coef_len * config.upsamp
+        self.coef_len = (
+            len(coef) if coef is not None else config.coef_len * config.upsamp
+        )
         self.theta = theta
         self.tau = tau
         self.ps = ps
-        
+
         # Scale tracking (mutable, since config is frozen)
         self.scale = config.scale
-        
+
         # Penalty tracking
         self.l0_penal = 0.0
         self.l1_penal = 0.0
-        
+
         # Weight vectors
         self.w_org = np.ones(self.T)
         self.w = np.ones(self.T)
-        
+
         # Masking indices
         self.nzidx_s = np.arange(self.T)
         self.nzidx_c = np.arange(self.T)
-        
+
         # Matrices
         self.R_org = construct_R(self.y_len, self.cfg.upsamp)
         self.R = self.R_org
@@ -73,16 +76,16 @@ class DeconvSolver(ABC):
         self.H_org = None
         self.G = None
         self.G_org = None
-        
+
         # Cache
         self.x_cache = None
         self.s_bin = None  # Binary spike solution from thresholding
-        
+
         # Error weighting
         self.err_wt = np.ones(self.y_len)
         self.wgt_len = self.coef_len
         self.Wt = sps.diags(self.err_wt)
-        
+
         # Huber parameter
         self.huber_k = 0.5 * np.std(self.y) if y is not None else 0
 
@@ -148,11 +151,15 @@ class DeconvSolver(ABC):
         coef = self.coef
         if coef is None:
             return
-            
+
         # H matrix: convolution matrix
         # IMPORTANT: in free-kernel mode the optimization uses R @ H explicitly,
         # so H must always be materialized (do not drop it based on Hlim).
-        if self.cfg.free_kernel or self.cfg.Hlim is None or self.T * len(coef) < self.cfg.Hlim:
+        if (
+            self.cfg.free_kernel
+            or self.cfg.Hlim is None
+            or self.T * len(coef) < self.cfg.Hlim
+        ):
             self.H_org = sps.diags(
                 [np.repeat(coef[i], self.T - i) for i in range(len(coef))],
                 offsets=-np.arange(len(coef)),
@@ -212,7 +219,9 @@ class DeconvSolver(ABC):
             elif len(s) == self.T:
                 result = self.H @ sps.csc_matrix(s[self.nzidx_s].reshape(-1, 1))
             else:
-                logger.warning(f"Shape mismatch in convolve: s={len(s)}, nzidx_s={len(self.nzidx_s)}")
+                logger.warning(
+                    f"Shape mismatch in convolve: s={len(s)}, nzidx_s={len(self.nzidx_s)}"
+                )
                 result = sps.csc_matrix(np.zeros((len(self.nzidx_c), 1)))
             return result
         else:
@@ -221,7 +230,7 @@ class DeconvSolver(ABC):
                 out = bin_convolve(self.coef, s, nzidx_s=self.nzidx_s, s_len=self.T)
             else:
                 s_pad = self._pad_s(s) if len(s) == len(self.nzidx_s) else s
-                out = np.convolve(self.coef, s_pad)[:self.T]
+                out = np.convolve(self.coef, s_pad)[: self.T]
             return sps.csc_matrix(out[self.nzidx_c].reshape(-1, 1))
 
     def validate_coefficients(self, atol: float = 1e-3) -> bool:
@@ -229,32 +238,36 @@ class DeconvSolver(ABC):
         if self.tau is None or self.ps is None or self.theta is None:
             logger.debug("Skipping coefficient validation - missing tau/ps/theta")
             return True
-            
+
         try:
             # Generate exponential pulse
             tr_exp, _, _ = exp_pulse(
-                self.tau[0], self.tau[1],
-                p_d=self.ps[0], p_r=self.ps[1],
+                self.tau[0],
+                self.tau[1],
+                p_d=self.ps[0],
+                p_r=self.ps[1],
                 nsamp=self.coef_len,
             )
-            
+
             # Generate AR pulse
             theta = self.theta
-            tr_ar, _, _ = ar_pulse(theta[0], theta[1], nsamp=self.coef_len, shifted=True)
-            
+            tr_ar, _, _ = ar_pulse(
+                theta[0], theta[1], nsamp=self.coef_len, shifted=True
+            )
+
             # Validate
             if not (~np.isnan(self.coef)).all():
                 logger.warning("Coefficient array contains NaN values")
                 return False
-                
-            if not np.isclose(tr_exp, self.coef[:len(tr_exp)], atol=atol).all():
+
+            if not np.isclose(tr_exp, self.coef[: len(tr_exp)], atol=atol).all():
                 logger.warning("Exp time constant inconsistent with coefficients")
                 return False
-                
-            if not np.isclose(tr_ar, self.coef[:len(tr_ar)], atol=atol).all():
+
+            if not np.isclose(tr_ar, self.coef[: len(tr_ar)], atol=atol).all():
                 logger.warning("AR coefficients inconsistent with coefficients")
                 return False
-                
+
             logger.debug("Coefficient validation passed")
             return True
         except Exception as e:
@@ -291,22 +304,28 @@ class CVXPYSolver(DeconvSolver):
         # NOTE: `free_kernel=True` is forbidden with CVXPY backend (see `DeconvConfig`).
         self.cp_R = cp.Constant(self.R, name="R")
         self.cp_c = cp.Variable((self.T, 1), nonneg=True, name="c")
-        self.cp_s = cp.Variable((self.T, 1), nonneg=True, name="s", boolean=self.cfg.mixin)
+        self.cp_s = cp.Variable(
+            (self.T, 1), nonneg=True, name="s", boolean=self.cfg.mixin
+        )
         self.cp_y = cp.Parameter(shape=(self.y_len, 1), name="y")
-        self.cp_huber_k = cp.Parameter(value=float(self.huber_k), nonneg=True, name="huber_k")
-        
+        self.cp_huber_k = cp.Parameter(
+            value=float(self.huber_k), nonneg=True, name="huber_k"
+        )
+
         self.cp_scale = cp.Parameter(value=self.scale, name="scale", nonneg=True)
         self.cp_l1_penal = cp.Parameter(value=0.0, name="l1_penal", nonneg=True)
-        self.cp_l0_w = cp.Parameter(shape=self.T, value=np.zeros(self.T), nonneg=True, name="w_l0")
-        
+        self.cp_l0_w = cp.Parameter(
+            shape=self.T, value=np.zeros(self.T), nonneg=True, name="w_l0"
+        )
+
         if self.y is not None:
             self.cp_y.value = self.y.reshape((-1, 1))
-            
+
         if self.cfg.use_base:
             self.cp_b = cp.Variable(nonneg=True, name="b")
         else:
             self.cp_b = cp.Constant(value=0, name="b")
-            
+
         # Error term based on norm
         term = self.cp_y - self.cp_scale * self.cp_R @ self.cp_c - self.cp_b
         if self.cfg.norm == "l1":
@@ -316,15 +335,15 @@ class CVXPYSolver(DeconvSolver):
         elif self.cfg.norm == "huber":
             # Keep huber parameter consistent with OSQP backend's `huber_k`.
             self.err_term = cp.sum(cp.huber(term, M=self.cp_huber_k))
-            
+
         # Objective
         obj_expr = (
-            self.err_term 
-            + self.cp_l0_w.T @ cp.abs(self.cp_s) 
+            self.err_term
+            + self.cp_l0_w.T @ cp.abs(self.cp_s)
             + self.cp_l1_penal * cp.sum(cp.abs(self.cp_s))
         )
         obj = cp.Minimize(obj_expr)
-        
+
         # Constraints
         # AR constraint via G matrix
         self.cp_theta = cp.Parameter(
@@ -343,10 +362,10 @@ class CVXPYSolver(DeconvSolver):
             ]
         )
         dcv_cons = [self.cp_s == G @ self.cp_c]
-            
+
         edge_cons = [self.cp_c[0, 0] == 0, self.cp_s[-1, 0] == 0]
         amp_cons = [self.cp_s <= 1]
-        
+
         self.prob_free = cp.Problem(obj, dcv_cons + edge_cons)
         self.prob = cp.Problem(obj, dcv_cons + edge_cons + amp_cons)
 
@@ -360,7 +379,7 @@ class CVXPYSolver(DeconvSolver):
         l0_penal: float = None,
         w: np.ndarray = None,
         theta: np.ndarray = None,
-        **kwargs
+        **kwargs,
     ):
         """Update CVXPY parameters."""
         if y is not None:
@@ -388,7 +407,7 @@ class CVXPYSolver(DeconvSolver):
             self._update_w(w)
         if l0_penal is not None or w is not None:
             self.cp_l0_w.value = self.l0_penal * self.w
-        if theta is not None and hasattr(self, 'cp_theta'):
+        if theta is not None and hasattr(self, "cp_theta"):
             self.theta = theta
             self.cp_theta.value = theta
 
@@ -400,12 +419,20 @@ class CVXPYSolver(DeconvSolver):
         except cp.error.SolverError as e:
             logger.warning(f"CVXPY SolverError: {e}")
             res = np.inf
-        
-        opt_s = self.cp_s.value.squeeze() if self.cp_s.value is not None else np.zeros(self.T)
+
+        opt_s = (
+            self.cp_s.value.squeeze()
+            if self.cp_s.value is not None
+            else np.zeros(self.T)
+        )
         opt_b = 0
-        if self.cfg.use_base and hasattr(self.cp_b, 'value') and self.cp_b.value is not None:
+        if (
+            self.cfg.use_base
+            and hasattr(self.cp_b, "value")
+            and self.cp_b.value is not None
+        ):
             opt_b = float(self.cp_b.value)
-        
+
         return opt_s, opt_b, res
 
 
@@ -414,7 +441,7 @@ class OSQPSolver(DeconvSolver):
 
     def __init__(self, config: DeconvConfig, y_len: int, **kwargs):
         super().__init__(config, y_len, **kwargs)
-        
+
         # Additional state for OSQP
         self.prob = None
         self.prob_free = None
@@ -426,12 +453,12 @@ class OSQPSolver(DeconvSolver):
         self.ub = None
         self.ub_inf = None
         self.nzidx_A = None
-        
+
         # STFT for FFT weighting
         if self.cfg.err_weighting == "fft":
             self.stft = ShortTimeFFT(win=np.ones(self.coef_len), hop=1, fs=1)
             self.yspec = get_stft_spec(self.y, self.stft)
-        
+
         # Initialize matrices and problem
         self._update_HG()
         self._update_wgt_len()
@@ -456,7 +483,7 @@ class OSQPSolver(DeconvSolver):
         if clear:
             logger.debug("Clearing error weighting")
             self.err_wt = np.ones(self.y_len)
-        elif self.cfg.err_weighting == "fft" and hasattr(self, 'stft'):
+        elif self.cfg.err_weighting == "fft" and hasattr(self, "stft"):
             logger.debug("Updating error weighting with fft")
             hspec = get_stft_spec(coef, self.stft)[:, int(len(coef) / 2)]
             self.err_wt = (
@@ -471,7 +498,7 @@ class OSQPSolver(DeconvSolver):
                 yseg = self.y[i : i + len(coef)]
                 if len(yseg) <= 1:
                     continue
-                cseg = coef[:len(yseg)]
+                cseg = coef[: len(yseg)]
                 with np.errstate(all="ignore"):
                     self.err_wt[i] = np.corrcoef(yseg, cseg)[0, 1].clip(0, 1)
             self.err_wt = np.nan_to_num(self.err_wt)
@@ -483,7 +510,7 @@ class OSQPSolver(DeconvSolver):
                     self.err_wt[nzidx : nzidx + self.wgt_len] = 1
             else:
                 self.err_wt = np.ones(self.y_len)
-        
+
         self.Wt = sps.diags(self.err_wt)
 
     def _get_M(self) -> sps.csc_matrix:
@@ -511,18 +538,22 @@ class OSQPSolver(DeconvSolver):
             ls = len(self.nzidx_s)
             ly = self.y_len
             if self.cfg.free_kernel:
-                P = sps.bmat([
-                    [sps.csc_matrix((ls + 1, ls + 1)), None, None],
-                    [None, sps.csc_matrix((ly, ly)), None],
-                    [None, None, sps.eye(ly, format="csc")],
-                ])
+                P = sps.bmat(
+                    [
+                        [sps.csc_matrix((ls + 1, ls + 1)), None, None],
+                        [None, sps.csc_matrix((ly, ly)), None],
+                        [None, None, sps.eye(ly, format="csc")],
+                    ]
+                )
             else:
-                P = sps.bmat([
-                    [sps.csc_matrix((lc + 1, lc + 1)), None, None],
-                    [None, sps.csc_matrix((ly, ly)), None],
-                    [None, None, sps.eye(ly, format="csc")],
-                ])
-        
+                P = sps.bmat(
+                    [
+                        [sps.csc_matrix((lc + 1, lc + 1)), None, None],
+                        [None, sps.csc_matrix((ly, ly)), None],
+                        [None, None, sps.eye(ly, format="csc")],
+                    ]
+                )
+
         self.P = sps.triu(P).tocsc()
         logger.debug(f"Updated P matrix - shape: {self.P.shape}, nnz: {self.P.nnz}")
 
@@ -535,8 +566,12 @@ class OSQPSolver(DeconvSolver):
             self.q0 = -M.T @ self.Wt.T @ self.Wt @ self.y
         elif self.cfg.norm == "huber":
             ly = self.y_len
-            lx = len(self.nzidx_s) + 1 if self.cfg.free_kernel else len(self.nzidx_c) + 1
-            self.q0 = np.concatenate([np.zeros(lx), np.ones(ly), np.ones(ly)]) * self.huber_k
+            lx = (
+                len(self.nzidx_s) + 1 if self.cfg.free_kernel else len(self.nzidx_c) + 1
+            )
+            self.q0 = (
+                np.concatenate([np.zeros(lx), np.ones(ly), np.ones(ly)]) * self.huber_k
+            )
 
     def _update_q(self) -> None:
         """Update linear cost vector q (including penalties)."""
@@ -560,13 +595,18 @@ class OSQPSolver(DeconvSolver):
                 self.q = (
                     self.q0
                     + self.l0_penal * np.concatenate([[0], self.w, pad_k, pad_k])
-                    + self.l1_penal * np.concatenate([[0], np.ones(len(self.nzidx_s)), pad_k, pad_k])
+                    + self.l1_penal
+                    * np.concatenate([[0], np.ones(len(self.nzidx_s)), pad_k, pad_k])
                 )
             else:
                 self.q = (
                     self.q0
-                    + self.l0_penal * np.concatenate([[0], self.w @ self.G, pad_k, pad_k])
-                    + self.l1_penal * np.concatenate([[0], np.ones(self.G.shape[0]) @ self.G, pad_k, pad_k])
+                    + self.l0_penal
+                    * np.concatenate([[0], self.w @ self.G, pad_k, pad_k])
+                    + self.l1_penal
+                    * np.concatenate(
+                        [[0], np.ones(self.G.shape[0]) @ self.G, pad_k, pad_k]
+                    )
                 )
 
     def _update_A(self) -> None:
@@ -580,46 +620,44 @@ class OSQPSolver(DeconvSolver):
             self.nzidx_A = np.where((Ax != 0).sum(axis=1))[0]
             Ax = Ax[self.nzidx_A, :]
             Ar = self.scale * self.R
-        
+
         if self.cfg.norm == "huber":
             e = sps.eye(self.y_len, format="csc")
-            self.A = sps.bmat([
-                [sps.csc_matrix((Ax.shape[0], 1)), Ax, None, None],
-                [None, None, e, None],
-                [None, None, None, -e],
-                [np.ones((Ar.shape[0], 1)), Ar, e, e],
-            ], format="csc")
+            self.A = sps.bmat(
+                [
+                    [sps.csc_matrix((Ax.shape[0], 1)), Ax, None, None],
+                    [None, None, e, None],
+                    [None, None, None, -e],
+                    [np.ones((Ar.shape[0], 1)), Ar, e, e],
+                ],
+                format="csc",
+            )
         else:
-            self.A = sps.bmat([
-                [np.ones((1, 1)), None],
-                [None, Ax]
-            ], format="csc")
-        
+            self.A = sps.bmat([[np.ones((1, 1)), None], [None, Ax]], format="csc")
+
         logger.debug(f"Updated A matrix - shape: {self.A.shape}, nnz: {self.A.nnz}")
 
     def _update_bounds(self) -> None:
         """Update constraint bounds."""
         if self.cfg.norm == "huber":
             xlen = len(self.nzidx_s) if self.cfg.free_kernel else len(self.nzidx_A)
-            self.lb = np.concatenate([
-                np.zeros(xlen + self.y_len * 2),
-                self.y - self.huber_k
-            ])
-            self.ub = np.concatenate([
-                np.ones(xlen),
-                np.full(self.y_len * 2, np.inf),
-                self.y - self.huber_k
-            ])
-            self.ub_inf = np.concatenate([
-                np.full(xlen + self.y_len * 2, np.inf),
-                self.y - self.huber_k
-            ])
+            self.lb = np.concatenate(
+                [np.zeros(xlen + self.y_len * 2), self.y - self.huber_k]
+            )
+            self.ub = np.concatenate(
+                [np.ones(xlen), np.full(self.y_len * 2, np.inf), self.y - self.huber_k]
+            )
+            self.ub_inf = np.concatenate(
+                [np.full(xlen + self.y_len * 2, np.inf), self.y - self.huber_k]
+            )
         else:
             bb = np.clip(self.y.mean(), 0, None) if self.cfg.use_base else 0
             if self.cfg.free_kernel:
                 self.lb = np.zeros(len(self.nzidx_s) + 1)
                 self.ub = np.concatenate([np.full(1, bb), np.ones(len(self.nzidx_s))])
-                self.ub_inf = np.concatenate([np.full(1, bb), np.full(len(self.nzidx_s), np.inf)])
+                self.ub_inf = np.concatenate(
+                    [np.full(1, bb), np.full(len(self.nzidx_s), np.inf)]
+                )
             else:
                 ub_pad = np.zeros(self.T)
                 ub_inf_pad = np.zeros(self.T)
@@ -628,20 +666,22 @@ class OSQPSolver(DeconvSolver):
                 self.lb = np.zeros(len(self.nzidx_A) + 1)
                 self.ub = np.concatenate([np.full(1, bb), ub_pad[self.nzidx_A]])
                 self.ub_inf = np.concatenate([np.full(1, bb), ub_inf_pad[self.nzidx_A]])
-        
+
         assert (self.ub >= self.lb).all(), "Upper bounds must be >= lower bounds"
-        assert (self.ub_inf >= self.lb).all(), "Upper bounds (inf) must be >= lower bounds"
+        assert (
+            self.ub_inf >= self.lb
+        ).all(), "Upper bounds (inf) must be >= lower bounds"
 
     def _setup_prob_osqp(self) -> None:
         """Setup OSQP problem instances."""
         logger.debug("Setting up OSQP problem")
-        
+
         self._update_P()
         self._update_q0()
         self._update_q()
         self._update_A()
         self._update_bounds()
-        
+
         # Choose solver backend
         if self.cfg.backend == "cuosqp":
             if not HAS_CUOSQP:
@@ -659,7 +699,7 @@ class OSQPSolver(DeconvSolver):
         else:
             self.prob = osqp.OSQP()
             self.prob_free = osqp.OSQP()
-        
+
         # Setup constrained problem
         self.prob.setup(
             P=self.P.copy(),
@@ -675,7 +715,7 @@ class OSQPSolver(DeconvSolver):
             eps_prim_inf=1e-7,
             eps_dual_inf=1e-7,
         )
-        
+
         # Setup unconstrained (free) problem
         self.prob_free.setup(
             P=self.P.copy(),
@@ -691,7 +731,7 @@ class OSQPSolver(DeconvSolver):
             eps_prim_inf=1e-7,
             eps_dual_inf=1e-7,
         )
-        
+
         logger.debug(f"{self.cfg.backend} setup completed successfully")
 
     def update(
@@ -708,11 +748,11 @@ class OSQPSolver(DeconvSolver):
         update_weighting: bool = False,
         clear_weighting: bool = False,
         scale_coef: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """Update OSQP problem parameters."""
         logger.debug(f"Updating OSQP solver parameters")
-        
+
         # Update input parameters
         if y is not None:
             self.y = y
@@ -722,8 +762,7 @@ class OSQPSolver(DeconvSolver):
             theta_new = np.array(tau2AR(tau[0], tau[1]))
             p = solve_p(tau[0], tau[1])
             coef_new, _, _ = exp_pulse(
-                tau[0], tau[1], p_d=p, p_r=-p,
-                nsamp=self.coef_len, kn_len=self.coef_len
+                tau[0], tau[1], p_d=p, p_r=-p, nsamp=self.coef_len, kn_len=self.coef_len
             )
             self.tau = tau
             self.ps = np.array([p, -p])
@@ -745,7 +784,7 @@ class OSQPSolver(DeconvSolver):
             self.l0_penal = l0_penal
         if w is not None:
             self._update_w(w)
-        
+
         # Track what needs updating
         updt_HG = coef is not None
         updt_P = False
@@ -754,11 +793,11 @@ class OSQPSolver(DeconvSolver):
         updt_A = False
         updt_bounds = False
         setup_prob = False
-        
+
         if updt_HG:
             self._update_HG()
             self._update_wgt_len()
-        
+
         if self.cfg.err_weighting is not None and update_weighting:
             self._update_Wt(clear=clear_weighting)
             if self.cfg.err_weighting == "adaptive":
@@ -767,7 +806,7 @@ class OSQPSolver(DeconvSolver):
                 updt_P = True
                 updt_q0 = True
                 updt_q = True
-        
+
         if self.cfg.norm == "huber":
             # huber_k changes require recomputing q and bounds
             if y is not None:
@@ -776,7 +815,9 @@ class OSQPSolver(DeconvSolver):
             if any([scale is not None, scale_mul is not None, updt_HG]):
                 self._update_A()
                 updt_A = True
-            if any([w is not None, l0_penal is not None, l1_penal is not None, updt_HG]):
+            if any(
+                [w is not None, l0_penal is not None, l1_penal is not None, updt_HG]
+            ):
                 self._update_q()
                 updt_q = True
             if y is not None:
@@ -789,13 +830,29 @@ class OSQPSolver(DeconvSolver):
             if any([scale is not None, scale_mul is not None, updt_HG, updt_P]):
                 self._update_P()
                 updt_P = True
-            if any([scale is not None, scale_mul is not None, y is not None, updt_HG, updt_q0]):
+            if any(
+                [
+                    scale is not None,
+                    scale_mul is not None,
+                    y is not None,
+                    updt_HG,
+                    updt_q0,
+                ]
+            ):
                 self._update_q0()
                 updt_q0 = True
-            if any([w is not None, l0_penal is not None, l1_penal is not None, updt_q0, updt_q]):
+            if any(
+                [
+                    w is not None,
+                    l0_penal is not None,
+                    l1_penal is not None,
+                    updt_q0,
+                    updt_q,
+                ]
+            ):
                 self._update_q()
                 updt_q = True
-        
+
         # Apply updates to OSQP - conservative approach:
         # Only q can be updated in-place safely. For P, A, bounds, rebuild.
         if setup_prob or any([updt_P, updt_A, updt_bounds]):
@@ -803,25 +860,31 @@ class OSQPSolver(DeconvSolver):
         elif updt_q:
             self.prob.update(q=self.q)
             self.prob_free.update(q=self.q)
-        
+
         logger.debug("OSQP problem updated")
 
     def solve(self, amp_constraint: bool = True) -> Tuple[np.ndarray, float, Any]:
         """Solve OSQP problem."""
         prob = self.prob if amp_constraint else self.prob_free
         res = prob.solve()
-        
+
         if res.info.status not in ["solved", "solved inaccurate"]:
             logger.warning(f"OSQP not solved: {res.info.status}")
             if res.info.status in ["primal infeasible", "primal infeasible inaccurate"]:
                 x = np.zeros(self.P.shape[0], dtype=float)
             else:
-                x = res.x.astype(float) if res.x is not None else np.zeros(self.P.shape[0], dtype=float)
+                x = (
+                    res.x.astype(float)
+                    if res.x is not None
+                    else np.zeros(self.P.shape[0], dtype=float)
+                )
         else:
             x = res.x
-        
+
         if self.cfg.norm == "huber":
-            xlen = len(self.nzidx_s) + 1 if self.cfg.free_kernel else len(self.nzidx_c) + 1
+            xlen = (
+                len(self.nzidx_s) + 1 if self.cfg.free_kernel else len(self.nzidx_c) + 1
+            )
             sol = x[:xlen]
             opt_b = sol[0]
             if self.cfg.free_kernel:
@@ -835,6 +898,6 @@ class OSQPSolver(DeconvSolver):
             else:
                 c_sol = x[1:]
                 opt_s = self.G @ c_sol
-        
+
         # Return 0 for objective - caller should use _compute_err for correct objective
         return opt_s, opt_b, 0

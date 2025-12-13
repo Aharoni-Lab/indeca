@@ -55,5 +55,3 @@ def test_G_matrix_matches_shifted_ar_difference_equation():
     expected[4] = 0.0
 
     assert np.allclose(s, expected)
-
-
