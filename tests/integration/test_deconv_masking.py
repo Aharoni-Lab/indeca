@@ -18,10 +18,10 @@ class TestDeconvBin:
         deconv, y, c, c_org, s, s_org, scale = fixt_deconv(
             taus=taus, rand_seed=rand_seed, upsamp=upsamp, deconv_kws={"Hlim": None}
         )
-        s_nomsk, b_nomsk = deconv._solve(amp_constraint=False)
+        s_nomsk, b_nomsk = deconv.solve(amp_constraint=False, pks_polish=False)
         c_nomsk = deconv.H @ s_nomsk
         deconv._update_mask()
-        s_msk, b_msk = deconv._solve(amp_constraint=False)
+        s_msk, b_msk = deconv.solve(amp_constraint=False, pks_polish=False)
         c_msk = deconv.H @ s_msk
         s_msk = deconv._pad_s(s_msk)
         c_msk = deconv._pad_c(c_msk)
