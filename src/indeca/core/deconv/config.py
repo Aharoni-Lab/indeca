@@ -24,10 +24,12 @@ class DeconvConfig(BaseModel):
         False, description="Whether to use mixed-integer programming (boolean spikes)."
     )
     backend: Literal["osqp", "cvxpy", "cuosqp"] = Field(
-        "osqp", description="Solver backend ('osqp', 'cvxpy', 'cuosqp'). Note: emosqp requires codegen and is not supported."
+        "osqp",
+        description="Solver backend ('osqp', 'cvxpy', 'cuosqp'). Note: emosqp requires codegen and is not supported.",
     )
     free_kernel: bool = Field(
-        False, description="If True, use convolution constraint instead of AR constraint. Only supported with OSQP backends."
+        False,
+        description="If True, use convolution constraint instead of AR constraint. Only supported with OSQP backends.",
     )
     nthres: int = Field(1000, description="Number of thresholds for thresholding step.")
     err_weighting: Optional[str] = Field(
@@ -74,7 +76,6 @@ class DeconvConfig(BaseModel):
         if data.get("ncons_thres") == "auto":
             data["ncons_thres"] = upsamp + 1
         return data
-
 
     @model_validator(mode="after")
     def validate_penal(self):
