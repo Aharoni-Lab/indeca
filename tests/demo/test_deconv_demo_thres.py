@@ -8,6 +8,7 @@ from tests.testing_utils.plotting import plot_met_ROC_thres
 
 pytestmark = pytest.mark.demo
 
+
 @pytest.mark.slow
 class TestDemoDeconv:
     @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])

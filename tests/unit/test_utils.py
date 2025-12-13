@@ -3,7 +3,6 @@ import numpy as np
 from indeca.utils import norm, scal_lstsq, scal_like, enumerated_product
 
 
-
 @pytest.mark.unit
 class TestNormalization:
     def test_norm_basic(self):
@@ -24,7 +23,6 @@ class TestNormalization:
         result = norm(a)
         assert np.isnan(result[1])
         assert not np.any(np.isnan(result[[0, 2, 3]]))
-
 
 
 @pytest.mark.unit
@@ -56,7 +54,6 @@ class TestScaling:
         tgt = np.array([0, 5, 10])
         result = scal_like(src, tgt, zero_center=False)
         assert np.allclose(result, np.array([0, 5, 10]))
-
 
 
 @pytest.mark.unit

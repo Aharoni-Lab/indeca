@@ -8,6 +8,7 @@ from tests.conftest import fixt_y
 
 pytestmark = pytest.mark.unit
 
+
 @pytest.mark.xfail(reason="yule walker estimation struggle to get accurate")
 @pytest.mark.parametrize("taus", [(6, 1), (10, 3)])
 @pytest.mark.parametrize("rand_seed", np.arange(3))
