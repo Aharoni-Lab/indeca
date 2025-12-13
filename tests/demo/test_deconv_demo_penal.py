@@ -71,14 +71,5 @@ class TestDemoDeconv:
         fig = plot_met_ROC_thres(metdf, grad_color=False)
         fig.savefig(test_fig_path_svg)
         # assertion
-        s = s_org # Note: s_org is available from fixt_deconv
-        s_s = deconv.R @ intm_pn[2][oidx] # Wait, s_org is s in fixt_deconv.
-        # But s needs to be padded if upsamp.
-        # Need to re-check the logic. The original test had `if ns_lev == 0 and upsamp == 1: assert (cur_svals[oidx][:-1] == s[:-1]).all()`
-        # In my split, `s` is not explicitly unpacked from fixture in the test signature but it is returned. I need to capture it.
-        # fixt_deconv returns: deconv, y, c, c_org, s, s_org, scale.
-        # So s is available.
-        # Using s from fixture return.
         if ns_lev == 0 and upsamp == 1:
-             # The assertion uses 's'. which is s from fixt_deconv
-             assert (cur_svals[oidx][:-1] == s[:-1]).all()
+            assert (cur_svals[oidx][:-1] == s[:-1]).all()

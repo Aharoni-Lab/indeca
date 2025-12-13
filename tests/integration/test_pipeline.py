@@ -13,10 +13,10 @@ from indeca.core.deconv import DeconvBin, construct_R
 from indeca.pipeline import pipeline_bin
 from indeca.core.simulation import find_dhm
 
-from .conftest import fixt_realds, fixt_y
-from .testing_utils.cnmf import pipeline_cnmf
-from .testing_utils.metrics import assignment_distance, dtw_corr, nzidx_int
-from .testing_utils.plotting import plot_traces
+from tests.conftest import fixt_realds, fixt_y
+from tests.testing_utils.cnmf import pipeline_cnmf
+from tests.testing_utils.metrics import assignment_distance, dtw_corr, nzidx_int
+from tests.testing_utils.plotting import plot_traces
 
 
 class TestPipeline:
