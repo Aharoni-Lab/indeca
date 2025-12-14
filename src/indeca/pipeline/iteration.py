@@ -41,18 +41,14 @@ def run_deconv_step(
     """
     res = []
 
-    for icell, _ in tqdm(
-        enumerate(Y), total=Y.shape[0], desc="deconv", leave=False
-    ):
+    for icell, _ in tqdm(enumerate(Y), total=Y.shape[0], desc="deconv", leave=False):
         if da_client is not None:
             r = da_client.submit(
                 lambda d: d.solve_scale(reset_scale=i_iter <= 1 or reset_scale),
                 deconvolvers[icell],
             )
         else:
-            r = deconvolvers[icell].solve_scale(
-                reset_scale=i_iter <= 1 or reset_scale
-            )
+            r = deconvolvers[icell].solve_scale(reset_scale=i_iter <= 1 or reset_scale)
         res.append(r)
 
     if da_client is not None:
@@ -76,4 +72,3 @@ def run_deconv_step(
         nnz=nnz,
         penal=penal,
     )
-

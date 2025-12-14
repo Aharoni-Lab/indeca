@@ -53,9 +53,7 @@ def check_convergence(
         Result indicating if converged and why
     """
     # Need at least one previous iteration
-    metric_prev = metric_df[metric_df["iter"] < i_iter].dropna(
-        subset=["obj", "scale"]
-    )
+    metric_prev = metric_df[metric_df["iter"] < i_iter].dropna(subset=["obj", "scale"])
     metric_last = metric_df[metric_df["iter"] == i_iter - 1].dropna(
         subset=["obj", "scale"]
     )
@@ -109,4 +107,3 @@ def check_convergence(
             )
 
     return ConvergenceResult(converged=False, reason="")
-

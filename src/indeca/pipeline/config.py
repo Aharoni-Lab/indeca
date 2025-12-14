@@ -278,4 +278,3 @@ class DeconvPipelineConfig(BaseModel):
                 n_best=n_best,
             ),
         )
-

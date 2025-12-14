@@ -249,9 +249,7 @@ def pipeline_bin(
         theta = np.array([tau2AR(t[0], t[1]) for t in tau])
 
         if ar_cfg.use_all:
-            logger.debug(
-                f"Updating AR parameters for all cells: tau={tau[0]}"
-            )
+            logger.debug(f"Updating AR parameters for all cells: tau={tau[0]}")
         else:
             logger.debug(f"Updated AR parameters per-cell")
 
@@ -285,9 +283,7 @@ def pipeline_bin(
         logger.warning("Max iteration reached without convergence")
 
     # 7. Compute final results
-    opt_C, opt_S = _finalize_results(
-        state, ncell, T, up_factor, ar_cfg.use_all
-    )
+    opt_C, opt_S = _finalize_results(state, ncell, T, up_factor, ar_cfg.use_all)
 
     # 8. Cleanup
     if dashboard is not None:
@@ -361,4 +357,3 @@ def _finalize_results(
     S_ls.append(opt_S)
 
     return opt_C, opt_S
-

@@ -129,4 +129,3 @@ def update_dashboard(
             scale=cur_metric["scale"].squeeze(),
         )
         dashboard.set_iter(min(i_iter + 1, max_iters - 1))
-

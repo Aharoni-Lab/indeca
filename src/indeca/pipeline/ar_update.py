@@ -74,9 +74,7 @@ def select_best_spikes(
         for icell, cell_met in metric_best.groupby("cell", sort=True):
             cell_met = cell_met.reset_index().sort_values("obj", ascending=True)
             cur_idx = np.array(cell_met["iter"][:n_best])
-            metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(
-                cur_idx.astype(str)
-            )
+            metric_df.loc[(i_iter, icell), "best_idx"] = ",".join(cur_idx.astype(str))
             S_best[icell, :] = np.sum(
                 np.stack([S_ls[i][icell, :] for i in cur_idx], axis=0), axis=0
             ) > (n_best / 2)
@@ -127,9 +125,7 @@ def make_S_ar(
 
         for s in S_best:
             Rs = R @ s
-            s_pks, pk_prop = find_peaks(
-                Rs, height=1, distance=ar_kn_len * up_factor
-            )
+            s_pks, pk_prop = find_peaks(Rs, height=1, distance=ar_kn_len * up_factor)
             pk_ht = pk_prop["peak_heights"]
             top_idx = s_pks[np.argsort(pk_ht)[-est_nevt:]]
             mask = np.zeros_like(Rs, dtype=bool)
@@ -229,7 +225,7 @@ def update_ar_parameters(
     else:
         # Per-cell AR update
         tau = np.empty((ncell, p))
-        
+
         # NOTE: Original pipeline only retained the last cell's ps/h/h_fit
         # when ar_use_all=False. We preserve this behavior explicitly.
         ps = None
@@ -303,4 +299,3 @@ def propagate_ar_update(
                 )
             else:
                 d.update(tau=tau[idx], scale=scal_best[idx])
-
