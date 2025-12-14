@@ -54,4 +54,3 @@ def preprocess_traces(
             Y[iy, :] = compute_dff(y, window_size=ar_kn_len * 5, q=0.2)
 
     return Y
-

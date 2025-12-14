@@ -151,4 +151,3 @@ class PipelineResult:
     S_ls: Optional[List[np.ndarray]] = None
     h_ls: Optional[List[np.ndarray]] = None
     h_fit_ls: Optional[List[np.ndarray]] = None
-
