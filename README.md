@@ -49,4 +49,13 @@ repository of Interpretable Deconvolution for Calcium imaging.
 1. Run `CUDA_PATH=whatever python setup.py install`.
    If you followed the steps correctly, `CUDA_PATH` shouldn't matter (but it has to be set).
 1. Verify that `cuosqp` is installed under your environment.
+
+## Profiling
+
+For comprehensive profiling documentation, see [`benchmarks/profile/README.md`](benchmarks/profile/README.md).
+
+Quick reference:
+- **Line-level profiling**: Use `kernprof -l -v your_script.py` for functions decorated with `@profile`
+- **Pipeline-level profiling**: Use `yappi_profile` context manager for function-level attribution
+- **Benchmark scripts**: Deterministic benchmarks in `benchmarks/profile/` for regression detection
    

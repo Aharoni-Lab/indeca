@@ -9,7 +9,7 @@ import xarray as xr
 from plotly.subplots import make_subplots
 from tqdm.auto import tqdm
 
-from indeca.utils import norm
+from indeca.utils.utils import norm
 from tests.testing_utils.io import load_gt_ds, subset_gt_ds
 from tests.testing_utils.metrics import compute_metrics
 from tests.testing_utils.plotting import plot_traces
