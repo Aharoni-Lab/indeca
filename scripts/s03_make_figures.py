@@ -11,9 +11,9 @@ import xarray as xr
 from matplotlib.lines import Line2D
 from matplotlib.patches import ConnectionPatch, Rectangle
 
-from indeca.AR_kernel import estimate_coefs, solve_fit_h_num
-from indeca.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
-from indeca.utils import norm
+from indeca.core.AR_kernel import estimate_coefs, solve_fit_h_num
+from indeca.core.simulation import AR2exp, AR2tau, ar_pulse, eval_exp, find_dhm
+from indeca.utils.utils import norm
 from tests.conftest import fixt_deconv
 from tests.testing_utils.compose import GridSpec
 from tests.testing_utils.io import load_gt_ds, subset_gt_ds
