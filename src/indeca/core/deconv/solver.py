@@ -85,8 +85,6 @@ class DeconvSolver(ABC):
         self.err_wt = np.ones(self.y_len)
         self.wgt_len = self.coef_len
         self.Wt = sps.diags(self.err_wt)
-        # Precompute squared version for P matrix
-        self._Wt_sq = sps.diags(self.err_wt ** 2)
 
         # Huber parameter
         self.huber_k = 0.5 * np.std(self.y) if y is not None else 0
@@ -514,8 +512,6 @@ class OSQPSolver(DeconvSolver):
                 self.err_wt = np.ones(self.y_len)
 
         self.Wt = sps.diags(self.err_wt)
-        # Precompute squared version for P matrix
-        self._Wt_sq = sps.diags(self.err_wt ** 2)
 
     def _get_M(self) -> sps.csc_matrix:
         """Get the combined model matrix M = [1, scale*R] or [1, scale*R@H]."""
@@ -536,11 +532,10 @@ class OSQPSolver(DeconvSolver):
             raise NotImplementedError("l1 norm not yet supported with OSQP backend")
         elif self.cfg.norm == "l2":
             M = self._get_M()
-            # NOTE: This is the original code
-            # P = M.T @ self.Wt.T @ self.Wt @ M
-            # NOTE: This is the optimized code
-            # We precompute Wt_sq each time Wt is updated
-            P = M.T @ self._Wt_sq @ M
+            w = self.err_wt  # shape (y_len,)
+            # Use row-scaling: M.T @ W^2 @ M == (W @ M).T @ (W @ M)
+            Mw = M.multiply(w[:, None])  # = diag(w) @ M
+            P = Mw.T @ Mw
 
 
         elif self.cfg.norm == "huber":
@@ -573,11 +568,12 @@ class OSQPSolver(DeconvSolver):
             raise NotImplementedError("l1 norm not yet supported with OSQP backend")
         elif self.cfg.norm == "l2":
             M = self._get_M()
-            # NOTE: This is the original code
-            # self.q0 = -M.T @ self.Wt.T @ self.Wt @ self.y
-            # NOTE: This is the optimized code  
-            # Use precomputed _Wt_sq for consistency and performance
-            self.q0 = -M.T @ self._Wt_sq @ self.y
+            w = self.err_wt
+            # Use row-scaling: M.T @ W^2 @ y == (W @ M).T @ (W @ y)
+            Mw = M.multiply(w[:, None])  # = diag(w) @ M
+            y = self.y.reshape(-1)  # safe for (y_len,) or (y_len,1)
+            yw = w * y  # elementwise
+            self.q0 = -(Mw.T @ yw)
         elif self.cfg.norm == "huber":
             ly = self.y_len
             lx = (
