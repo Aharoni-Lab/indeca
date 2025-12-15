@@ -178,6 +178,7 @@ cython_debug/
 *.npy
 *.feat
 *.prof
+*.png
 /tests/output/*
 !/tests/output/figs
 /tests/output/figs/*
