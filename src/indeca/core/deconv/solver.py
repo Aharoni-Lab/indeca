@@ -573,7 +573,11 @@ class OSQPSolver(DeconvSolver):
             raise NotImplementedError("l1 norm not yet supported with OSQP backend")
         elif self.cfg.norm == "l2":
             M = self._get_M()
-            self.q0 = -M.T @ self.Wt.T @ self.Wt @ self.y
+            # NOTE: This is the original code
+            # self.q0 = -M.T @ self.Wt.T @ self.Wt @ self.y
+            # NOTE: This is the optimized code  
+            # Use precomputed _Wt_sq for consistency and performance
+            self.q0 = -M.T @ self._Wt_sq @ self.y
         elif self.cfg.norm == "huber":
             ly = self.y_len
             lx = (
