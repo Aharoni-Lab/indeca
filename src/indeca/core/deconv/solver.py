@@ -85,6 +85,8 @@ class DeconvSolver(ABC):
         self.err_wt = np.ones(self.y_len)
         self.wgt_len = self.coef_len
         self.Wt = sps.diags(self.err_wt)
+        # Precompute squared version for P matrix
+        self._Wt_sq = sps.diags(self.err_wt ** 2)
 
         # Huber parameter
         self.huber_k = 0.5 * np.std(self.y) if y is not None else 0
@@ -512,6 +514,8 @@ class OSQPSolver(DeconvSolver):
                 self.err_wt = np.ones(self.y_len)
 
         self.Wt = sps.diags(self.err_wt)
+        # Precompute squared version for P matrix
+        self._Wt_sq = sps.diags(self.err_wt ** 2)
 
     def _get_M(self) -> sps.csc_matrix:
         """Get the combined model matrix M = [1, scale*R] or [1, scale*R@H]."""
@@ -532,7 +536,13 @@ class OSQPSolver(DeconvSolver):
             raise NotImplementedError("l1 norm not yet supported with OSQP backend")
         elif self.cfg.norm == "l2":
             M = self._get_M()
-            P = M.T @ self.Wt.T @ self.Wt @ M
+            # NOTE: This is the original code
+            # P = M.T @ self.Wt.T @ self.Wt @ M
+            # NOTE: This is the optimized code
+            # We precompute Wt_sq each time Wt is updated
+            P = M.T @ self._Wt_sq @ M
+
+
         elif self.cfg.norm == "huber":
             lc = len(self.nzidx_c)
             ls = len(self.nzidx_s)
