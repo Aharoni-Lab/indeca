@@ -177,6 +177,8 @@ cython_debug/
 /tests/data
 *.npy
 *.feat
+*.prof
+*.png
 /tests/output/*
 !/tests/output/figs
 /tests/output/figs/*
