@@ -6,6 +6,18 @@ import numpy as np
 
 from indeca.simulation import generate_data
 
+# %% Define dataclass for trace parameters
+from dataclasses import dataclass
+@dataclass(init=True, repr=True)
+class Trace_parameter:
+    sig_scale: float
+    sz_mean: float
+    sz_sigma: float
+    sz_min: float
+    markov_transition: np.ndarray
+    tau_decay: float
+    tau_rise: float
+
 OUT_PATH = "./intermediate/simulated/"
 PARAM_TAU_D = 6
 PARAM_TAU_R = 1
