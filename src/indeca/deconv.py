@@ -142,14 +142,14 @@ class DeconvBin:
         backend: str = "osqp",
         nthres: int = 1000,
         err_weighting: str = None,
-        wt_trunc_thres: float = 1e-2,
+        wt_trunc_thres: float = None,
         masking_radius: int = None,
         pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
         density_thres: float = None,
         ncons_thres: int = None,
-        min_rel_scl: float = "auto",
+        min_rel_scl: float = None,
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
@@ -482,15 +482,17 @@ class DeconvBin:
                     A_before = self.A.copy()
                     self._update_A()
                     assert self.A.shape == A_before.shape
-                    assert (self.A.nonzero()[0] == A_before.nonzero()[0]).all()
-                    assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
+                    if not setup_prob:
+                        assert (self.A.nonzero()[0] == A_before.nonzero()[0]).all()
+                        assert (self.A.nonzero()[1] == A_before.nonzero()[1]).all()
                     updt_A = True
                 if any((scale is not None, scale_mul is not None, updt_HG, updt_P)):
                     P_before = self.P.copy()
                     self._update_P()
                     assert self.P.shape == P_before.shape
-                    assert (self.P.nonzero()[0] == P_before.nonzero()[0]).all()
-                    assert (self.P.nonzero()[1] == P_before.nonzero()[1]).all()
+                    if not setup_prob:
+                        assert (self.P.nonzero()[0] == P_before.nonzero()[0]).all()
+                        assert (self.P.nonzero()[1] == P_before.nonzero()[1]).all()
                     updt_P = True
                 if any(
                     (
