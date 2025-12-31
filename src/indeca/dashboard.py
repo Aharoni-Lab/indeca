@@ -1,19 +1,86 @@
+"""
+Interactive dashboard for real-time visualization of InDeCa optimization.
+
+This module provides a web-based dashboard for monitoring the InDeCa
+algorithm during execution. It displays:
+- Per-cell fluorescence traces, calcium fits, and spike trains
+- Estimated kernels and their bi-exponential fits
+- Iteration metrics (error, scale, time constants)
+- Penalty search heatmaps
+
+The dashboard uses Panel and Plotly for interactive visualization and
+can be accessed via a web browser during algorithm execution.
+"""
+
+from typing import Any, Dict, Optional, Union
+
 import numpy as np
+from numpy.typing import NDArray
 import panel as pn
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
 class Dashboard:
+    """
+    Interactive web dashboard for monitoring InDeCa optimization.
+
+    Provides real-time visualization of the deconvolution process including
+    per-cell traces, kernels, and iteration metrics. Runs as a threaded
+    web server accessible via browser.
+
+    Parameters
+    ----------
+    Y : NDArray, optional
+        Input fluorescence data of shape (n_cells, n_timepoints).
+        Either Y or both ncell and T must be provided.
+    ncell : int, optional
+        Number of cells (required if Y not provided).
+    T : int, optional
+        Number of time points (required if Y not provided).
+    max_iters : int, default=20
+        Maximum number of iterations to store.
+    kn_len : int, default=60
+        Length of kernel for display.
+    port : int, default=54321
+        Port number for the web server.
+
+    Attributes
+    ----------
+    it_vars : dict
+        Dictionary storing iteration data with keys:
+        - 'c': Calcium traces (max_iters, ncell, T)
+        - 's': Spike trains (max_iters, ncell, T)
+        - 'h': Kernels (max_iters, ncell, kn_len)
+        - 'h_fit': Fitted kernels (max_iters, ncell, kn_len)
+        - 'scale': Scaling factors (max_iters, ncell)
+        - 'tau_d': Decay time constants (max_iters, ncell)
+        - 'tau_r': Rise time constants (max_iters, ncell)
+        - 'err': Errors (max_iters, ncell)
+        - 'penal_err': Penalty search data
+    it_update : int
+        Current iteration being updated.
+    it_view : int
+        Current iteration being viewed.
+
+    Examples
+    --------
+    >>> dashboard = Dashboard(Y=fluorescence_data, kn_len=60)
+    >>> # Access at http://localhost:54321
+    >>> dashboard.update(uid=0, s=spike_train, c=calcium_trace)
+    >>> dashboard.set_iter(1)
+    >>> dashboard.stop()
+    """
+
     def __init__(
         self,
-        Y: np.ndarray = None,
-        ncell: int = None,
-        T: int = None,
+        Y: Optional[NDArray] = None,
+        ncell: Optional[int] = None,
+        T: Optional[int] = None,
         max_iters: int = 20,
         kn_len: int = 60,
         port: int = 54321,
-    ):
+    ) -> None:
         super().__init__()
         self.title = "Dashboard"
         if Y is None:
@@ -28,7 +95,7 @@ class Dashboard:
         self.max_iters = max_iters
         self.it_update = 0
         self.it_view = 0
-        self.it_vars = {
+        self.it_vars: Dict[str, NDArray] = {
             "c": np.full((max_iters, ncell, T), np.nan),
             "s": np.full((max_iters, ncell, T), np.nan),
             "h": np.full((max_iters, ncell, kn_len), np.nan),
@@ -246,13 +313,43 @@ class Dashboard:
             self._refresh_cells_fig(u)
             self._refresh_err_penal_fit(u)
 
-    def set_iter(self, it: int):
+    def set_iter(self, it: int) -> None:
+        """
+        Set the current iteration for display and update.
+
+        If the view is tracking the update iteration, it will advance
+        to show the new iteration.
+
+        Parameters
+        ----------
+        it : int
+            Iteration number to set.
+        """
         if self.it_update == self.it_view:
             self.it_view = it
             self._refresh_it_view()
         self.it_update = it
 
-    def update(self, uid: int = None, **kwargs):
+    def update(self, uid: Optional[int] = None, **kwargs: Any) -> None:
+        """
+        Update dashboard data for one or more cells.
+
+        Parameters
+        ----------
+        uid : int, optional
+            Cell ID to update. If None, updates all cells.
+        **kwargs : Any
+            Data to update. Supported keys:
+            - c : NDArray - Calcium trace
+            - s : NDArray - Spike train
+            - h : NDArray - Kernel
+            - h_fit : NDArray - Fitted kernel
+            - scale : float - Scaling factor
+            - tau_d : float - Decay time constant
+            - tau_r : float - Rise time constant
+            - err : float - Error value
+            - penal_err : dict - Penalty search data with keys 'penal', 'scale', 'err'
+        """
         if uid is None:
             uids = np.arange(self.ncell)
         else:
@@ -279,5 +376,11 @@ class Dashboard:
                     for v in ["penal", "scale", "err"]:
                         self.it_vars[vname][self.it_update, u][v].append(dat[v])
 
-    def stop(self):
+    def stop(self) -> None:
+        """
+        Stop the dashboard web server.
+
+        Should be called when the algorithm completes to cleanly
+        shut down the threaded server.
+        """
         self.sv.stop()

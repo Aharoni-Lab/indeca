@@ -1,6 +1,46 @@
+"""
+Deconvolution solver for calcium imaging spike inference.
+
+This module implements the core DeconvBin class for solving the spike inference
+problem from calcium imaging data. It formulates deconvolution as a convex
+optimization problem and uses binary pursuit to recover sparse spike trains.
+
+The forward model is:
+    y = scale * R @ H @ s + b + noise
+
+Where:
+    - y: Observed fluorescence trace (y_len,)
+    - s: Spike train to infer (T,), where T = y_len * upsamp
+    - H: Convolution matrix encoding calcium dynamics (T × T)
+    - R: Downsampling matrix (y_len × T)
+    - scale: Amplitude scaling factor
+    - b: Baseline offset
+
+Key features:
+    - Multiple optimization backends: CVXPY, OSQP, EMOSQP, CUOSQP (GPU)
+    - L0/L1 sparsity penalties with automatic tuning via DIRECT algorithm
+    - Temporal upsampling for sub-frame spike timing resolution
+    - Adaptive error weighting (FFT-based, correlation-based)
+    - Amplitude constraints for physiologically realistic spikes
+
+Classes
+-------
+DeconvBin
+    Main solver class for binary pursuit deconvolution.
+
+Functions
+---------
+construct_R
+    Build temporal downsampling matrix.
+construct_G
+    Build AR relationship matrix from coefficients.
+max_thres
+    Generate threshold series for binary spike detection.
+"""
+
 import itertools as itt
 import warnings
-from typing import Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import cvxpy as cp
 import numpy as np
@@ -9,6 +49,7 @@ import pandas as pd
 import scipy.sparse as sps
 import xarray as xr
 from numba import njit
+from numpy.typing import NDArray
 from scipy.ndimage import label
 from scipy.optimize import direct
 from scipy.signal import ShortTimeFFT, find_peaks
@@ -28,7 +69,27 @@ except ImportError:
     logger.warning("No GPU solver support")
 
 
-def construct_R(T: int, up_factor: int):
+def construct_R(T: int, up_factor: int) -> sps.csc_matrix:
+    """
+    Construct a temporal downsampling/upsampling matrix.
+
+    Creates a sparse matrix R that relates upsampled spike times to
+    observed frame times. When up_factor > 1, R sums groups of up_factor
+    consecutive time points into single frames.
+
+    Parameters
+    ----------
+    T : int
+        Number of observed time frames.
+    up_factor : int
+        Temporal upsampling factor. The spike train has T * up_factor points.
+
+    Returns
+    -------
+    sps.csc_matrix
+        Sparse matrix of shape (T, T * up_factor) in CSC format.
+        When up_factor=1, returns identity matrix.
+    """
     if up_factor > 1:
         return sps.csc_matrix(
             (
@@ -41,11 +102,49 @@ def construct_R(T: int, up_factor: int):
         return sps.eye(T, format="csc")
 
 
-def sum_downsample(a, factor):
+def sum_downsample(a: NDArray, factor: int) -> NDArray:
+    """
+    Downsample an array by summing consecutive groups.
+
+    Parameters
+    ----------
+    a : NDArray
+        Input array to downsample.
+    factor : int
+        Downsampling factor.
+
+    Returns
+    -------
+    NDArray
+        Downsampled array where each element is the sum of `factor`
+        consecutive elements from the input.
+    """
     return np.convolve(a, np.ones(factor), mode="full")[factor - 1 :: factor]
 
 
-def construct_G(fac: np.ndarray, T: int, fromTau=False):
+def construct_G(fac: NDArray, T: int, fromTau: bool = False) -> sps.csc_matrix:
+    """
+    Construct the AR relationship matrix G.
+
+    Builds a sparse lower-triangular matrix G that encodes the AR(2)
+    relationship: s = G @ c, where s is the spike train and c is calcium.
+
+    Parameters
+    ----------
+    fac : NDArray
+        AR(2) coefficients of shape (2,), or time constants if fromTau=True.
+    T : int
+        Number of time points.
+    fromTau : bool, default=False
+        If True, interpret `fac` as time constants [τ_d, τ_r] and convert
+        to AR coefficients.
+
+    Returns
+    -------
+    sps.csc_matrix
+        Sparse AR matrix of shape (T, T) in CSC format.
+        Structure: G[i,i] = 1, G[i,i-1] = -θ₁, G[i,i-2] = -θ₂
+    """
     fac = np.array(fac)
     assert fac.shape == (2,)
     if fromTau:
@@ -60,17 +159,53 @@ def construct_G(fac: np.ndarray, T: int, fromTau=False):
 
 
 def max_thres(
-    a: xr.DataArray,
+    a: Union[NDArray, xr.DataArray],
     nthres: int,
-    th_min=0.1,
-    th_max=0.9,
-    ds=None,
-    return_thres=False,
-    th_amplitude=False,
-    delta=1e-6,
-    reverse_thres=False,
+    th_min: float = 0.1,
+    th_max: float = 0.9,
+    ds: Optional[int] = None,
+    return_thres: bool = False,
+    th_amplitude: bool = False,
+    delta: float = 1e-6,
+    reverse_thres: bool = False,
     nz_only: bool = False,
-):
+) -> Union[List[NDArray], Tuple[List[NDArray], List[float]]]:
+    """
+    Generate a series of thresholded spike trains for binary pursuit.
+
+    Creates multiple candidate spike trains by applying different amplitude
+    thresholds to a continuous spike estimate.
+
+    Parameters
+    ----------
+    a : NDArray or xr.DataArray
+        Continuous spike estimate to threshold.
+    nthres : int
+        Number of threshold levels to generate.
+    th_min : float, default=0.1
+        Minimum threshold as fraction of maximum value.
+    th_max : float, default=0.9
+        Maximum threshold as fraction of maximum value.
+    ds : int, optional
+        Downsampling factor to apply after thresholding.
+    return_thres : bool, default=False
+        If True, also return the threshold values.
+    th_amplitude : bool, default=False
+        If True, divide by threshold instead of binary comparison.
+    delta : float, default=1e-6
+        Minimum value to avoid division by zero.
+    reverse_thres : bool, default=False
+        If True, start from high threshold and go to low.
+    nz_only : bool, default=False
+        If True, exclude threshold levels that produce all-zero outputs.
+
+    Returns
+    -------
+    S_ls : list of NDArray
+        List of thresholded spike trains.
+    thres : list of float, optional
+        Threshold values, returned if return_thres=True.
+    """
     amax = a.max()
     if reverse_thres:
         thres = np.linspace(th_max, th_min, nthres)
@@ -94,8 +229,33 @@ def max_thres(
 
 @njit(nopython=True, nogil=True, cache=True)
 def bin_convolve(
-    coef: np.ndarray, s: np.ndarray, nzidx_s: np.ndarray = None, s_len: int = None
-):
+    coef: NDArray,
+    s: NDArray,
+    nzidx_s: Optional[NDArray] = None,
+    s_len: Optional[int] = None,
+) -> NDArray:
+    """
+    Fast convolution optimized for sparse binary spike trains.
+
+    Computes the convolution of a kernel with a sparse spike train by
+    only processing non-zero spike locations. JIT-compiled with Numba.
+
+    Parameters
+    ----------
+    coef : NDArray
+        Convolution kernel of shape (coef_len,).
+    s : NDArray
+        Spike train (potentially sparse).
+    nzidx_s : NDArray, optional
+        Indices mapping positions in s to full time array.
+    s_len : int, optional
+        Output length. If None, uses len(s).
+
+    Returns
+    -------
+    NDArray
+        Convolution result of shape (s_len,).
+    """
     coef_len = len(coef)
     if s_len is None:
         s_len = len(s)
@@ -111,7 +271,22 @@ def bin_convolve(
 
 
 @njit(nopython=True, nogil=True, cache=True)
-def max_consecutive(arr):
+def max_consecutive(arr: NDArray) -> int:
+    """
+    Find the maximum number of consecutive True values in a boolean array.
+
+    JIT-compiled with Numba for performance.
+
+    Parameters
+    ----------
+    arr : NDArray
+        Boolean array.
+
+    Returns
+    -------
+    int
+        Length of the longest consecutive True sequence.
+    """
     max_count = 0
     current_count = 0
     for value in arr:
@@ -124,32 +299,137 @@ def max_consecutive(arr):
 
 
 class DeconvBin:
+    """
+    Binary pursuit deconvolution solver for calcium imaging spike inference.
+
+    Infers spike trains from calcium fluorescence traces by solving a
+    convex optimization problem with sparsity constraints. Supports multiple
+    optimization backends and various regularization strategies.
+
+    The forward model is:
+        y = scale * R @ H @ s + b
+
+    Where y is the observed fluorescence, s is the spike train, H is the
+    convolution matrix, R is the downsampling matrix, and b is baseline.
+
+    Parameters
+    ----------
+    y : NDArray, optional
+        Observed fluorescence trace. Either y or y_len must be provided.
+    y_len : int, optional
+        Length of fluorescence trace (if y not provided).
+    theta : NDArray, optional
+        AR(2) coefficients [θ₁, θ₂]. Either theta or tau must be provided.
+    tau : NDArray, optional
+        Time constants [τ_d, τ_r] in frames.
+    ps : NDArray, optional
+        Exponential amplitudes [p_d, p_r]. Required if tau is provided.
+    coef : NDArray, optional
+        Impulse response kernel. Computed from theta/tau if not provided.
+    coef_len : int, default=100
+        Length of impulse response kernel.
+    scale : float, default=1
+        Initial amplitude scaling factor.
+    penal : str, default="l1"
+        Sparsity penalty type: "l0", "l1", or None.
+    use_base : bool, default=False
+        If True, include baseline offset in optimization.
+    upsamp : int, default=1
+        Temporal upsampling factor for sub-frame resolution.
+    norm : str, default="l2"
+        Error norm: "l1", "l2", or "huber".
+    mixin : bool, default=False
+        If True, use mixed-integer formulation (CVXPY only).
+    backend : str, default="osqp"
+        Optimization backend: "cvxpy", "osqp", "emosqp", or "cuosqp" (GPU).
+    nthres : int, default=1000
+        Number of threshold levels for binary pursuit.
+    err_weighting : str, optional
+        Error weighting scheme: "fft", "corr", "adaptive", or None.
+    wt_trunc_thres : float, optional
+        Threshold for truncating error weights.
+    masking_radius : int, optional
+        Radius for search region masking.
+    pks_polish : bool, default=True
+        If True, refine spike locations after optimization.
+    th_min : float, default=0
+        Minimum threshold as fraction of maximum.
+    th_max : float, default=1
+        Maximum threshold as fraction of maximum.
+    density_thres : float, optional
+        Maximum allowed spike density.
+    ncons_thres : int or "auto", optional
+        Maximum consecutive spikes allowed.
+    min_rel_scl : float or "auto", optional
+        Minimum relative scale for valid solutions.
+    max_iter_l0 : int, default=30
+        Maximum iterations for L0 penalty optimization.
+    max_iter_penal : int, default=500
+        Maximum iterations for penalty search (DIRECT).
+    max_iter_scal : int, default=50
+        Maximum iterations for scale optimization.
+    delta_l0 : float, default=1e-4
+        Threshold for L0 penalty soft-thresholding.
+    delta_penal : float, default=1e-4
+        Tolerance for penalty search.
+    atol : float, default=1e-3
+        Absolute tolerance for convergence.
+    rtol : float, default=1e-3
+        Relative tolerance for convergence.
+    Hlim : int, default=1e5
+        Maximum size for dense H matrix before switching to sparse.
+    dashboard : Dashboard, optional
+        Dashboard object for real-time visualization.
+    dashboard_uid : any, optional
+        Unique identifier for this solver in the dashboard.
+
+    Attributes
+    ----------
+    s : NDArray
+        Inferred spike train of shape (T,) or (len(nzidx_s),).
+    c : NDArray
+        Inferred calcium trace of shape (T,) or (len(nzidx_c),).
+    b : float
+        Inferred baseline offset.
+    H : sparse matrix
+        Convolution matrix.
+    G : sparse matrix
+        AR relationship matrix.
+    R : sparse matrix
+        Downsampling matrix.
+
+    Examples
+    --------
+    >>> solver = DeconvBin(y=fluorescence, tau=[10, 2], ps=[1, -1])
+    >>> s, c, scale, err = solver.solve_scale()
+    """
+
     def __init__(
         self,
-        y: np.array = None,
-        y_len: int = None,
-        theta: np.array = None,
-        tau: np.array = None,
-        ps: np.array = None,
-        coef: np.array = None,
+        y: Optional[NDArray] = None,
+        y_len: Optional[int] = None,
+        theta: Optional[NDArray] = None,
+        tau: Optional[NDArray] = None,
+        ps: Optional[NDArray] = None,
+        coef: Optional[NDArray] = None,
         coef_len: int = 100,
         scale: float = 1,
-        penal: str = "l1",
+        penal: Optional[str] = "l1",
         use_base: bool = False,
         upsamp: int = 1,
         norm: str = "l2",
         mixin: bool = False,
         backend: str = "osqp",
         nthres: int = 1000,
-        err_weighting: str = None,
-        wt_trunc_thres: float = None,
-        masking_radius: int = None,
+        err_weighting: Optional[str] = None,
+        wt_trunc_thres: Optional[float] = None,
+        masking_radius: Optional[int] = None,
         pks_polish: bool = True,
         th_min: float = 0,
         th_max: float = 1,
-        density_thres: float = None,
-        ncons_thres: int = None,
-        min_rel_scl: float = None,
+        density_thres: Optional[float] = None,
+        ncons_thres: Optional[Union[int, str]] = None,
+        min_rel_scl: Optional[Union[float, str]] = None,
         max_iter_l0: int = 30,
         max_iter_penal: int = 500,
         max_iter_scal: int = 50,
@@ -158,8 +438,8 @@ class DeconvBin:
         atol: float = 1e-3,
         rtol: float = 1e-3,
         Hlim: int = 1e5,
-        dashboard=None,
-        dashboard_uid=None,
+        dashboard: Optional[Any] = None,
+        dashboard_uid: Optional[Any] = None,
     ) -> None:
         # book-keeping
         if y is not None:
