@@ -305,9 +305,7 @@ def exp_trace(
     return C, S
 
 
-def markov_fire(
-    frame: int, P: NDArray, rng: Optional[Generator] = None
-) -> NDArray:
+def markov_fire(frame: int, P: NDArray, rng: Optional[Generator] = None) -> NDArray:
     """
     Generate a binary spike train using a 2-state Markov chain.
 
@@ -982,9 +980,7 @@ def solve_p(tau_d: float, tau_r: float) -> float:
     return p
 
 
-def AR2exp(
-    theta1: float, theta2: float
-) -> Tuple[bool, NDArray, NDArray]:
+def AR2exp(theta1: float, theta2: float) -> Tuple[bool, NDArray, NDArray]:
     """
     Convert AR(2) coefficients to exponential representation with coefficients.
 
@@ -1131,9 +1127,7 @@ def exp_pulse(
     return exp, t, pulse
 
 
-def eval_exp(
-    t: NDArray, is_biexp: bool, tconst: NDArray, coefs: NDArray
-) -> NDArray:
+def eval_exp(t: NDArray, is_biexp: bool, tconst: NDArray, coefs: NDArray) -> NDArray:
     """
     Evaluate exponential response at given time points.
 
@@ -1263,9 +1257,7 @@ def find_dhm(
     return (rt0.root, rt1.root), t_hat
 
 
-def shift_frame(
-    fm: NDArray, sh: NDArray, fill: float = np.nan
-) -> NDArray:
+def shift_frame(fm: NDArray, sh: NDArray, fill: float = np.nan) -> NDArray:
     """
     Shift a frame by integer offsets and fill edges.
 

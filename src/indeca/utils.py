@@ -43,9 +43,7 @@ def norm(a: ArrayLike) -> NDArray:
         return a - amin
 
 
-def scal_lstsq(
-    a: NDArray, b: NDArray, fit_intercept: bool = False
-) -> NDArray:
+def scal_lstsq(a: NDArray, b: NDArray, fit_intercept: bool = False) -> NDArray:
     """
     Solve a least squares scaling problem to find coefficients.
 
@@ -144,9 +142,7 @@ def enumerated_product(
     yield from zip(itt.product(*(range(len(x)) for x in args)), itt.product(*args))
 
 
-def compute_dff(
-    s: ArrayLike, window_size: int = 100, q: float = 0.10
-) -> NDArray:
+def compute_dff(s: ArrayLike, window_size: int = 100, q: float = 0.10) -> NDArray:
     """
     Compute ΔF/F₀ (change in fluorescence) for a calcium signal.
 
