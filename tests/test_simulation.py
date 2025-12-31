@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from indeca.simulation import (
+from indeca.core.simulation import (
     AR2exp,
     AR2tau,
     apply_arcoef,

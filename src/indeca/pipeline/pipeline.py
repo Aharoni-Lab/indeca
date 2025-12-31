@@ -6,12 +6,12 @@ from line_profiler import profile
 from scipy.signal import find_peaks, medfilt
 from tqdm.auto import tqdm, trange
 
-from .AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
-from .dashboard import Dashboard
-from .deconv import DeconvBin, construct_R
-from .logging_config import get_module_logger
-from .simulation import AR2tau, find_dhm, tau2AR
-from .utils import compute_dff
+from indeca.core.AR_kernel import AR_upsamp_real, estimate_coefs, updateAR
+from indeca.dashboard.dashboard import Dashboard
+from indeca.core.deconv.deconv import DeconvBin, construct_R
+from indeca.utils.logging_config import get_module_logger
+from indeca.core.simulation import AR2tau, find_dhm, tau2AR
+from indeca.utils.utils import compute_dff
 
 # Initialize logger for this module
 logger = get_module_logger("pipeline")

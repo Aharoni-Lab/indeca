@@ -8,9 +8,9 @@ import xarray as xr
 from plotly.subplots import make_subplots
 from scipy.ndimage import gaussian_filter1d
 
-from indeca.deconv import DeconvBin, construct_R
+from indeca.core.deconv import DeconvBin, construct_R
 from indeca.pipeline import pipeline_bin
-from indeca.simulation import find_dhm
+from indeca.core.simulation import find_dhm
 
 from .conftest import fixt_realds, fixt_y
 from .testing_utils.cnmf import pipeline_cnmf
