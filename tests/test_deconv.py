@@ -526,9 +526,16 @@ class TestDemoDeconv:
             err_weighting=err_weighting,
             use_base=True,
         )
-        opt_s, opt_c, cur_scl, cur_obj, err_rel, nnz, cur_penal, iterdf = (
-            deconv.solve_scale(return_met=True, obj_crit=obj_crit)
-        )
+        (
+            opt_s,
+            opt_c,
+            cur_scl,
+            cur_obj,
+            err_rel,
+            nnz,
+            cur_penal,
+            iterdf,
+        ) = deconv.solve_scale(return_met=True, obj_crit=obj_crit)
         deconv.update(update_weighting=True)
         err_wt = deconv.err_wt.squeeze()
         deconv.update(update_weighting=True, clear_weighting=True, scale=1)
