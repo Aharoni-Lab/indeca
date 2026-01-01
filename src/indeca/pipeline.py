@@ -432,7 +432,6 @@ def pipeline_bin(
             opt_idx = metric_df.loc[
                 metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
             ]
-        opt_idx = -1
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
     C_ls.append(opt_C)
