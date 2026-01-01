@@ -1,8 +1,22 @@
+"""
+Main processing pipeline for InDeCa spike inference.
+
+This module provides the main entry point for running the InDeCa (Interpretable
+Deconvolution for Calcium Imaging) algorithm. It implements an iterative
+binary pursuit pipeline that alternates between:
+1. Spike inference (deconvolution) using the current kernel estimate
+2. Kernel estimation using the inferred spikes
+
+The algorithm converges when spike patterns stabilize or error criteria are met.
+"""
+
 import warnings
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 from line_profiler import profile
+from numpy.typing import NDArray
 from scipy.signal import find_peaks, medfilt
 from tqdm.auto import tqdm, trange
 
@@ -20,53 +34,153 @@ logger.info("Pipeline module initialized")  # Test message on import
 
 @profile
 def pipeline_bin(
-    Y,
-    up_factor=1,
-    p=2,
-    tau_init=None,
-    return_iter=False,
-    max_iters=50,
-    n_best=3,
-    use_rel_err=True,
-    err_atol=1e-4,
-    err_rtol=5e-2,
-    est_noise_freq=None,
-    est_use_smooth=False,
-    est_add_lag=20,
-    est_nevt=10,
-    med_wnd=None,
-    dff=True,
-    deconv_nthres=1000,
-    deconv_norm="l2",
-    deconv_atol=1e-3,
-    deconv_penal=None,
-    deconv_backend="osqp",
-    deconv_err_weighting=None,
-    deconv_use_base=True,
-    deconv_reset_scl=True,
-    deconv_masking_radius=None,
-    deconv_pks_polish=None,
-    deconv_ncons_thres=None,
-    deconv_min_rel_scl=None,
-    ar_use_all=True,
-    ar_kn_len=100,
-    ar_norm="l2",
-    ar_prop_best=None,
-    da_client=None,
-    spawn_dashboard=True,
-):
-    """Binary pursuit pipeline for spike inference.
+    Y: NDArray,
+    up_factor: int = 1,
+    p: int = 2,
+    tau_init: Optional[NDArray] = None,
+    return_iter: bool = False,
+    max_iters: int = 50,
+    n_best: int = 3,
+    use_rel_err: bool = True,
+    err_atol: float = 1e-4,
+    err_rtol: float = 5e-2,
+    est_noise_freq: Optional[Tuple[float, float]] = None,
+    est_use_smooth: bool = False,
+    est_add_lag: int = 20,
+    est_nevt: Optional[int] = 10,
+    med_wnd: Optional[Union[int, str]] = None,
+    dff: bool = True,
+    deconv_nthres: int = 1000,
+    deconv_norm: str = "l2",
+    deconv_atol: float = 1e-3,
+    deconv_penal: Optional[str] = None,
+    deconv_backend: str = "osqp",
+    deconv_err_weighting: Optional[str] = None,
+    deconv_use_base: bool = True,
+    deconv_reset_scl: bool = True,
+    deconv_masking_radius: Optional[int] = None,
+    deconv_pks_polish: Optional[bool] = None,
+    deconv_ncons_thres: Optional[Union[int, str]] = None,
+    deconv_min_rel_scl: Optional[Union[float, str]] = None,
+    ar_use_all: bool = True,
+    ar_kn_len: int = 100,
+    ar_norm: str = "l2",
+    ar_prop_best: Optional[float] = None,
+    da_client: Optional[Any] = None,
+    spawn_dashboard: bool = True,
+) -> Union[
+    Tuple[NDArray, NDArray, pd.DataFrame],
+    Tuple[NDArray, NDArray, pd.DataFrame, list, list, list, list],
+]:
+    """
+    Binary pursuit pipeline for calcium imaging spike inference.
+
+    Implements the InDeCa algorithm for inferring spike trains from calcium
+    fluorescence traces. The algorithm iteratively refines both spike estimates
+    and calcium dynamics parameters until convergence.
 
     Parameters
     ----------
-    Y : array-like
-        Input fluorescence trace
-    ...
+    Y : NDArray
+        Input fluorescence traces of shape (n_cells, n_timepoints).
+    up_factor : int, default=1
+        Temporal upsampling factor for sub-frame spike resolution.
+    p : int, default=2
+        Order of the AR process (typically 2 for bi-exponential).
+    tau_init : NDArray, optional
+        Initial time constants [τ_d, τ_r]. If None, estimated from data.
+    return_iter : bool, default=False
+        If True, return intermediate results from all iterations.
+    max_iters : int, default=50
+        Maximum number of iterations.
+    n_best : int, default=3
+        Number of best previous solutions to combine for kernel update.
+    use_rel_err : bool, default=True
+        If True, use relative error as optimization objective.
+    err_atol : float, default=1e-4
+        Absolute error tolerance for convergence.
+    err_rtol : float, default=5e-2
+        Relative error tolerance for convergence.
+    est_noise_freq : tuple of float, optional
+        Frequency range for noise estimation during initialization.
+    est_use_smooth : bool, default=False
+        If True, smooth data before initial AR estimation.
+    est_add_lag : int, default=20
+        Additional lags for Yule-Walker AR estimation.
+    est_nevt : int, optional, default=10
+        Number of top events to use for kernel update. None uses all.
+    med_wnd : int or "auto", optional
+        Median filter window size for preprocessing. "auto" uses ar_kn_len.
+    dff : bool, default=True
+        If True, compute ΔF/F₀ preprocessing.
+    deconv_nthres : int, default=1000
+        Number of threshold levels for binary pursuit.
+    deconv_norm : str, default="l2"
+        Error norm for deconvolution: "l1", "l2", or "huber".
+    deconv_atol : float, default=1e-3
+        Absolute tolerance for deconvolution solver.
+    deconv_penal : str, optional
+        Sparsity penalty type: "l0", "l1", or None.
+    deconv_backend : str, default="osqp"
+        Optimization backend: "cvxpy", "osqp", "emosqp", or "cuosqp".
+    deconv_err_weighting : str, optional
+        Error weighting scheme: "fft", "corr", "adaptive", or None.
+    deconv_use_base : bool, default=True
+        If True, estimate baseline offset.
+    deconv_reset_scl : bool, default=True
+        If True, reset scale each iteration.
+    deconv_masking_radius : int, optional
+        Radius for search region masking.
+    deconv_pks_polish : bool, optional
+        If True, refine spike locations after optimization.
+    deconv_ncons_thres : int or "auto", optional
+        Maximum consecutive spikes allowed.
+    deconv_min_rel_scl : float or "auto", optional
+        Minimum relative scale for valid solutions.
+    ar_use_all : bool, default=True
+        If True, use all cells for shared kernel estimation.
+    ar_kn_len : int, default=100
+        Kernel length in frames.
+    ar_norm : str, default="l2"
+        Error norm for kernel estimation.
+    ar_prop_best : float, optional
+        Proportion of best cells to use for kernel update.
+    da_client : distributed.Client, optional
+        Dask client for distributed computation.
+    spawn_dashboard : bool, default=True
+        If True, create interactive visualization dashboard.
 
     Returns
     -------
-    dict
-        Dictionary containing results of the pipeline
+    opt_C : NDArray
+        Optimal calcium traces of shape (n_cells, T * up_factor).
+    opt_S : NDArray
+        Optimal spike trains of shape (n_cells, T * up_factor).
+    metric_df : pd.DataFrame
+        Iteration metrics including errors, time constants, and scales.
+
+    If return_iter=True, also returns:
+    C_ls : list of NDArray
+        Calcium traces from each iteration.
+    S_ls : list of NDArray
+        Spike trains from each iteration.
+    h_ls : list of NDArray
+        Kernels from each iteration.
+    h_fit_ls : list of NDArray
+        Fitted kernels from each iteration.
+
+    Notes
+    -----
+    The algorithm converges when any of these conditions are met:
+    - Absolute error change < err_atol
+    - Relative error change < err_rtol * best_error
+    - Spike pattern unchanged from previous iteration
+    - Solution trapped in local optimum
+
+    Examples
+    --------
+    >>> C, S, metrics = pipeline_bin(fluorescence_data, up_factor=4, ar_kn_len=60)
+    >>> # S contains inferred spike trains at 4x temporal resolution
     """
     logger.info("Starting binary pursuit pipeline")
     # 0. housekeeping
