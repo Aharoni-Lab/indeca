@@ -432,7 +432,7 @@ fig.save(FIG_PATH_FIG / "deconv.svg")
 
 # %% ar-dhm
 fig_path = FIG_PATH_PN / "ar-dhm.svg"
-fig_w, fig_h = 6.8, 2
+fig_w, fig_h = 6.2, 1.8
 with sns.axes_style("white"):
     fig, axs = plt.subplots(1, 2, figsize=(fig_w, fig_h))
 end = 60
@@ -506,7 +506,9 @@ for iplt, (theta1, theta2) in enumerate([(1.6, -0.62), (1.6, -0.7)]):
     axs[iplt].set_xlabel("Timesteps")
 fig.tight_layout()
 fig.legend(
-    loc="center left", bbox_to_anchor=(1.01, 0.5), bbox_transform=axs[-1].transAxes
+    loc="lower center",
+    bbox_to_anchor=(0.5, 0.95),
+    ncol=3,
 )
 fig.savefig(fig_path, bbox_inches="tight")
 
@@ -539,7 +541,7 @@ def AR_scatter(
 fig_path = FIG_PATH_PN / "ar-full.svg"
 resdf = load_agg_result(IN_MET_PATH / "test_demo_solve_fit_h_num")
 ressub = (
-    resdf.query("taus == '(6, 1)' & upsamp < 5 & rand_seed == 2")
+    resdf.query("taus == '(6, 1)' & upsamp == 1 & rand_seed == 2")
     .astype({"upsamp": int})
     .copy()
 )
@@ -555,9 +557,7 @@ lab_map = {
     "solve_fit": "InDeCa",
     "solve_fit-all": "InDeCa /w \nshared kernel",
 }
-g = sns.FacetGrid(
-    ressub, row="upsamp", col="ns_lev", height=1.5, aspect=1.15, margin_titles=True
-)
+g = sns.FacetGrid(ressub, col="ns_lev", height=1.7, aspect=1, margin_titles=True)
 g.map_dataframe(
     AR_scatter,
     x="dhm0",
@@ -577,12 +577,12 @@ g.add_legend(
     frameon=RC_PARAM["legend.frameon"],
     fancybox=RC_PARAM["legend.fancybox"],
     framealpha=RC_PARAM["legend.framealpha"],
-    bbox_to_anchor=(1.02, 0.5),
+    bbox_to_anchor=(0.5, 1.06),
+    ncol=4,
 )
 g.set_xlabels(r"$\text{DHM}_r$ (timesteps)")
 g.set_ylabels(r"$\text{DHM}_d$" + "\n(timesteps)")
 g.set_titles(
-    row_template="Upsampling $k$: {row_name}",
     col_template="Noise level (A.U.): {col_name}",
 )
 for lab in g._legend.texts:
