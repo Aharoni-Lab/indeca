@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 
-from indeca.simulation import generate_data
+from indeca.core.simulation import generate_data
 
 OUT_PATH = "./intermediate/simulated/"
 PARAM_TAU_D = 6
