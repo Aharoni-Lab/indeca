@@ -52,7 +52,7 @@ class DeconvBin:
         free_kernel: bool = False,
         nthres: int = 1000,
         err_weighting: str = None,
-        wt_trunc_thres: float = None,
+        wt_trunc_thres: float = 1e-2,
         masking_radius: int = None,
         pks_polish: bool = True,
         th_min: float = 0,
