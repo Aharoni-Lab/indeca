@@ -186,3 +186,4 @@ cython_debug/
 !/tests/output/figs/func
 /tests/output/figs/func/*
 !/tests/output/figs/func/mlspike_comparison
+tests/*/output/
