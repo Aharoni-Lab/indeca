@@ -130,16 +130,16 @@ jobs:
 
       - name: Run Unit Tests
         id: unit
-        run: pdm run pytest tests/unit -v -n auto --cov=indeca --cov-report=xml
+        run: pdm run pytest tests/unit --cov-report=xml
 
       - name: Run Integration & Regression Tests
         id: integration
         if: success() || steps.unit.conclusion == 'failure'
-        run: pdm run pytest tests/integration tests/regression -v -n auto -m "not slow" --cov=indeca --cov-report=xml --cov-append
+        run: pdm run pytest tests/integration tests/regression -m "not slow" --cov-report=xml --cov-append
 
       - name: Run Other Tests (Robustness, Validation, Demo)
         if: success() || steps.unit.conclusion == 'failure' || steps.integration.conclusion == 'failure'
-        run: pdm run pytest tests/robustness tests/validation tests/demo -v -n auto -m "not slow" --cov=indeca --cov-report=xml --cov-append
+        run: pdm run pytest tests/robustness tests/validation tests/demo -m "not slow" --cov-report=xml --cov-append
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
