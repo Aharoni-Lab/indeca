@@ -24,7 +24,7 @@ class TestDeconvBin:
             upsamp=upsamp,
             deconv_kws={"Hlim": None},
         )
-        R = deconv.R.value if backend == "cvxpy" else deconv.R
+        R = deconv.R
         s_solve, b_solve = deconv.solve(amp_constraint=False, pks_polish=True)
         c_solve = deconv.H @ s_solve
         c_solve_R = R @ c_solve
