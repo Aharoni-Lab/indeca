@@ -5,6 +5,7 @@ import math
 import os
 import warnings
 from typing import Tuple, Any, Optional
+from dataclasses import dataclass
 
 import numpy as np
 import scipy.sparse as sps
@@ -24,6 +25,59 @@ from .utils import max_thres, max_consecutive, sum_downsample
 logger = get_module_logger("deconv")
 logger.info("Deconv module initialized")
 
+@dataclass
+class InputParams:
+    """Input parameters for deconv module."""
+    y: np.ndarray = None
+    y_len: int = None
+    theta: np.ndarray = None
+    tau: np.ndarray = None
+    ps: np.ndarray = None
+    coef: np.ndarray = None
+    coef_len: int = 100
+    scale: float = 1
+    penal: str = "l1"
+    use_base: bool = False
+    upsamp: int = 1
+    norm: str = "l2"
+    mixin: bool = False
+    backend: str = "osqp"
+    free_kernel: bool = False
+    nthres: int = 1000
+    err_weighting: str = None
+    wt_trunc_thres: float = 1e-2
+    masking_radius: int = None,
+    pks_polish: bool = True
+    th_min: float = 0
+    th_max: float = 1
+    density_thres: float = None
+    ncons_thres: int = None
+    min_rel_scl: float = None
+    max_iter_l0: int = 30
+    max_iter_penal: int = 500
+    max_iter_scal: int = 50
+    delta_l0: float = 1e-4
+    delta_penal: float = 1e-4
+    atol: float = 1e-3
+    rtol: float = 1e-3
+    Hlim: int = 1e5
+    dashboard = None
+    dashboard_uid = None
+
+@dataclass
+class UpdateParams:
+    """Update parameters for update function defined in DeconvBin class."""
+    y: np.ndarray = None
+    tau: np.ndarray = None
+    coef: np.ndarray = None
+    scale: float = None
+    scale_mul: float = None
+    l0_penal: float = None
+    l1_penal: float = None
+    w: np.ndarray = None
+    update_weighting: bool = False
+    clear_weighting: bool = False
+    scale_coef: bool = False
 
 class DeconvBin:
     """Deconvolution main class.
@@ -31,55 +85,22 @@ class DeconvBin:
     This class wraps the solver backends and provides high-level methods
     for spike inference including thresholding, penalty optimization,
     and scale estimation.
+
     """
+    def __init__(self, params: InputParams) -> None:
 
-    def __init__(
-        self,
-        y: np.ndarray = None,
-        y_len: int = None,
-        theta: np.ndarray = None,
-        tau: np.ndarray = None,
-        ps: np.ndarray = None,
-        coef: np.ndarray = None,
-        coef_len: int = 100,
-        scale: float = 1,
-        penal: str = "l1",
-        use_base: bool = False,
-        upsamp: int = 1,
-        norm: str = "l2",
-        mixin: bool = False,
-        backend: str = "osqp",
-        free_kernel: bool = False,
-        nthres: int = 1000,
-        err_weighting: str = None,
-        wt_trunc_thres: float = 1e-2,
-        masking_radius: int = None,
-        pks_polish: bool = True,
-        th_min: float = 0,
-        th_max: float = 1,
-        density_thres: float = None,
-        ncons_thres: int = None,
-        min_rel_scl: float = None,
-        max_iter_l0: int = 30,
-        max_iter_penal: int = 500,
-        max_iter_scal: int = 50,
-        delta_l0: float = 1e-4,
-        delta_penal: float = 1e-4,
-        atol: float = 1e-3,
-        rtol: float = 1e-3,
-        Hlim: int = 1e5,
-        dashboard=None,
-        dashboard_uid=None,
-    ) -> None:
+        self.params = params
+
         # Handle y input
-        if y is not None:
-            self.y_len = len(y)
-            self.y = y
+        if params.y is not None:
+            self.y_len = len(params.y)
+            self.y = params.y
         else:
-            assert y_len is not None
-            self.y_len = y_len
-            self.y = np.zeros(y_len)
+            assert params.y_len is not None
+            self.y_len = params.y_len
+            self.y = np.zeros(params.y_len)
 
+        coef_len = params.coef_len
         if coef_len is not None and coef_len > self.y_len:
             warnings.warn("Coefficient length longer than data")
             coef_len = self.y_len
@@ -89,10 +110,11 @@ class DeconvBin:
         self.tau = None
         self.ps = None
 
-        # Compute coefficients from theta or tau
+        # Compute coefficients from theta or tau.
+
         if theta is not None:
-            self.theta = np.array(theta)
-            if tau is None:
+            theta = np.array(self.theta)
+            if self.tau is None:
                 tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
                 self.tau = np.array([tau_d, tau_r])
                 self.ps = np.array([p, -p])
@@ -110,9 +132,9 @@ class DeconvBin:
                 ps is not None
             ), "exp coefficients must be provided together with time constants."
             if theta is None:
-                self.theta = np.array(tau2AR(tau[0], tau[1]))
-            self.tau = np.array(tau)
-            self.ps = ps
+                InputParams.theta = np.array(tau2AR(tau[0], tau[1]))
+            InputParams.tau = np.array(tau)
+            InputParams.ps = ps
             coef, _, _ = exp_pulse(
                 tau[0],
                 tau[1],
@@ -131,51 +153,23 @@ class DeconvBin:
         self.coef_len = len(coef)
 
         # Create config (note: frozen after creation)
-        self.cfg = DeconvConfig(
-            coef_len=coef_len,
-            scale=scale,
-            penal=penal,
-            use_base=use_base,
-            upsamp=upsamp,
-            norm=norm,
-            mixin=mixin,
-            backend=backend,
-            free_kernel=free_kernel,
-            nthres=nthres,
-            err_weighting=err_weighting,
-            wt_trunc_thres=wt_trunc_thres,
-            masking_radius=masking_radius,
-            pks_polish=pks_polish,
-            th_min=th_min,
-            th_max=th_max,
-            density_thres=density_thres,
-            # IMPORTANT: preserve old semantics: None disables consecutive constraint,
-            # and "auto" enables the (upsamp + 1) default.
-            ncons_thres=ncons_thres,
-            min_rel_scl=min_rel_scl,
-            max_iter_l0=max_iter_l0,
-            max_iter_penal=max_iter_penal,
-            max_iter_scal=max_iter_scal,
-            delta_l0=delta_l0,
-            delta_penal=delta_penal,
-            atol=atol,
-            rtol=rtol,
-            Hlim=Hlim,
-        )
+        self.cfg = DeconvConfig(params: InputParams)
 
         # Dashboard for visualization
-        self.dashboard = dashboard
-        self.dashboard_uid = dashboard_uid
+        self.dashboard = params.dashboard
+        self.dashboard_uid = params.dashboard_uid
 
         # Penalty tracking - solver tracks scale, we track penalty locally
         self._l0_penal = 0.0
         self._l1_penal = 0.0
 
-        # Create solver
+    #Solver function for the correct backend
+    def initialize_solver(self, coef: np.ndarray) -> None:
+    """coef is the coefficient kernel that gets passed as an array"""
         if self.cfg.backend == "cvxpy":
             if self.cfg.free_kernel:
                 raise NotImplementedError(
-                    "CVXPY backend does not support free_kernel mode"
+                "CVXPY backend does not support free_kernel mode"
                 )
             self.solver = CVXPYSolver(
                 self.cfg,
@@ -185,7 +179,7 @@ class DeconvBin:
                 theta=self.theta,
                 tau=self.tau,
                 ps=self.ps,
-            )
+                )
         elif self.cfg.backend in ["osqp", "cuosqp"]:
             self.solver = OSQPSolver(
                 self.cfg,
@@ -198,6 +192,9 @@ class DeconvBin:
             )
         else:
             raise ValueError(f"Unknown backend: {self.cfg.backend}")
+        # Initialize the solver
+
+        initialize_solver(coef)
 
         # State
         self.T = self.solver.T
@@ -205,8 +202,6 @@ class DeconvBin:
         self.b = 0
         self.c_bin = None
         self.s_bin = None
-        # NOTE: do not store an "err_total" here. `_res_err` expects a residual,
-        # not the raw `y`, and this value was misleading and unused.
 
         # Update dashboard with initial kernel
         if self.dashboard is not None:
@@ -214,6 +209,10 @@ class DeconvBin:
 
         # Validate coefficients
         self.solver.validate_coefficients(atol=atol)
+
+        # NOTE: do not store an "err_total" here. `_res_err` expects a residual,
+        # not the raw `y`, and this value was misleading and unused.
+
 
     @property
     def scale(self) -> float:
@@ -266,25 +265,13 @@ class DeconvBin:
         self.solver.err_wt = np.array(value)
         self.solver.Wt = sps.diags(self.solver.err_wt)
 
-    def update(
-        self,
-        y: np.ndarray = None,
-        tau: np.ndarray = None,
-        coef: np.ndarray = None,
-        scale: float = None,
-        scale_mul: float = None,
-        l0_penal: float = None,
-        l1_penal: float = None,
-        w: np.ndarray = None,
-        update_weighting: bool = False,
-        clear_weighting: bool = False,
-        scale_coef: bool = False,
-    ) -> None:
+    def update(self,update_param: UpdateParams) -> None:
         """Update parameters."""
         logger.debug(f"Updating parameters - backend: {self.cfg.backend}")
 
-        theta_new = None
-        if tau is not None:
+        self.theta_new = None
+
+        if self.tau is not None:
             theta_new = np.array(tau2AR(tau[0], tau[1]))
             p = solve_p(tau[0], tau[1])
             coef_new, _, _ = exp_pulse(
@@ -296,7 +283,7 @@ class DeconvBin:
                 kn_len=self.cfg.coef_len * self.cfg.upsamp,
             )
             coef = coef_new
-            self.tau = tau
+            s.tau = tau
             self.theta = theta_new
             self.ps = np.array([p, -p])
 
