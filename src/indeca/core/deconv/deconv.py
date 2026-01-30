@@ -85,12 +85,9 @@ class DeconvBin:
     This class wraps the solver backends and provides high-level methods
     for spike inference including thresholding, penalty optimization,
     and scale estimation.
-
     """
     def __init__(self, params: InputParams) -> None:
-
         self.params = params
-
         # Handle y input
         if params.y is not None:
             self.y_len = len(params.y)
@@ -132,9 +129,9 @@ class DeconvBin:
                 ps is not None
             ), "exp coefficients must be provided together with time constants."
             if theta is None:
-                InputParams.theta = np.array(tau2AR(tau[0], tau[1]))
-            InputParams.tau = np.array(tau)
-            InputParams.ps = ps
+                self.theta = np.array(tau2AR(tau[0], tau[1]))
+            self.tau = np.array(tau)
+            self.ps = ps
             coef, _, _ = exp_pulse(
                 tau[0],
                 tau[1],
@@ -153,7 +150,7 @@ class DeconvBin:
         self.coef_len = len(coef)
 
         # Create config (note: frozen after creation)
-        self.cfg = DeconvConfig(params: InputParams)
+        self.cfg = DeconvConfig(self, params: InputParams)
 
         # Dashboard for visualization
         self.dashboard = params.dashboard
@@ -164,108 +161,110 @@ class DeconvBin:
         self._l1_penal = 0.0
 
     #Solver function for the correct backend
-    def initialize_solver(self, coef: np.ndarray) -> None:
-    """coef is the coefficient kernel that gets passed as an array"""
-        if self.cfg.backend == "cvxpy":
-            if self.cfg.free_kernel:
-                raise NotImplementedError(
-                "CVXPY backend does not support free_kernel mode"
-                )
-            self.solver = CVXPYSolver(
-                self.cfg,
-                self.y_len,
-                y=self.y,
-                coef=coef,
-                theta=self.theta,
-                tau=self.tau,
-                ps=self.ps,
-                )
-        elif self.cfg.backend in ["osqp", "cuosqp"]:
-            self.solver = OSQPSolver(
-                self.cfg,
-                self.y_len,
-                y=self.y,
-                coef=coef,
-                theta=self.theta,
-                tau=self.tau,
-                ps=self.ps,
-            )
-        else:
-            raise ValueError(f"Unknown backend: {self.cfg.backend}")
-        # Initialize the solver
+    class SolverFunc:
+        def __init__(self):
+            self._solver = None
 
-        initialize_solver(coef)
+        @property
+        def solver(self) -> None:
+            if self._solver is None:
+                if self.cfg.backend == "cvxpy":
+                    if self.cfg.free_kernel:
+                        raise NotImplementedError(
+                            "CVXPY backend does not support free_kernel mode"
+                        )
+                    self._solver = CVXPYSolver(
+                        self.cfg,
+                        self.y_len,
+                        y=self.y,
+                        coef=self.coef,
+                        theta=self.theta,
+                        tau=self.tau,
+                        ps=self.ps,
+                    )
+                elif self.cfg.backend in ["osqp", "cuosqp"]:
+                    self._solver = OSQPSolver(
+                        self.cfg,
+                        self.y_len,
+                        y=self.y,
+                        coef=self.coef,
+                        theta=self.theta,
+                        tau=self.tau,
+                        ps=self.ps,
+                    )
+                else:
+                    raise ValueError(f"Unknown backend: {self.cfg.backend}")
+            return self._solver
 
         # State
-        self.T = self.solver.T
-        self.s = np.zeros(self.T)
-        self.b = 0
-        self.c_bin = None
-        self.s_bin = None
+    self.T = self._solver.T
+    self.s = np.zeros(self.T)
+    self.b = 0
+    self.c_bin = None
+    self.s_bin = None
 
-        # Update dashboard with initial kernel
-        if self.dashboard is not None:
-            self.dashboard.update(h=coef, uid=self.dashboard_uid)
+    # Update dashboard with initial kernel
+    if self.dashboard is not None:
+        self.dashboard.update(h=coef, uid=self.dashboard_uid)
 
-        # Validate coefficients
-        self.solver.validate_coefficients(atol=atol)
+    # Validate coefficients
+    self._solver.validate_coefficients(atol=atol)
 
         # NOTE: do not store an "err_total" here. `_res_err` expects a residual,
         # not the raw `y`, and this value was misleading and unused.
 
-
     @property
     def scale(self) -> float:
         """Current scale value (delegated to solver)."""
-        return self.solver.scale
+        return self._solver.scale
 
     @property
     def H(self):
         """Convolution matrix H."""
-        return self.solver.H
+        return self._solver.H
 
     @property
     def R(self):
         """Resampling matrix R."""
-        return self.solver.R
+        return self._solver.R
 
     @property
     def R_org(self):
         """Original (full) resampling matrix."""
-        return self.solver.R_org
+        return self._solver.R_org
 
     @property
     def nzidx_s(self):
         """Nonzero indices for s."""
-        return self.solver.nzidx_s
+        return self._solver.nzidx_s
 
     @property
     def nzidx_c(self):
         """Nonzero indices for c."""
-        return self.solver.nzidx_c
+        return self._solver.nzidx_c
 
     @property
     def coef(self):
         """Coefficient kernel."""
-        return self.solver.coef
+        return self._solver.coef
 
     @property
     def err_wt(self):
         """Error weighting vector."""
-        return self.solver.err_wt
+        return self._solver.err_wt
 
     @property
     def wgt_len(self):
         """Error weighting length."""
-        return self.solver.wgt_len
+        return self._solver.wgt_len
 
     @err_wt.setter
     def err_wt(self, value):
         """Allow direct assignment (used by tests/demo code)."""
-        self.solver.err_wt = np.array(value)
-        self.solver.Wt = sps.diags(self.solver.err_wt)
+        self._solver.err_wt = np.array(value)
+        self._solver.Wt = sps.diags(self._solver.err_wt)
 
-    def update(self,update_param: UpdateParams) -> None:
+    def update(self, update_param: UpdateParams) -> None:
         """Update parameters."""
         logger.debug(f"Updating parameters - backend: {self.cfg.backend}")
 
@@ -318,26 +317,25 @@ class DeconvBin:
 
     def _pad_s(self, s: np.ndarray = None) -> np.ndarray:
         """Pad sparse s to full length."""
-        return self.solver._pad_s(s)
+        return self._solver._pad_s(s)
 
     def _pad_c(self, c: np.ndarray = None) -> np.ndarray:
         """Pad sparse c to full length."""
-        return self.solver._pad_c(c)
+        return self._solver._pad_c(c)
 
     def _reset_cache(self) -> None:
         """Reset solver cache."""
-        self.solver.reset_cache()
+        self._solver.reset_cache()
 
     def _reset_mask(self) -> None:
         """Reset solver mask to full range."""
-        self.solver.reset_mask()
+        self._solver.reset_mask()
 
     def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
         """Update mask based on current solution."""
         # CVXPY doesn't support masking
         if self.cfg.backend == "cvxpy":
             return
-
         if self.cfg.backend in ["osqp", "cuosqp"]:
             if use_wt:
                 nzidx_s = np.where(self.R.T @ self.err_wt)[0]
@@ -519,10 +517,10 @@ class DeconvBin:
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         """Compute c from s via convolution."""
         if s is not None:
-            return self.solver.convolve(s)
+            return self._solver.convolve(s)
         else:
-            return self.solver.convolve(self.s)
-
+            return self._solver.convolve(self.s)
+#Refactoring this function
     def _res_err(self, r: np.ndarray) -> float:
         """Compute residual error."""
         if self.err_wt is not None:
@@ -535,12 +533,13 @@ class DeconvBin:
             # True Huber loss:
             # 0.5*r^2                    if |r| <= k
             # k*(|r| - 0.5*k)            otherwise
-            k = float(self.solver.huber_k)
+            k = float(self._solver.huber_k)
             ar = np.abs(r)
             quad = 0.5 * (r**2)
             lin = k * (ar - 0.5 * k)
             return float(np.sum(np.where(ar <= k, quad, lin)))
 
+# In process of refactoring this function
     def _compute_err(
         self,
         y_fit: np.ndarray = None,
@@ -580,6 +579,8 @@ class DeconvBin:
             elif obj_crit in ["aic", "bic"]:
                 T = len(r)
                 mu = r.mean()
+                #r_hat = r - mu
+                #sigma = np.dot(r_hat,r_hat) instead of ((r - mu) **2).sum() since it's just the dot product
                 sigma = max(((r - mu) ** 2).sum() / T, 1e-10)
                 logL = -0.5 * (
                     T * np.log(2 * np.pi * sigma) + 1 / sigma * ((r - mu) ** 2).sum()
