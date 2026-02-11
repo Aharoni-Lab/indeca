@@ -37,11 +37,14 @@ license = { text = "GPL-3.0" }
 
 [tool.pdm]
 distribution = true
+
 [tool.pdm.scripts]
 simulate_data = "python scripts/s00_simulate_data.py"
 benchmark_ar = "python scripts/s01_benchmark_ar.py"
 benchmark_bin = "python scripts/s01_benchmark_bin.py"
 plot_test = "python tests/plot_results.py"
+test = "pytest"
+test_parallel = "pytest -n auto"
 
 [tool.pdm.dev-dependencies]
 dev = ["line-profiler[all]>=4.1.3", "jupyter>=1.1.1", "snakeviz>=2.2.0"]
@@ -71,7 +74,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-n auto --cov=indeca --cov-report=term-missing"
+addopts = "--cov=indeca --cov-report=term-missing"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
@@ -94,7 +97,7 @@ test = [
     "black>=23.7.0,<24.0.0",
     "flake8>=6.1.0,<7.0.0",
     "mypy>=1.5.1,<2.0.0",
-    "pytest-dependency>=0.6.0",
+    #"pytest-dependency>=0.6.0",
     "pytest-order>=1.3.0",
     "pytest-plt>=1.1.1",
     "pytest-repeat>=0.9.3",
