@@ -5,7 +5,7 @@ import math
 import os
 import warnings
 from typing import Tuple, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 import numpy as np
 import scipy.sparse as sps
@@ -46,7 +46,7 @@ class InputParams:
     nthres: int = 1000
     err_weighting: str = None
     wt_trunc_thres: float = 1e-2
-    masking_radius: int = None,
+    masking_radius: int = None
     pks_polish: bool = True
     th_min: float = 0
     th_max: float = 1
@@ -64,11 +64,17 @@ class InputParams:
     dashboard = None
     dashboard_uid = None
 
+
+""" 
+Need to fix how these params are called later on in the code. For now I switched back to the old param style for 
+update() function in DeconvBin
+
 @dataclass
 class UpdateParams:
-    """Update parameters for update function defined in DeconvBin class."""
+    Update parameters for update function defined in DeconvBin class.
     y: np.ndarray = None
     tau: np.ndarray = None
+    theta: np.ndarray = None
     coef: np.ndarray = None
     scale: float = None
     scale_mul: float = None
@@ -77,7 +83,7 @@ class UpdateParams:
     w: np.ndarray = None
     update_weighting: bool = False
     clear_weighting: bool = False
-    scale_coef: bool = False
+    scale_coef: bool = False """
 
 class DeconvBin:
     """Deconvolution main class.
@@ -108,11 +114,31 @@ class DeconvBin:
         self.ps = None
 
         # Compute coefficients from theta or tau.
-
-        if theta is not None:
-            theta = np.array(self.theta)
-            if self.tau is None:
-                tau_d, tau_r, p = AR2tau(theta[0], theta[1], solve_amp=True)
+        if self.params.theta is not None:
+            theta = np.array(self.params.theta)
+        
+        # Compute tau from theta if not provided
+        if self.params.tau is None:
+            tau_d, tau_r, p = AR2tau(
+                self.params.theta[0], 
+                self.params.theta[1], 
+                solve_amp=True
+            )
+            self.tau = np.array([tau_d, tau_r])
+            self.ps = np.array([p, -p])
+        else:
+            # Both theta and tau provided
+            self.tau = np.array(self.params.tau)
+            
+            # ps must be provided when both theta and tau are given
+            assert self.params.ps is not None, \
+                "ps must be provided when both theta and tau are specified"
+            self.ps = np.array(self.params.ps)
+            
+        """ if self.params.theta is not None:
+            theta = np.array(self.params.theta)
+            if self.params.tau is None:
+                tau_d, tau_r, p = AR2tau(self.params.theta[0], self.params.theta[1], solve_amp=True)
                 self.tau = np.array([tau_d, tau_r])
                 self.ps = np.array([p, -p])
                 coef, _, _ = exp_pulse(
@@ -126,13 +152,13 @@ class DeconvBin:
                 )
         if self.params.tau is not None:
             assert (
-                ps is not None
-            ), "exp coefficients must be provided together with time constants."
+                self.ps is not None
+            ), "exp coefficients must be provided together with time cov    nstants."
             if self.params.theta is None:
                 self.theta = np.array(tau2AR(self.params.tau[0], self.params.tau[1]))
             self.tau = np.array(self.params.tau)
-            self.ps = self.params.ps
-            coef, _, _ = exp_pulse(
+            self.ps = self.params.ps """
+        coef, _, _ = exp_pulse(
                 self.params.tau[0],
                 self.params.tau[1],
                 p_d=self.params.ps[0],
@@ -150,7 +176,7 @@ class DeconvBin:
         self.coef_len = len(coef)
 
         # Create config (note: frozen after creation)
-        self.cfg = DeconvConfig(params)
+        self.cfg = DeconvConfig(**asdict(params))
 
         # Dashboard for visualization
         self.dashboard = params.dashboard
@@ -161,19 +187,19 @@ class DeconvBin:
         self._l1_penal = 0.0
 
         #Solver function for the correct backend
-        class SolverFunc:
+        """ class SolverFunc:
             def __init__(self):
-                self._solver = None
+                self.solver = None
 
             @property
             def solver(self) -> None:
-                if self._solver is None:
+                if self.solver is None:
                     if self.cfg.backend == "cvxpy":
                         if self.cfg.free_kernel:
                             raise NotImplementedError(
                                 "CVXPY backend does not support free_kernel mode"
                             )
-                        self._solver = CVXPYSolver(
+                        self.solver = CVXPYSolver(
                             self.cfg,
                             self.y_len,
                             y=self.y,
@@ -183,7 +209,7 @@ class DeconvBin:
                             ps=self.ps,
                         )
                     elif self.cfg.backend in ["osqp", "cuosqp"]:
-                        self._solver = OSQPSolver(
+                        self.solver = OSQPSolver(
                             self.cfg,
                             self.y_len,
                             y=self.y,
@@ -194,10 +220,37 @@ class DeconvBin:
                         )
                     else:
                         raise ValueError(f"Unknown backend: {self.cfg.backend}")
-                return self._solver
+                return self.solver """
+        # Create solver
+        if self.cfg.backend == "cvxpy":
+            if self.cfg.free_kernel:
+                raise NotImplementedError(
+                    "CVXPY backend does not support free_kernel mode"
+                )
+            self.solver = CVXPYSolver(
+                self.cfg,
+                self.y_len,
+                y=self.y,
+                coef=coef,
+                theta=self.theta,
+                tau=self.tau,
+                ps=self.ps,
+            )
+        elif self.cfg.backend in ["osqp", "cuosqp"]:
+            self.solver = OSQPSolver(
+                self.cfg,
+                self.y_len,
+                y=self.y,
+                coef=coef,
+                theta=self.theta,
+                tau=self.tau,
+                ps=self.ps,
+            )
+        else:
+            raise ValueError(f"Unknown backend: {self.cfg.backend}")
 
         # State
-        self.T = self._solver.T
+        self.T = self.solver.T
         self.s = np.zeros(self.T)
         self.b = 0
         self.c_bin = None
@@ -208,7 +261,7 @@ class DeconvBin:
             self.dashboard.update(h=coef, uid=self.dashboard_uid)
 
     # Validate coefficients
-        self._solver.validate_coefficients(atol=self.params.atol)
+        self.solver.validate_coefficients(atol=self.params.atol)
 
     # NOTE: do not store an "err_total" here. `_res_err` expects a residual,
     # not the raw `y`, and this value was misleading and unused.
@@ -216,120 +269,132 @@ class DeconvBin:
     @property
     def scale(self) -> float:
         """Current scale value (delegated to solver)."""
-        return self._solver.scale
+        return self.solver.scale
 
     @property
     def H(self):
         """Convolution matrix H."""
-        return self._solver.H
+        return self.solver.H
 
     @property
     def R(self):
         """Resampling matrix R."""
-        return self._solver.R
+        return self.solver.R
 
     @property
     def R_org(self):
         """Original (full) resampling matrix."""
-        return self._solver.R_org
+        return self.solver.R_org
 
     @property
     def nzidx_s(self):
         """Nonzero indices for s."""
-        return self._solver.nzidx_s
+        return self.solver.nzidx_s
 
     @property
     def nzidx_c(self):
         """Nonzero indices for c."""
-        return self._solver.nzidx_c
+        return self.solver.nzidx_c
 
     @property
     def coef(self):
         """Coefficient kernel."""
-        return self._solver.coef
+        return self.solver.coef
 
     @property
     def err_wt(self):
         """Error weighting vector."""
-        return self._solver.err_wt
+        return self.solver.err_wt
 
     @property
     def wgt_len(self):
         """Error weighting length."""
-        return self._solver.wgt_len
+        return self.solver.wgt_len
 
     @err_wt.setter
     def err_wt(self, value):
         """Allow direct assignment (used by tests/demo code)."""
-        self._solver.err_wt = np.array(value)
-        self._solver.Wt = sps.diags(self._solver.err_wt)
+        self.solver.err_wt = np.array(value)
+        self.solver.Wt = sps.diags(self.solver.err_wt)
 
-    def update(self, update_param: UpdateParams) -> None:
+    def update(
+        self,
+        y: np.ndarray = None,
+        tau: np.ndarray = None,
+        coef: np.ndarray = None,
+        scale: float = None,
+        scale_mul: float = None,
+        l0_penal: float = None,
+        l1_penal: float = None,
+        w: np.ndarray = None,
+        update_weighting: bool = False,
+        clear_weighting: bool = False,
+        scale_coef: bool = False,
+    ) -> None:
         """Update parameters."""
         logger.debug(f"Updating parameters - backend: {self.cfg.backend}")
 
-        self.theta_new = None
-
-        if self.params.tau is not None:
-            theta_new = np.array(tau2AR(self.params.tau[0], self.params.tau[1]))
-            p = solve_p(self.params.tau[0], self.params.tau[1])
+        theta_new = None
+        if tau is not None:
+            theta_new = np.array(tau2AR(tau[0], tau[1]))
+            p = solve_p(tau[0], tau[1])
             coef_new, _, _ = exp_pulse(
-                self.params.tau[0],
-                self.params.tau[1],
+                tau[0],
+                tau[1],
                 p_d=p,
                 p_r=-p,
                 nsamp=self.cfg.coef_len * self.cfg.upsamp,
                 kn_len=self.cfg.coef_len * self.cfg.upsamp,
             )
             coef = coef_new
-            self.params.s.tau = self.params.tau
+            self.tau = tau
             self.theta = theta_new
             self.ps = np.array([p, -p])
 
-        if coef is not None and self.params.scale_coef:
+        if coef is not None and scale_coef:
             current_coef = (
-                self._solver.coef if self._solver.coef is not None else np.ones_like(coef)
+                self.solver.coef if self.solver.coef is not None else np.ones_like(coef)
             )
             scale_mul = scal_lstsq(coef, current_coef).item()
 
-        if self.params.l0_penal is not None:
-            self._l0_penal = self.params.l0_penal
-        if self.params.l1_penal is not None:
-            self._l1_penal = self.params.l1_penal
+        if l0_penal is not None:
+            self._l0_penal = l0_penal
+        if l1_penal is not None:
+            self._l1_penal = l1_penal
 
         # Forward updates to solver (solver handles scale directly)
-        self._solver.update(
-            y=self.params.y,
+        self.solver.update(
+            y=y,
             coef=coef,
-            scale=self.params.scale,
+            scale=scale,
             scale_mul=scale_mul,
-            l1_penal=self._l1_penal if self.params.l1_penal is not None else None,
-            l0_penal=self._l0_penal if self.params.l0_penal is not None else None,
-            w=self.params.w,
+            l1_penal=self._l1_penal if l1_penal is not None else None,
+            l0_penal=self._l0_penal if l0_penal is not None else None,
+            w=w,
             theta=theta_new if theta_new is not None else self.theta,
-            update_weighting=self.params.update_weighting,
-            clear_weighting=self.params.clear_weighting,
-            scale_coef=self.params.scale_coef,
+            update_weighting=update_weighting,
+            clear_weighting=clear_weighting,
+            scale_coef=scale_coef,
         )
 
-        if self.params.y is not None:
-            self.y = self.params.y
+        if y is not None:
+            self.y = y
 
     def _pad_s(self, s: np.ndarray = None) -> np.ndarray:
         """Pad sparse s to full length."""
-        return self._solver._pad_s(s)
+        return self.solver._pad_s(s)
 
     def _pad_c(self, c: np.ndarray = None) -> np.ndarray:
         """Pad sparse c to full length."""
-        return self._solver._pad_c(c)
+        return self.solver._pad_c(c)
 
     def _reset_cache(self) -> None:
         """Reset solver cache."""
-        self._solver.reset_cache()
+        self.solver.reset_cache()
 
     def _reset_mask(self) -> None:
         """Reset solver mask to full range."""
-        self._solver.reset_mask()
+        self.solver.reset_mask()
 
     def _update_mask(self, use_wt: bool = False, amp_constraint: bool = True) -> None:
         """Update mask based on current solution."""
@@ -517,9 +582,9 @@ class DeconvBin:
     def _compute_c(self, s: np.ndarray = None) -> np.ndarray:
         """Compute c from s via convolution."""
         if s is not None:
-            return self._solver.convolve(s)
+            return self.solver.convolve(s)
         else:
-            return self._solver.convolve(self.s)
+            return self.solver.convolve(self.s)
 
     def _res_err(self, r: np.ndarray) -> float:
         """Compute residual error."""
@@ -534,7 +599,7 @@ class DeconvBin:
             # True Huber loss:
             # 0.5*r^2                    if |r| <= k
             # k*(|r| - 0.5*k)            otherwise
-            k = float(self._solver.huber_k)
+            k = float(self.solver.huber_k)
             ar = np.abs(r)
             quad = 0.5 * (r**2)
             lin = k * (ar - 0.5 * k)
