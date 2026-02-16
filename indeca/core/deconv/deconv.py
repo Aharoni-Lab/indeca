@@ -129,7 +129,8 @@ class DeconvBin:
         else:
             # Both theta and tau provided
             self.tau = np.array(self.params.tau)
-            
+            # Compute theta from tau
+            self.theta = np.array(tau2AR(self.tau[0], self.tau[1]))
             # ps must be provided when both theta and tau are given
             assert self.params.ps is not None, \
                 "ps must be provided when both theta and tau are specified"
@@ -159,10 +160,10 @@ class DeconvBin:
             self.tau = np.array(self.params.tau)
             self.ps = self.params.ps """
         coef, _, _ = exp_pulse(
-                self.params.tau[0],
-                self.params.tau[1],
-                p_d=self.params.ps[0],
-                p_r=self.params.ps[1],
+                self.tau[0],
+                self.tau[1],
+                p_d=self.ps[0],
+                p_r=self.ps[1],
                 nsamp=coef_len * self.params.upsamp,
                 kn_len=coef_len * self.params.upsamp,
                 trunc_thres=self.params.atol,

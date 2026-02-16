@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 class DeconvConfig(BaseModel):
     """Configuration for DeconvBin."""
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "ignore"}
 
     coef_len: int = Field(
         100, description="Length of the coefficient kernel (e.g. calcium response)."
