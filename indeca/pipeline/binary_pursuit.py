@@ -28,6 +28,7 @@ from .iteration import run_deconv_step
 from .metrics import append_metrics, make_cur_metric, update_dashboard
 from .preprocess import preprocess_traces
 from .types import IterationState
+from dask.distributed import Client
 
 logger = get_module_logger("pipeline")
 
@@ -37,7 +38,7 @@ def pipeline_bin(
     Y: np.ndarray,
     *,
     config: DeconvPipelineConfig,
-    da_client: Any = None,
+    da_client: Client | None = None,
     spawn_dashboard: bool = True,
     return_iter: bool = False,
 ) -> Union[

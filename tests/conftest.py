@@ -164,7 +164,7 @@ def fixt_deconv(
     taus_up = np.array(taus) * upsamp
     _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
     
-    # Create InputParams first
+    # Make sure you have InputParams first
     params = InputParams(
         y=y,
         tau=taus_up,

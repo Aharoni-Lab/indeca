@@ -3,6 +3,7 @@
 Handles AR parameter estimation and DeconvBin instance creation.
 """
 
+from concurrent import futures
 from typing import List, Optional, Tuple, Any
 
 import numpy as np
@@ -13,7 +14,7 @@ from indeca.core.deconv.deconv import InputParams
 from indeca.core.simulation import AR2tau, tau2AR
 
 from .types import ARParams
-
+from dask.distributed import Client
 
 def initialize_ar_params(
     Y: np.ndarray,
@@ -108,8 +109,8 @@ def initialize_deconvolvers(
     atol: float,
     backend: str,
     dashboard: Any,
-    da_client: Any,
-) -> List[Any]:
+    da_client: Client | None = None,
+) -> List[DeconvBin]|List[futures.Future[DeconvBin]]:
     """Create DeconvBin instances for all cells.
 
     Parameters
@@ -163,6 +164,7 @@ def initialize_deconvolvers(
         dcv = [
             da_client.submit(
                 lambda yy, th, tau_i, ps_i: DeconvBin(
+                    InputParams(
                     y=yy,
                     theta=th,
                     tau=tau_i,
@@ -182,6 +184,7 @@ def initialize_deconvolvers(
                     backend=backend,
                     dashboard=dashboard,
                     dashboard_uid=i,
+                    )
                 ),
                 y,
                 theta[i],
@@ -190,7 +193,9 @@ def initialize_deconvolvers(
             )
             for i, y in enumerate(Y)
         ]
+        #dcv = da_client.gather(dcv)  #
     else:
+        
         # Local execution
         dcv = [
             DeconvBin(

@@ -3,11 +3,13 @@
 Handles building the per-iteration metrics DataFrame.
 """
 
+from dask.distributed import Future
 from typing import Any, List
 
 import numpy as np
 import pandas as pd
 
+from indeca.core.deconv.deconv import DeconvBin
 from indeca.core.simulation import find_dhm
 
 from .types import DeconvStepResult
@@ -20,7 +22,7 @@ def make_cur_metric(
     tau: np.ndarray,
     scale: np.ndarray,
     deconv_result: DeconvStepResult,
-    deconvolvers: List[Any],
+    deconvolvers: List[DeconvBin] | List[Future[DeconvBin]],
     use_rel_err: bool,
 ) -> pd.DataFrame:
     """Construct the metrics DataFrame for the current iteration.
@@ -57,7 +59,11 @@ def make_cur_metric(
         ],
         axis=0,
     )
-
+    if isinstance(deconvolvers[0], Future):
+        dcv = [d.result() for d in deconvolvers]
+    else:
+        dcv = deconvolvers
+        
     cur_metric = pd.DataFrame(
         {
             "iter": i_iter,
@@ -74,7 +80,7 @@ def make_cur_metric(
             "penal": deconv_result.penal,
             "nnz": deconv_result.nnz,
             "obj": deconv_result.err_rel if use_rel_err else deconv_result.err,
-            "wgt_len": [d.wgt_len for d in deconvolvers],
+            "wgt_len": [d.wgt_len for d in dcv],
         }
     )
 
