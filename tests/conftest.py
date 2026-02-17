@@ -18,6 +18,16 @@ from indeca.core.simulation import AR2tau, ar_trace, tau2AR
 from tests.testing_utils.io import download_realds, load_gt_ds, subset_gt_ds
 from tests.testing_utils.misc import get_upsamp_scale
 
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Add tests directory to Python path
+tests_dir = Path(__file__).parent
+if str(tests_dir) not in sys.path:
+    sys.path.insert(0, str(tests_dir))
+
+
 AGG_RES_DIR = "tests/output/data/agg"
 TEST_DATA_DIR = "tests/data"
 

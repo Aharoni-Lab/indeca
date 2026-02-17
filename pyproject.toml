@@ -29,6 +29,8 @@ dependencies = [
     "numba>=0.61.2",
     "pydantic>=2.0",
     "yappi>=1.6.0",
+    "caiman>=0.1.0",
+    "oasis-deconv>=0.2.1",
 ]
 requires-python = ">=3.11,<3.13"
 readme = "README.md"

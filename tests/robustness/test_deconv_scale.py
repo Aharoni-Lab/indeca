@@ -2,6 +2,7 @@ import numpy as np
 import plotly.graph_objects as go
 import pytest
 
+from indeca.core.deconv.deconv import InputParams
 from indeca.core.simulation import AR2tau, tau2AR
 from indeca.core.deconv import DeconvBin
 from tests.conftest import fixt_y
@@ -47,6 +48,14 @@ class TestDeconvBin:
         )
         taus_up = np.array(taus) * upsamp
         _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
+        
+        params = InputParams(
+            y=y,
+            tau=taus,
+            ps=(p, -p),
+            penal=penalty,
+            err_weighting=err_weighting,
+        )
         deconv = DeconvBin(
             y=y,
             tau=taus,

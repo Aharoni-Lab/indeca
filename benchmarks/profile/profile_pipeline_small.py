@@ -29,7 +29,7 @@ import numpy as np
 
 # Add project root to path for imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from indeca.core.simulation import ar_trace, tau2AR
 from indeca.pipeline import DeconvPipelineConfig, pipeline_bin_new

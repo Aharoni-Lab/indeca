@@ -9,6 +9,7 @@ import numpy as np
 
 from indeca.core.AR_kernel import AR_upsamp_real, estimate_coefs
 from indeca.core.deconv import DeconvBin
+from indeca.core.deconv.deconv import InputParams
 from indeca.core.simulation import AR2tau, tau2AR
 
 from .types import ARParams
@@ -193,6 +194,7 @@ def initialize_deconvolvers(
         # Local execution
         dcv = [
             DeconvBin(
+                InputParams(
                 y=y,
                 theta=theta[i],
                 tau=tau[i],
@@ -212,6 +214,7 @@ def initialize_deconvolvers(
                 backend=backend,
                 dashboard=dashboard,
                 dashboard_uid=i,
+                )
             )
             for i, y in enumerate(Y)
         ]

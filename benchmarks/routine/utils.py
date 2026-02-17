@@ -1,4 +1,14 @@
 import itertools as itt
+import sys
+from pathlib import Path
+
+# Add project root to path
+# routine/utils.py
+# .parent = routine/
+# .parent.parent = benchmarks/
+# .parent.parent.parent = project root
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import cv2
 import dask as da

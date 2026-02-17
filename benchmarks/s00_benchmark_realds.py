@@ -1,7 +1,16 @@
 import logging
 import logging.handlers
 import os
+import sys
 from pathlib import Path
+
+# Add project root to path
+# benchmarks/s00_benchmark_realds.py
+# .parent = benchmarks/
+# .parent.parent = project root
+
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 import dask as da
 import numpy as np
@@ -165,7 +174,7 @@ if __name__ == "__main__":
             logger.info(f"Downloading dataset: {dsname}")
             download_realds(LOCAL_DS_PATH, dsname)
         logger.info(f"Processing dataset: {dsname}")
-        Y, S_true = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
+        Y, S_true, ap_df, fluo_df= load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         logger.debug(f"Loaded dataset shape - Y: {Y.shape}, S_true: {S_true.shape}")
         Y = Y.dropna("frame")
         S_true = S_true.dropna("frame")

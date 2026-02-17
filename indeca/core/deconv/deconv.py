@@ -61,8 +61,8 @@ class InputParams:
     atol: float = 1e-3
     rtol: float = 1e-3
     Hlim: int = 1e5
-    dashboard = None
-    dashboard_uid = None
+    dashboard: Any = None
+    dashboard_uid: Any = None
 
 
 """ 
