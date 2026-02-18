@@ -49,19 +49,15 @@ class TestDeconvBin:
         taus_up = np.array(taus) * upsamp
         _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
         
-        params = InputParams(
-            y=y,
-            tau=taus,
-            ps=(p, -p),
-            penal=penalty,
-            err_weighting=err_weighting,
         )
         deconv = DeconvBin(
+            InputParams(
             y=y,
             tau=taus,
             ps=(p, -p),
             penal=penalty,
             err_weighting=err_weighting,
+            )
         )
         (
             opt_s,
