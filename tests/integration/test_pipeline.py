@@ -201,6 +201,10 @@ class TestPipeline:
             f1_last = res_df.set_index(["method", "iter"]).loc[
                 ("indeca", niter - 1), "f1"
             ]
+    
+            # Also print full results for last iteration
+            print("Full results for last iteration:")
+            print(res_df[res_df["iter"] == niter - 1])
             assert f1_last.min() == 1
 
 

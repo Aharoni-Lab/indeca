@@ -119,6 +119,7 @@ class DeconvBin:
         
         # Compute tau from theta if not provided
         if self.params.tau is None:
+            self.theta = np.array(self.params.theta)
             tau_d, tau_r, p = AR2tau(
                 self.params.theta[0], 
                 self.params.theta[1], 

@@ -87,7 +87,7 @@ def initialize_ar_params(
             tau[icell, :] = cur_tau
             theta[icell, :] = cur_theta
             ps[icell, :] = cur_p
-
+        
     return ARParams(theta=theta, tau=tau, ps=ps)
 
 
