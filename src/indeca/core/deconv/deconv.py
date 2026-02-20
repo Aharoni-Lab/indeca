@@ -25,9 +25,11 @@ from .utils import max_thres, max_consecutive, sum_downsample
 logger = get_module_logger("deconv")
 logger.info("Deconv module initialized")
 
+
 @dataclass
 class InputParams:
     """Input parameters for deconv module."""
+
     y: np.ndarray = None
     y_len: int = None
     theta: np.ndarray = None
@@ -85,6 +87,7 @@ class UpdateParams:
     clear_weighting: bool = False
     scale_coef: bool = False """
 
+
 class DeconvBin:
     """Deconvolution main class.
 
@@ -92,6 +95,7 @@ class DeconvBin:
     for spike inference including thresholding, penalty optimization,
     and scale estimation.
     """
+
     def __init__(self, params: InputParams) -> None:
         self.params = params
         # Handle y input
@@ -100,8 +104,8 @@ class DeconvBin:
             self.y = params.y
         else:
             assert params.y_len is not None
-            self.y_len = params.y_len
-            self.y = np.zeros(params.y_len)
+            # self.y_len = params.y_len#
+            self.y = np.zeros(self.y_len)
 
         coef_len = params.coef_len
         if coef_len is not None and coef_len > self.y_len:
@@ -114,29 +118,26 @@ class DeconvBin:
         self.ps = None
 
         # Compute coefficients from theta or tau.
-        if self.params.theta is not None:
-            theta = np.array(self.params.theta)
-        
+        if params.theta is not None:
+            self.theta = np.array(params.theta)
+
         # Compute tau from theta if not provided
-        if self.params.tau is None:
-            self.theta = np.array(self.params.theta)
-            tau_d, tau_r, p = AR2tau(
-                self.params.theta[0], 
-                self.params.theta[1], 
-                solve_amp=True
-            )
+        if params.tau is None:
+            self.theta = np.array(params.theta)
+            tau_d, tau_r, p = AR2tau(self.theta[0], self.theta[1], solve_amp=True)
             self.tau = np.array([tau_d, tau_r])
             self.ps = np.array([p, -p])
         else:
             # Both theta and tau provided
-            self.tau = np.array(self.params.tau)
+            self.tau = np.array(params.tau)
             # Compute theta from tau
             self.theta = np.array(tau2AR(self.tau[0], self.tau[1]))
             # ps must be provided when both theta and tau are given
-            assert self.params.ps is not None, \
-                "ps must be provided when both theta and tau are specified"
-            self.ps = np.array(self.params.ps)
-            
+            assert (
+                params.ps is not None
+            ), "ps must be provided when both theta and tau are specified"
+            self.ps = np.array(params.ps)
+
         """ if self.params.theta is not None:
             theta = np.array(self.params.theta)
             if self.params.tau is None:
@@ -161,14 +162,14 @@ class DeconvBin:
             self.tau = np.array(self.params.tau)
             self.ps = self.params.ps """
         coef, _, _ = exp_pulse(
-                self.tau[0],
-                self.tau[1],
-                p_d=self.ps[0],
-                p_r=self.ps[1],
-                nsamp=coef_len * self.params.upsamp,
-                kn_len=coef_len * self.params.upsamp,
-                trunc_thres=self.params.atol,
-            )
+            self.tau[0],
+            self.tau[1],
+            p_d=self.ps[0],
+            p_r=self.ps[1],
+            nsamp=coef_len * self.params.upsamp,
+            kn_len=coef_len * self.params.upsamp,
+            trunc_thres=self.params.atol,
+        )
         if coef is None:
             assert coef_len is not None
             coef = np.ones(coef_len * self.params.upsamp)
@@ -188,7 +189,7 @@ class DeconvBin:
         self._l0_penal = 0.0
         self._l1_penal = 0.0
 
-        #Solver function for the correct backend
+        # Solver function for the correct backend
         """ class SolverFunc:
             def __init__(self):
                 self.solver = None
@@ -258,11 +259,11 @@ class DeconvBin:
         self.c_bin = None
         self.s_bin = None
 
-    # Update dashboard with initial kernel
+        # Update dashboard with initial kernel
         if self.dashboard is not None:
             self.dashboard.update(h=coef, uid=self.dashboard_uid)
 
-    # Validate coefficients
+        # Validate coefficients
         self.solver.validate_coefficients(atol=self.params.atol)
 
     # NOTE: do not store an "err_total" here. `_res_err` expects a residual,
@@ -498,7 +499,7 @@ class DeconvBin:
                     s_new[idx_min] = rsum / len(idx_min)
                     s_ret = s_new
         return s_ret
-    
+
     def solve(
         self,
         amp_constraint: bool = True,
@@ -507,7 +508,7 @@ class DeconvBin:
         pks_delta: float = 1e-5,
         pks_err_rtol: float = 10,
         pks_cut: bool = False,
-        ) -> Tuple[np.ndarray, float]:
+    ) -> Tuple[np.ndarray, float]:
         """Solve main routine (l0 heuristic wrapper)."""
         if self._l0_penal == 0:
             opt_s, opt_b, _ = self.solver.solve(amp_constraint=amp_constraint)
@@ -595,8 +596,8 @@ class DeconvBin:
         if self.cfg.norm == "l1":
             return float(np.linalg.norm(r, ord=1))
         elif self.cfg.norm == "l2":
-            return float(np.dot(r,r))
-            #np.sum(r**2)
+            return float(np.dot(r, r))
+            # np.sum(r**2)
         elif self.cfg.norm == "huber":
             # True Huber loss:
             # 0.5*r^2                    if |r| <= k
@@ -607,7 +608,7 @@ class DeconvBin:
             lin = k * (ar - 0.5 * k)
             return float(np.sum(np.where(ar <= k, quad, lin)))
 
-# In process of refactoring this function
+    # In process of refactoring this function
     def _compute_err(
         self,
         y_fit: np.ndarray = None,
@@ -618,7 +619,7 @@ class DeconvBin:
         obj_crit: str = None,
     ) -> float:
         """Compute error/objective value using AIC and BIC.
-        
+
         Args:   y_fit: Fitted fluorescence trace
                 b: Background
                 c: Calcium trace
@@ -626,7 +627,7 @@ class DeconvBin:
                 res: Residual
                 obj_crit: Objective criterion to compute
         """
-        #y = np.array(self.y)  I am changing this to self.y because I don't think y needs to be copied. should speed things up. 
+        # y = np.array(self.y)  I am changing this to self.y because I don't think y needs to be copied. should speed things up.
         y = self.y
         if res is not None:
             y = y - res
@@ -656,14 +657,16 @@ class DeconvBin:
                 T = len(r)
                 mu = r.mean()
                 r_hat = r - mu
-                var = np.dot(r_hat, r_hat) / T 
+                var = np.dot(r_hat, r_hat) / T
                 sigma = max(var, 1e-10)
-                #sigma = max(((r - mu) ** 2).sum() / T, 1e-10)
-                #logL = -0.5 * (
+                # sigma = max(((r - mu) ** 2).sum() / T, 1e-10)
+                # logL = -0.5 * (
                 #    T * np.log(2 * np.pi * sigma) + 1 / sigma * ((r - mu) ** 2).sum()
-                #)
-                logL = -0.5 * T * (np.log(2 * np.pi * sigma) + 1) #Simplified this bc ((r - mu) ** 2).sum() should just be T * sigma 
-                
+                # )
+                logL = (
+                    -0.5 * T * (np.log(2 * np.pi * sigma) + 1)
+                )  # Simplified this bc ((r - mu) ** 2).sum() should just be T * sigma
+
                 if obj_crit == "aic":
                     return float(2 * (nspk - logL))
                 elif obj_crit == "bic":
@@ -685,7 +688,7 @@ class DeconvBin:
         S_ls = [np.array(ss) for ss in S_ls]
 
         # Apply density threshold
-        if self.cfg.density_thres is not None:  
+        if self.cfg.density_thres is not None:
             Sden = [ss.sum() / self.T for ss in S_ls]
             S_ls = [ss for ss, den in zip(S_ls, Sden) if den < self.cfg.density_thres]
             thres = [th for th, den in zip(thres, Sden) if den < self.cfg.density_thres]

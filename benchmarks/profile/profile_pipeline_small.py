@@ -93,12 +93,12 @@ def plot_pipeline_results(
     Y: np.ndarray, C: np.ndarray, S: np.ndarray, output_dir: Path
 ) -> None:
     """Plot and save pipeline results visualization.
-    
+
     For each cell, overlays:
     - Y: Input fluorescence trace (test data)
     - C: Deconvolved calcium trace
     - S: Inferred spike train
-    
+
     Parameters
     ----------
     Y : np.ndarray
@@ -112,23 +112,23 @@ def plot_pipeline_results(
     """
     ncell, T = Y.shape
     T_up = C.shape[1]
-    
+
     # Create figure with subplots (one row per cell)
     fig, axes = plt.subplots(ncell, 1, figsize=(14, 2.5 * ncell), sharex=True)
     if ncell == 1:
         axes = [axes]
-    
+
     time_axis = np.arange(T)
     time_axis_up = np.arange(T_up)
-    
+
     for i in range(ncell):
         ax = axes[i]
-        
+
         # Normalize traces for better visualization (optional scaling)
         y_norm = Y[i]
         c_norm = C[i]
         s_norm = S[i]
-        
+
         # Plot input fluorescence (Y) - use original time axis
         ax.plot(
             time_axis,
@@ -139,7 +139,7 @@ def plot_pipeline_results(
             label="Y (input)",
             zorder=1,
         )
-        
+
         # Plot deconvolved calcium (C) - use upsampled time axis
         ax.plot(
             time_axis_up,
@@ -150,7 +150,7 @@ def plot_pipeline_results(
             label="C (calcium)",
             zorder=2,
         )
-        
+
         # Plot inferred spikes (S) - use upsampled time axis
         # Scale spikes for visibility (multiply by max of Y or C for relative scaling)
         scale_factor = max(y_norm.max(), c_norm.max()) * 0.3
@@ -177,12 +177,12 @@ def plot_pipeline_results(
             linestyle="--",
             zorder=2,
         )
-        
+
         ax.set_ylabel(f"Cell {i+1}", fontsize=10, fontweight="bold")
         ax.grid(True, alpha=0.3, zorder=0)
         ax.legend(loc="upper right", fontsize=9)
         ax.set_title(f"Cell {i+1}: Input (Y), Calcium (C), and Spikes (S)", fontsize=11)
-    
+
     axes[-1].set_xlabel("Time (frames)", fontsize=10)
     fig.suptitle(
         f"Pipeline Results: {ncell} cells × {T} frames (upsampled to {T_up})",
@@ -190,13 +190,13 @@ def plot_pipeline_results(
         y=0.995,
     )
     plt.tight_layout()
-    
+
     # Save plot
     output_dir.mkdir(parents=True, exist_ok=True)
     plot_path = output_dir / "pipeline_results.png"
     plt.savefig(plot_path, dpi=150, bbox_inches="tight")
     plt.close()
-    
+
     print(f"Saved pipeline results plot: {plot_path}")
 
 
@@ -234,11 +234,11 @@ def run_benchmark(profile: bool = False, clock: str = "wall") -> float:
     # Reset random seed for reproducibility
     # This ensures deterministic behavior across runs
     np.random.seed(SEED)
-    
+
     # Generate data
     print(f"Generating test data: {NCELL} cells x {T} frames (seed={SEED})")
     Y = make_test_data(NCELL, T, SEED)
-    
+
     config = get_config()
 
     print(f"Running pipeline (max_iters={MAX_ITERS})...")
@@ -306,4 +306,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

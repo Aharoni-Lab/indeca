@@ -174,7 +174,7 @@ if __name__ == "__main__":
             logger.info(f"Downloading dataset: {dsname}")
             download_realds(LOCAL_DS_PATH, dsname)
         logger.info(f"Processing dataset: {dsname}")
-        Y, S_true, ap_df, fluo_df= load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
+        Y, S_true, ap_df, fluo_df = load_gt_ds(os.path.join(LOCAL_DS_PATH, dsname))
         logger.debug(f"Loaded dataset shape - Y: {Y.shape}, S_true: {S_true.shape}")
         Y = Y.dropna("frame")
         S_true = S_true.dropna("frame")

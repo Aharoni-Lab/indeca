@@ -63,7 +63,7 @@ def make_cur_metric(
         dcv = [d.result() for d in deconvolvers]
     else:
         dcv = deconvolvers
-        
+
     cur_metric = pd.DataFrame(
         {
             "iter": i_iter,

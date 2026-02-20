@@ -148,6 +148,7 @@ def fixt_y(
         )
     return Y, C, C_org, S, S_org, scales
 
+
 def fixt_deconv(
     taus,
     norm="l2",
@@ -163,7 +164,7 @@ def fixt_deconv(
     assert y.ndim == 1, "fixt_deconv only support single cell mode"
     taus_up = np.array(taus) * upsamp
     _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
-    
+
     # Make sure you have InputParams first
     params = InputParams(
         y=y,
@@ -175,16 +176,15 @@ def fixt_deconv(
         norm=norm,
         **deconv_kws,
     )
-    
+
     # Then pass it to DeconvBin
     deconv = DeconvBin(params)
-    
+
     if upsamp_y != upsamp:
         scl = get_upsamp_scale(taus, upsamp_y, upsamp)
         deconv.update(scale=scl)
-    
-    return deconv, y, c, c_org, s, s_org, scale
 
+    return deconv, y, c, c_org, s, s_org, scale
 
 
 # @pytest.hookimpl(tryfirst=True)

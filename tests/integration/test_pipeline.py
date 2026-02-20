@@ -9,7 +9,7 @@ if str(project_root) not in sys.path:
 tests_dir = Path(__file__).parent.parent  # Go up 2 levels: output → tests
 if str(tests_dir) not in sys.path:
     sys.path.insert(0, str(tests_dir))
-    
+
 import itertools as itt
 import os
 
@@ -201,7 +201,7 @@ class TestPipeline:
             f1_last = res_df.set_index(["method", "iter"]).loc[
                 ("indeca", niter - 1), "f1"
             ]
-    
+
             # Also print full results for last iteration
             print("Full results for last iteration:")
             print(res_df[res_df["iter"] == niter - 1])

@@ -71,4 +71,3 @@ def yappi_profile(outfile: str, clock: str = "wall") -> Generator[None, None, No
     finally:
         yappi.stop()
         yappi.get_func_stats().save(outfile, type="pstat")
-

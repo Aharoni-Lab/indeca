@@ -537,7 +537,6 @@ class OSQPSolver(DeconvSolver):
             Mw = M.multiply(w[:, None])  # = diag(w) @ M
             P = Mw.T @ Mw
 
-
         elif self.cfg.norm == "huber":
             lc = len(self.nzidx_c)
             ls = len(self.nzidx_s)

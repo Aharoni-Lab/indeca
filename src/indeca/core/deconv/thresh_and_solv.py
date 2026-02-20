@@ -12,8 +12,9 @@ from scripts.s01_caiman_test import S_ls
 # is first defined (solv), followed by an initial generation of thresholded spike trains (max_thres and _max_thres)
 # and then the iterative search for the most ideal inferred spike train (solve_thres).
 
-#This function allows us to generate multiple thresholded versions of an input array used as part 
+# This function allows us to generate multiple thresholded versions of an input array used as part
 # of iterative spike inference process
+
 
 def max_thres(
     a: np.ndarray,
@@ -27,77 +28,89 @@ def max_thres(
     reverse_thres=False,
     nz_only: bool = False,
 ):
-    """Threshold array a with nthres levels."""    
+    """Threshold array a with nthres levels."""
+
     # Normalization and setup step
     def _normalize_input(a):
         input_array = np.asarray(a)
         max_value = input_array.max()
         return input_array, max_value
-    
-    #Generating threshold level
-    def _generate_thresholds(nthres,th_min, th_max, reverse_thres):
+
+    # Generating threshold level
+    def _generate_thresholds(nthres, th_min, th_max, reverse_thres):
         if reverse_thres:
             thresholds = np.linspace(th_max, th_min, nthres)
         else:
             thresholds = np.linspace(th_min, th_max, nthres)
         return thresholds
-    
-    #Actually applying different threshold levels
+
+        # Actually applying different threshold levels
         """Generate different versions of array (spike trains) using multiple thresholds 
         """
+
     def _apply_thresholds(array, max_value, thresholds, th_amplitude, delta):
         if th_amplitude:
-            spike_trains = [np.floor_divide(array, (max_value * th).clip(delta, None)) for th in thresholds]
+            spike_trains = [
+                np.floor_divide(array, (max_value * th).clip(delta, None))
+                for th in thresholds
+            ]
         else:
-            spike_trains = [(array > (max_value * th).clip(delta, None)) for th in thresholds]
+            spike_trains = [
+                (array > (max_value * th).clip(delta, None)) for th in thresholds
+            ]
         return spike_trains
-        
-    #Downsampling (optional)
+
+    # Downsampling (optional)
     def _downsample(spike_trains, ds):
         if ds is None:
             return spike_trains
         else:
-        downsampled_spikes = [sum_downsample(input_array, ds) for input_array in spike_trains]
-        return downsampled_spikes    
-        
-    #Filter for nonzero vals
+            downsampled_spikes = [
+                sum_downsample(input_array, ds) for input_array in spike_trains
+            ]
+        return downsampled_spikes
+
+    # Filter for nonzero vals
     def _filter_nonzero(spike_trains, thresholds, nz_only):
         if not nz_only:
             return spike_trains, thresholds
-        
+
         filtered_trains_nz = [input_array.sum() > 0 for input_array in spike_trains]
-        #Compares the spike_trains, threshold arrays against the filtered_trains_nz array and keeps elements that 
-        #nonzero
+        # Compares the spike_trains, threshold arrays against the filtered_trains_nz array and keeps elements that
+        # nonzero
         spike_trains = [ss for ss, nz in zip(spike_trains, filtered_trains_nz) if nz]
-        filtered_thresholds = [th for th, nz in zip(thresholds, filtered_trains_nz) if nz]
-    
+        filtered_thresholds = [
+            th for th, nz in zip(thresholds, filtered_trains_nz) if nz
+        ]
+
         return filtered_trains_nz, filtered_thresholds
-    
-    #Results
-    def _give_results(spike_trains, thresholds, return_thres)
+
+    # Results
+    def _give_results(spike_trains, thresholds, return_thres):
         if return_thres:
             return spike_trains, thresholds
         else:
             return spike_trains
-    
-    #max_thres function using all our modules
+
+    # max_thres function using all our modules
     input_array, max_value = _normalize_input(a)
-    
+
     thresholds = _generate_threshold_levels(nthres, th_min, th_max, reverse_thres)
-    
+
     spike_trains = _apply_thresholds(
         input_array, max_value, thresholds, th_amplitude, delta
     )
-    
+
     spike_trains = _apply_downsampling(spike_trains, ds)
-    
+
     spike_trains, thresholds = _filter_nonzero_results(
         spike_trains, thresholds, nz_only
     )
-    
+
     return _give_results(spike_trains, thresholds, return_thres)
 
-def solve(
+
+""" def solve(
         self,
         amp_constraint: bool = True,
         update_cache: bool = False,
@@ -106,62 +119,61 @@ def solve(
         pks_err_rtol: float = 10,
         pks_cut: bool = False,
     ) -> Tuple[np.ndarray, float]:
-        """Solve main routine (l0 heuristic wrapper)."""
+        ""Solve main routine (l0 heuristic wrapper).""
         #Helper methods
         #Note: Need to change opt_s and opt_b to optimal_signal and optimal_baseline in the main solver.py file
         # as well
         
         def _solve_without_l0_penalty(self, amp_constraint: bool) -> Tuple[np.ndarray, float]:
-            """Solve optimization directly without L0 penalty."""
+            ""Solve optimization directly without L0 penalty.""
             optimal_signal, optimal_baseline, _ = self.solver.solve(amp_constraint=amp_constraint)
             return optimal_signal, optimal_baseline
         def _solve_with_l0_heuristic(self, amp_constraint: bool) -> Tuple[np.ndarray, float]:
-            """Solve  using reweighted L1 heuristic for L0 penalty."""
+            ""Solve  using reweighted L1 heuristic for L0 penalty.""
             metrics_dataframe = None
             for iteration in range(self.cfg.max_iter_l0):
-            # Solve current iteration
-            current_signal, current_baseline, _ = self.solver.solve(amp_constraint=amp_constraint)
-            current_objective = self._compute_err(s=current_signal, b=current_baseline)
+                # Solve current iteration
+                current_signal, current_baseline, _ = self.solver.solve(amp_constraint=amp_constraint)
+                current_objective = self._compute_err(s=current_signal, b=current_baseline)
         
-            # Get best and last objectives from history
-            best_objective, last_objective = self._get_objective_history(metrics_dataframe)
+                # Get best and last objectives from history
+                best_objective, last_objective = self._get_objective_history(metrics_dataframe)
         
-            # Threshold small values and compute convergence metrics
-            thresholded_signal = np.where(
-                current_signal > self.cfg.delta_l0, 
-                current_signal, 
-                0
-            )
-            objective_gap = np.abs(current_objective - best_objective)
-            objective_delta = np.abs(current_objective - last_objective)
+                # Threshold small values and compute convergence metrics
+                thresholded_signal = np.where(
+                    current_signal > self.cfg.delta_l0, 
+                    current_signal, 
+                    0
+                )
+                objective_gap = np.abs(current_objective - best_objective)
+                objective_delta = np.abs(current_objective - last_objective)
+            
+                # Record metrics
+                metrics_dataframe = self._record_iteration_metrics(
+                    metrics_dataframe,
+                    iteration,
+                    current_objective,
+                    thresholded_signal,
+                    objective_gap,
+                    objective_delta,
+                )
         
-            # Record metrics
-            metrics_dataframe = self._record_iteration_metrics(
-                metrics_dataframe,
-                iteration,
-                current_objective,
-                thresholded_signal,
-                objective_gap,
-                objective_delta,
-            )
-        
-            # Check convergence
-            if self._has_converged(objective_gap, best_objective, objective_delta):
-                break
-        
-            # Update weights for next iteration
-            self._update_weights_for_next_iteration(thresholded_signal)
+                # Check convergence
+                if self._has_converged(objective_gap, best_objective, objective_delta):
+                    break
+                # Update weights for next iteration
+                self._update_weights_for_next_iteration(thresholded_signal)
             else:
-            warnings.warn(
-            f"L0 heuristic did not converge in {self.cfg.max_iter_l0} iterations"
-            )
-    
+                warnings.warn(
+                    f"L0 heuristic did not converge in {self.cfg.max_iter_l0} iterations"
+                )
+        
             # Final solve with updated weights
             optimal_signal, optimal_baseline, _ = self.solver.solve(amp_constraint=amp_constraint)
             return optimal_signal, optimal_baseline
             
-            
-       #############################     
+             """
+"""  #############################     
         #No L0 penalty case
         if self._l0_penal == 0:
             opt_s, opt_b, _ = self.solver.solve(amp_constraint=amp_constraint)
@@ -233,4 +245,4 @@ def solve(
                 opt_s = opt_s[self.nzidx_s]
 
         self.s = np.abs(opt_s)
-        return self.s, self.b
+        return self.s, self.b """

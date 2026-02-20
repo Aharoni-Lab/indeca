@@ -16,6 +16,7 @@ from indeca.core.simulation import AR2tau, tau2AR
 from .types import ARParams
 from dask.distributed import Client
 
+
 def initialize_ar_params(
     Y: np.ndarray,
     *,
@@ -87,7 +88,7 @@ def initialize_ar_params(
             tau[icell, :] = cur_tau
             theta[icell, :] = cur_theta
             ps[icell, :] = cur_p
-        
+
     return ARParams(theta=theta, tau=tau, ps=ps)
 
 
@@ -110,7 +111,7 @@ def initialize_deconvolvers(
     backend: str,
     dashboard: Any,
     da_client: Client | None = None,
-) -> List[DeconvBin]|List[futures.Future[DeconvBin]]:
+) -> List[DeconvBin] | List[futures.Future[DeconvBin]]:
     """Create DeconvBin instances for all cells.
 
     Parameters
@@ -165,10 +166,44 @@ def initialize_deconvolvers(
             da_client.submit(
                 lambda yy, th, tau_i, ps_i: DeconvBin(
                     InputParams(
-                    y=yy,
-                    theta=th,
-                    tau=tau_i,
-                    ps=ps_i,
+                        y=yy,
+                        theta=th,
+                        tau=tau_i,
+                        ps=ps_i,
+                        coef_len=ar_kn_len,
+                        upsamp=up_factor,
+                        nthres=nthres,
+                        norm=norm,
+                        penal=penal,
+                        use_base=use_base,
+                        err_weighting=err_weighting,
+                        masking_radius=masking_radius,
+                        pks_polish=pks_polish,
+                        ncons_thres=ncons_thres,
+                        min_rel_scl=min_rel_scl,
+                        atol=atol,
+                        backend=backend,
+                        dashboard=dashboard,
+                        dashboard_uid=i,
+                    )
+                ),
+                y,
+                theta[i],
+                tau[i],
+                ps[i],
+            )
+            for i, y in enumerate(Y)
+        ]
+        # dcv = da_client.gather(dcv)  #
+    else:
+        # Local execution
+        dcv = [
+            DeconvBin(
+                InputParams(
+                    y=y,
+                    theta=theta[i],
+                    tau=tau[i],
+                    ps=ps[i],
                     coef_len=ar_kn_len,
                     upsamp=up_factor,
                     nthres=nthres,
@@ -184,41 +219,6 @@ def initialize_deconvolvers(
                     backend=backend,
                     dashboard=dashboard,
                     dashboard_uid=i,
-                    )
-                ),
-                y,
-                theta[i],
-                tau[i],
-                ps[i],
-            )
-            for i, y in enumerate(Y)
-        ]
-        #dcv = da_client.gather(dcv)  #
-    else:
-        
-        # Local execution
-        dcv = [
-            DeconvBin(
-                InputParams(
-                y=y,
-                theta=theta[i],
-                tau=tau[i],
-                ps=ps[i],
-                coef_len=ar_kn_len,
-                upsamp=up_factor,
-                nthres=nthres,
-                norm=norm,
-                penal=penal,
-                use_base=use_base,
-                err_weighting=err_weighting,
-                masking_radius=masking_radius,
-                pks_polish=pks_polish,
-                ncons_thres=ncons_thres,
-                min_rel_scl=min_rel_scl,
-                atol=atol,
-                backend=backend,
-                dashboard=dashboard,
-                dashboard_uid=i,
                 )
             )
             for i, y in enumerate(Y)
