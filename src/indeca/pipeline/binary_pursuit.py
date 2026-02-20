@@ -342,14 +342,16 @@ def _finalize_results(
     opt_C = np.empty((ncell, T * up_factor))
     opt_S = np.empty((ncell, T * up_factor))
 
-    # mobj = metric_df.groupby("iter")["obj"].median()
-    # opt_idx_all = mobj.idxmin()
-    # NOTE: Original pipeline always selected the last iteration (-1),
-    # regardless of metric-based selection. We preserve that behavior here.
-    # (The metric-based selection logic was present but unused in the original.)
-    opt_idx = -1
+    mobj = metric_df.groupby("iter")["obj"].median()
+    opt_idx_all = mobj.idxmin()
 
     for icell in range(ncell):
+        if ar_use_all:
+            opt_idx = opt_idx_all
+        else:
+            opt_idx = metric_df.loc[
+                metric_df[metric_df["cell"] == icell]["obj"].idxmin(), "iter"
+            ]
         opt_C[icell, :] = C_ls[opt_idx][icell, :]
         opt_S[icell, :] = S_ls[opt_idx][icell, :]
 
