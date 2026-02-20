@@ -1,6 +1,7 @@
 import numpy as np
 
 from indeca.core.deconv import DeconvBin
+from indeca.core.deconv.deconv import InputParams
 from indeca.core.simulation import tau2AR
 
 
@@ -19,6 +20,7 @@ def test_G_matrix_matches_shifted_ar_difference_equation():
     theta = np.array(tau2AR(10.0, 3.0))
 
     deconv = DeconvBin(
+      InputParams(
         y_len=T,
         theta=theta,
         coef_len=3,
@@ -27,6 +29,7 @@ def test_G_matrix_matches_shifted_ar_difference_equation():
         use_base=False,
         norm="l2",
         penal=None,
+      )
     )
 
     # Use the full, unmasked operator for determinism.
