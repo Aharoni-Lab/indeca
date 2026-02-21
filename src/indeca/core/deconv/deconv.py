@@ -104,7 +104,7 @@ class DeconvBin:
             self.y = params.y
         else:
             assert params.y_len is not None
-            self.y_len = params.y_len#
+            self.y_len = params.y_len  #
             self.y = np.zeros(self.y_len)
 
         coef_len = params.coef_len
