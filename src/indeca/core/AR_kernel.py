@@ -19,7 +19,7 @@ def convolve_g(s, g):
     return np.array(Gi @ s.reshape((-1, 1))).squeeze()
 
 
-def convolve_h(s, h):
+def convolve_h(s: np.ndarray, h: np.ndarray) -> np.ndarray:
     T = len(s)
     H0 = h.reshape((-1, 1))
     H1n = [
