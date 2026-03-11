@@ -1,4 +1,14 @@
 # %% imports and definitions
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+# Add tests directory to path (if you need testing_utils)
+tests_dir = project_root / "tests"
+sys.path.insert(0, str(tests_dir))
+
 import os
 
 import numpy as np

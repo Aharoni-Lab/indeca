@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import warnings
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -11,10 +12,21 @@ import xarray as xr
 from pytest_harvest import get_session_results_df, get_xdist_worker_id, is_main_process
 
 from indeca.core.deconv import DeconvBin
+from indeca.core.deconv.deconv import InputParams
 from indeca.core.simulation import AR2tau, ar_trace, tau2AR
 
-from .testing_utils.io import download_realds, load_gt_ds, subset_gt_ds
-from .testing_utils.misc import get_upsamp_scale
+from tests.testing_utils.io import download_realds, load_gt_ds, subset_gt_ds
+from tests.testing_utils.misc import get_upsamp_scale
+
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Add tests directory to Python path
+tests_dir = Path(__file__).parent
+if str(tests_dir) not in sys.path:
+    sys.path.insert(0, str(tests_dir))
+
 
 AGG_RES_DIR = "tests/output/data/agg"
 TEST_DATA_DIR = "tests/data"
@@ -152,7 +164,9 @@ def fixt_deconv(
     assert y.ndim == 1, "fixt_deconv only support single cell mode"
     taus_up = np.array(taus) * upsamp
     _, _, p = AR2tau(*tau2AR(*taus_up), solve_amp=True)
-    deconv = DeconvBin(
+
+    # Make sure you have InputParams first
+    params = InputParams(
         y=y,
         tau=taus_up,
         ps=np.array([p, -p]),
@@ -162,9 +176,14 @@ def fixt_deconv(
         norm=norm,
         **deconv_kws,
     )
+
+    # Then pass it to DeconvBin
+    deconv = DeconvBin(params)
+
     if upsamp_y != upsamp:
         scl = get_upsamp_scale(taus, upsamp_y, upsamp)
         deconv.update(scale=scl)
+
     return deconv, y, c, c_org, s, s_org, scale
 
 

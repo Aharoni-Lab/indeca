@@ -177,6 +177,8 @@ cython_debug/
 /tests/data
 *.npy
 *.feat
+*.prof
+*.png
 /tests/output/*
 !/tests/output/figs
 /tests/output/figs/*
@@ -184,3 +186,4 @@ cython_debug/
 !/tests/output/figs/func
 /tests/output/figs/func/*
 !/tests/output/figs/func/mlspike_comparison
+tests/*/output/

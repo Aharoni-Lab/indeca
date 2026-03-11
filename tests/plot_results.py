@@ -242,8 +242,9 @@ if result is not None:
 # %% plot thresholds
 fig_path = FIG_PATH / "solve_thres"
 fig_path.mkdir(parents=True, exist_ok=True)
-result = load_agg_result(IN_RES_PATH / "test_solve_thres").drop_duplicates()
+result = load_agg_result(IN_RES_PATH / "test_solve_thres")
 if result is not None:
+    result = result.drop_duplicates()
     for (td, tr), res_sub in result.groupby(["tau_d", "tau_r"]):
         for met in ["mdist", "f1", "precs", "recall"]:
             g = plot_agg_boxswarm(
