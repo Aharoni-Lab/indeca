@@ -1,0 +1,68 @@
+noob_id: indeca-demo
+noob_model: noob.tube.TubeSpecification
+noob_version: 0.0.1
+description: |
+  Demo of a simple noob tube with an input, 
+  an asset that is mutated across epochs,
+  and a simple operation that does the mutation.
+  
+  See tests/test_tubes.py:test_tube for an example invocation.
+  
+  Further detail - 
+  we pass a path to some save array when instantiating the tube
+  The NPYAsset then uses that path to load the array.
+  Since the array is `runner`-scoped, it will persist as long as the runner does,
+  and we use the `depends` on the asset to ensure that it is updated
+  from the result of the add operation.
+  The structured mutation allows asset mutations to work even when we are in a multi-process
+  context like the ZMQRunner (which we'll get to later)
+  
+  We use `params` for static parameters passed to the function that do not change,
+  and dependencies are the "dynamic" structure of the graph - which events get passed to the nodes.
+  `depends` is usually an array of objects (as it is used in the fft node)
+  where the key is the param in the function, and the value is the signal that we depend on
+  In this case none of the nodes annotate the names of their signals, so the signal is just named "value"
+  The `add` node uses positional arguments (because it is a builtin function that doesn't take kwargs)
+  which are passed as just an array of strings (not an array of objects)
+  
+  The return node is the one special-cased node in noob,
+  and the structure of its `depends` determines the structure of what comes out of the tube when you call process
+  an array of objects like we have here will return a dictionary like `{'a': .., 'b': ...}`
+  An array of strings would return a list like `[..., ...]`
+  and a scalar `depends: add.value` would return just the array itself.
+  
+
+input:
+  array_path:
+    type: pathlib.Path
+    scope: tube
+
+assets:
+  array:
+    type: indeca.demo.NPYAsset
+    params:
+      path: input.array_path
+    scope: runner
+    depends: add.value
+
+nodes:
+  fft:
+    type: indeca.core.AR_kernel.noise_fft
+    params:
+      noise_range: [0.1, 0.9]
+    depends:
+      - px: assets.array
+  add:
+    type: operator.add
+    depends:
+      - assets.array
+      - fft.value
+
+  return:
+    type: return
+    depends:
+    - a: fft.value
+    - b: add.value
+
+
+
